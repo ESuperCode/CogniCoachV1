@@ -91,13 +91,23 @@ body {
         linear-gradient(var(--primary-blue) 1px, transparent 1px),
         linear-gradient(90deg, var(--primary-blue) 1px, transparent 1px);
     background-size: 50px 50px;
+    background-position: 0 0;
     opacity: 0.03;
     animation: gridScroll 20s linear infinite;
+    transform:
+        perspective(700px)
+        rotateX(var(--grid-rotate-x, 0deg))
+        rotateY(var(--grid-rotate-y, 0deg))
+        translate3d(var(--grid-offset-x, 0px), var(--grid-offset-y, 0px), 0)
+        scale(var(--grid-scale, 1));
+    transform-origin: center center;
+    will-change: transform, background-position;
+    transition: transform 0.16s ease-out, background-position 0.16s ease-out;
 }
 
 @keyframes gridScroll {
-    0% { transform: translateY(0); }
-    100% { transform: translateY(50px); }
+    0% { background-position: 0 0; }
+    100% { background-position: 0 50px; }
 }
 
 /* Main Container */
@@ -1002,7 +1012,12 @@ body::before {
         linear-gradient(rgba(31, 122, 224, 0.12) 1px, transparent 1px);
     background-size: 34px 34px;
     background-position: var(--grid-shift-x) var(--grid-shift-y);
-    transform: translate3d(var(--bg-shift-x), var(--bg-shift-y), 0);
+    transform:
+        perspective(700px)
+        rotateX(var(--bg-rotate-x, 0deg))
+        rotateY(var(--bg-rotate-y, 0deg))
+        translate3d(var(--bg-shift-x), var(--bg-shift-y), 0)
+        scale(var(--bg-scale, 1));
     transition: transform 0.22s ease-out, background-position 0.22s ease-out;
 }
 
@@ -1073,6 +1088,15 @@ body::before {
     background-size: 34px 34px;
     background-position: var(--grid-shift-x) var(--grid-shift-y);
     animation: gridScroll 28s linear infinite;
+    transform:
+        perspective(700px)
+        rotateX(var(--grid-rotate-x, 0deg))
+        rotateY(var(--grid-rotate-y, 0deg))
+        translate3d(var(--grid-offset-x, 0px), var(--grid-offset-y, 0px), 0)
+        scale(var(--grid-scale, 1));
+    transform-origin: center center;
+    will-change: transform, background-position;
+    transition: transform 0.18s ease-out, background-position 0.18s ease-out;
 }
 
 @keyframes ambientSweep {
