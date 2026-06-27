@@ -211,8 +211,8 @@ const muscleCheckboxIds = [
                 return;
             }
 
-            appState.setup.timeline.forEach((drill, index) => {
-                const square = createDrillSquare(drill, index);
+            appState.setup.timeline.forEach((drill) => {
+                const square = createDrillSquare(drill);
                 timeline.appendChild(square);
             });
         }
@@ -237,14 +237,14 @@ const muscleCheckboxIds = [
         }
 
         // Create drill square
-        function createDrillSquare(drill, index) {
+        function createDrillSquare(drill) {
             const square = document.createElement('div');
             square.className = 'drill-square';
             square.draggable = true;
             square.id = drill.id;
             square.dataset.source = 'timeline';
             square.dataset.section = drill.section;
-            square.style.backgroundColor = appState.setup.sections[drill.section].color;            
+            square.style.backgroundColor = appState.setup.sections[drill.section].color;
             square.ondragstart = drag;
             return square;
         }
@@ -286,7 +286,6 @@ const muscleCheckboxIds = [
             const source = ev.dataTransfer.getData("source");
             const section = ev.dataTransfer.getData("section");
             const draggedElement = document.getElementById(data);
-            const timeline = document.getElementById('timelineBar');
             const dropTarget = ev.target.closest('.drill-square');
             const droppedInTimeline = ev.target.id === 'timelineBar' || ev.target.closest('#timelineBar');
             const droppedInTrash = ev.target.id === 'trashBin' || ev.target.closest('#trashBin');
@@ -350,18 +349,6 @@ const muscleCheckboxIds = [
                 renderTimeline();
                 saveState();
             }
-        }
-
-        // Update timeline order after drag
-        function updateTimelineOrder() {
-            const timeline = document.getElementById('timelineBar');
-            const squares = timeline.querySelectorAll('.drill-square');
-            appState.setup.timeline = Array.from(squares).map(square => {
-                const drill = appState.setup.timeline.find(d => d.id === square.id);
-                return drill;
-            });
-            renderTimeline();
-            saveState();
         }
 
         // Update timeline colors
@@ -463,20 +450,6 @@ const muscleCheckboxIds = [
                 document.getElementById('timerStatus').textContent = 'Unable to load the drill.';
             }
         }
-        async function run(model, input) {
-            const response = await fetch(
-                `https://api.cloudflare.com/client/v4/accounts/00ed78486159dbce2f059215aeee83e9/ai/run/${model}`,
-                {
-                headers: { Authorization: "Bearer cfut_Xj8Vho3uLNSgFu8YK0TewCHDweD5Kxb1PXDjhmYY84a97359" },
-                method: "POST",
-                body: JSON.stringify(input),
-                }
-            );
-            const result = await response.json();
-            return result;}
-
-        
-    
 
         async function getDrill(drillRequest) {
             const temperatureInput = document.getElementById("temperature").value;
