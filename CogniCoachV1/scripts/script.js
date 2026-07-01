@@ -135,7 +135,12 @@ const muscleCheckboxIds = [
             initializeColorLegend();
             initializeTimeline();
             updateSliderValue();
-            loadMuscleDiagram().then(() => initializeMuscleDiagramInteractions());
+            loadMuscleDiagram().then(() => {
+                initializeMuscleDiagramInteractions();
+                // Re-apply any muscle selections (e.g. restored from a saved
+                // session) now that the SVG groups actually exist in the DOM.
+                syncAllMuscleSelectionStates();
+            });
             
             // Update slider value on change
             document.getElementById('workoutLength').addEventListener('input', updateSliderValue);
@@ -778,6 +783,10 @@ const muscleCheckboxIds = [
                 svgGroup.classList.toggle('ai-selected', isAiSelected);
                 svgGroup.classList.toggle('manual-selected', isManualSelected);
             }
+        }
+
+        function syncAllMuscleSelectionStates() {
+            muscleCheckboxIds.forEach(id => syncMuscleSelectionState(id));
         }
 
         function toggleManualMuscle(id) {

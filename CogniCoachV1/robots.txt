@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://cognicoachai.com/CogniCoachV1/sitemap.xml

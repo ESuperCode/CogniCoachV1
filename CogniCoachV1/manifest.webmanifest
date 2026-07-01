@@ -1,0 +1,23 @@
+{
+  "name": "CogniCoachAI",
+  "short_name": "CogniCoachAI",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#059bff",
+  "description": "AI sports training app for custom drills, workout plans, speed, agility, endurance, and muscle-focused athletic sessions.",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
