@@ -789,7 +789,8 @@ box-shadow: 0 0 20px var(--secondary-orange);
 overflow: hidden;
 border-top: 0.75rem solid var(--dark-gray);
 }
-.muscle-groups h1 {
+.muscle-groups h1,
+.muscle-groups .muscle-diagram-heading {
 margin: -0.5rem -1rem 1rem;
 padding: 0 1rem 0.75rem;
 background: var(--dark-gray);
@@ -1404,7 +1405,8 @@ input[type="range"]::-moz-range-thumb {
     color: var(--text-white);
 }
 
-.muscle-groups h1 {
+.muscle-groups h1,
+.muscle-groups .muscle-diagram-heading {
     background: linear-gradient(90deg, rgba(31, 122, 224, 0.12), rgba(255, 138, 52, 0.12));
     color: var(--text-white);
     -webkit-text-fill-color: currentColor;
@@ -1471,12 +1473,14 @@ main .info a {
 }
 
 .muscle-groups h1,
-.muscle-groups h2 {
+.muscle-groups h2,
+.muscle-groups .muscle-diagram-heading {
     color: var(--primary-blue) !important;
     -webkit-text-fill-color: var(--primary-blue) !important;
 }
 
-.muscle-groups h1 {
+.muscle-groups h1,
+.muscle-groups .muscle-diagram-heading {
     background: rgba(31, 122, 224, 0.08) !important;
 }
 

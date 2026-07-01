@@ -122,7 +122,35 @@ const muscleCheckboxIds = [
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             initializeInteractiveBackground();
-            
+
+            // If this page load came from a sport landing page's "Start a
+            // session" link (e.g. index.html?sport=Basketball), always land
+            // on the setup form with the field filled in — don't silently
+            // resume a previous in-progress session that may still be saved
+            // in localStorage.
+            const incomingParams = new URLSearchParams(window.location.search);
+            if (incomingParams.has('sport')) {
+                const saved = localStorage.getItem('cognicoach-state');
+                if (saved) {
+                    try {
+                        const parsedState = JSON.parse(saved);
+                        parsedState.session = {
+                            currentDrillIndex: 0,
+                            drills: [],
+                            timerInterval: null,
+                            timeRemaining: 0,
+                            totalTime: 0,
+                            isPaused: false,
+                            timerStarted: false
+                        };
+                        localStorage.setItem('cognicoach-state', JSON.stringify(parsedState));
+                    } catch (e) {
+                        // If the saved state can't be parsed, leave it alone;
+                        // loadState() below will handle/ignore it safely.
+                    }
+                }
+            }
+
             loadState();
 
             const params = new URLSearchParams(window.location.search);
@@ -254,7 +282,6 @@ const muscleCheckboxIds = [
         }
 
         function clearCurrentWorkoutData() {
-            appState.setup.timeline = [];
             appState.session.drills = [];
             appState.session.currentDrillIndex = 0;
             appState.session.timerInterval = null;
@@ -262,7 +289,6 @@ const muscleCheckboxIds = [
             appState.session.totalTime = 0;
             appState.session.isPaused = false;
             appState.session.timerStarted = false;
-            renderTimeline();
             saveState();
         }
 
@@ -449,10 +475,10 @@ const muscleCheckboxIds = [
 
         // Start session
         function startSession() {
-            const hasCurrentWorkoutData = appState.setup.timeline.length > 0 || appState.session.drills.length > 0;
+            const hasCurrentWorkoutData = appState.session.drills.length > 0;
 
             if (hasCurrentWorkoutData) {
-                const shouldClear = confirm('This will clear any current workout data. Continue?');
+                const shouldClear = confirm('You have an unfinished workout in progress. Starting a new one will clear it. Continue?');
                 if (!shouldClear) {
                     return;
                 }
