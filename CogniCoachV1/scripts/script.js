@@ -35,6 +35,25 @@ const muscleCheckboxIds = [
             quads: 'Quads'
         };
 
+        async function loadMuscleDiagram() {
+            const container = document.getElementById('muscleSvgHost');
+            if (!container) {
+                return;
+            }
+
+            try {
+                const response = await fetch('assets/muscle-diagram.svg');
+                if (!response.ok) {
+                    throw new Error(`Unable to load muscle diagram (${response.status})`);
+                }
+
+                container.innerHTML = await response.text();
+            } catch (error) {
+                console.error('Failed to load muscle diagram:', error);
+                container.innerHTML = '<p class="text-muted">Unable to load muscle diagram.</p>';
+            }
+        }
+
         // State Management
         let appState = {
             setup: {
@@ -63,14 +82,60 @@ const muscleCheckboxIds = [
             }
         };
 
+        function applySportPresetFromQuery() {
+            const params = new URLSearchParams(window.location.search);
+            const sport = params.get('sport');
+            const location = params.get('location');
+            const focus = params.get('focus');
+            const workoutLength = params.get('workoutLength');
+
+            if (sport) {
+                const sportInput = document.getElementById('sport');
+                if (sportInput) {
+                    sportInput.value = sport;
+                }
+            }
+
+            if (location) {
+                const locationInput = document.getElementById('location');
+                if (locationInput) {
+                    locationInput.value = location;
+                }
+            }
+
+            if (focus) {
+                const focusInput = document.getElementById('focus');
+                if (focusInput) {
+                    focusInput.value = focus;
+                }
+            }
+
+            if (workoutLength) {
+                const workoutLengthInput = document.getElementById('workoutLength');
+                if (workoutLengthInput) {
+                    workoutLengthInput.value = workoutLength;
+                }
+                updateSliderValue();
+            }
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             initializeInteractiveBackground();
             
             loadState();
+
+            const params = new URLSearchParams(window.location.search);
+            const details = document.querySelector('.seo-section');
+            if (details && details.hasAttribute('open')) {
+                details.removeAttribute('open');
+            }
+
+            applySportPresetFromQuery();
             initializeColorLegend();
             initializeTimeline();
             updateSliderValue();
+            loadMuscleDiagram().then(() => initializeMuscleDiagramInteractions());
             
             // Update slider value on change
             document.getElementById('workoutLength').addEventListener('input', updateSliderValue);
@@ -181,6 +246,19 @@ const muscleCheckboxIds = [
         function initializeTimeline() {
             renderDrillBank();
             renderTimeline();
+        }
+
+        function clearCurrentWorkoutData() {
+            appState.setup.timeline = [];
+            appState.session.drills = [];
+            appState.session.currentDrillIndex = 0;
+            appState.session.timerInterval = null;
+            appState.session.timeRemaining = 0;
+            appState.session.totalTime = 0;
+            appState.session.isPaused = false;
+            appState.session.timerStarted = false;
+            renderTimeline();
+            saveState();
         }
 
         function useDefaultWorkout() {
@@ -366,6 +444,16 @@ const muscleCheckboxIds = [
 
         // Start session
         function startSession() {
+            const hasCurrentWorkoutData = appState.setup.timeline.length > 0 || appState.session.drills.length > 0;
+
+            if (hasCurrentWorkoutData) {
+                const shouldClear = confirm('This will clear any current workout data. Continue?');
+                if (!shouldClear) {
+                    return;
+                }
+                clearCurrentWorkoutData();
+            }
+
             // Collect form data
             appState.setup.sport = document.getElementById('sport').value || 'General';
             appState.setup.location = document.getElementById('location').value || 'Any';
@@ -668,7 +756,7 @@ const muscleCheckboxIds = [
             const label = document.querySelector(`.muscle-groups label[for="${id}"]`);
             const groupId = muscleSvgGroupIds[id];
             const svgGroup = groupId
-                ? document.querySelector(`.muscle-groups svg g g[id="${groupId}"]`)
+                ? document.querySelector(`.muscle-groups #muscleSvgHost svg g g[id="${groupId}"]`)
                 : null;
 
             if (!input) {
@@ -1010,25 +1098,27 @@ const muscleCheckboxIds = [
                 }
             }
         }
-    document.querySelectorAll(".muscle-groups svg g g[id]").forEach(function(group) {
-  const id = group.id.toLowerCase()
-  group.addEventListener('mouseover', function() {
-    let label = document.querySelector(`.muscle-groups label[for="${id}"]`)
-    if (label) label.classList.add("hover")
-  })
-  group.addEventListener('mouseout', function() {
-    let label = document.querySelector(`.muscle-groups label[for="${id}"]`)
-    if (label) label.classList.remove("hover")
-  })
-  group.addEventListener('click', function(event) {
-    event.preventDefault()
-    toggleManualMuscle(id)
-  });
-})
+        function initializeMuscleDiagramInteractions() {
+            document.querySelectorAll(".muscle-groups #muscleSvgHost svg g g[id]").forEach(function(group) {
+                const id = group.id.toLowerCase();
+                group.addEventListener('mouseover', function() {
+                    const label = document.querySelector(`.muscle-groups label[for="${id}"]`);
+                    if (label) label.classList.add("hover");
+                });
+                group.addEventListener('mouseout', function() {
+                    const label = document.querySelector(`.muscle-groups label[for="${id}"]`);
+                    if (label) label.classList.remove("hover");
+                });
+                group.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    toggleManualMuscle(id);
+                });
+            });
 
-    document.querySelectorAll('.muscle-groups label[for]').forEach(function(label) {
-  label.addEventListener('click', function(event) {
-    event.preventDefault()
-    toggleManualMuscle(label.htmlFor)
-  })
-})
+            document.querySelectorAll('.muscle-groups label[for]').forEach(function(label) {
+                label.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    toggleManualMuscle(label.htmlFor);
+                });
+            });
+        }
