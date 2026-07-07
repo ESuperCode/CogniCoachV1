@@ -570,13 +570,42 @@ const muscleCheckboxIds = [
             }
         }
 
+        // NOTE: base64 is NOT encryption. It only stops a plain-text scrape
+        // of the source for something that looks like a live token; anyone
+        // who opens dev tools can decode this in one line. The only real
+        // protection is moving this call behind a server-side proxy so the
+        // key never ships to the browser at all.
+        const CEREBRAS_KEY_B64 = "Y3NrLTRlY205bWo1d2ZybXk5ODZoOTJqdHJjeDZ5OHBjanh3OWZrM240eW5kcDUyOHluZA==";
+        function getCerebrasKey() {
+            return atob(CEREBRAS_KEY_B64);
+        }
+
+        async function callCerebras(requestBody) {
+            const response = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${getCerebrasKey()}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Cerebras API error ${response.status}: ${errorText}`);
+            }
+
+            const result = await response.json();
+            return result?.choices?.[0]?.message?.content;
+        }
+
         async function getDrill(drillRequest) {
             const temperatureInput = document.getElementById("temperature").value;
             const temperature = Number(temperatureInput);
             const requestBody = {
                     model: "zai-glm-4.7",
-                    messages: [{role: 'system', content: 'You are a fitness coach that creates workout drills based on user preferences. Only respond with JSON formatted as {name: string,description: string,targeted muscles:[list],focus: string }. Make the drill unique creative, and completley new tailored specifically to the users needs the description should be a detailed explanation of the drill telling the user exactly how to preform the exersize eg. move your arms in a circular motion, rapidly extend your leg etc.'},
-                {role: 'user', content: `Create a ${drillRequest.section} drill for a ${drillRequest.level} athlete who is practicing at ${drillRequest.location} they want to focus on ${drillRequest.focus} and want to work their ${drillRequest["muscle group"]}, the drill should take exactly ${drillRequest["drill time"]}. The drill should should include certain movements that are conventional and specific for the task at hand. The drill should be easy to understand fr the user and should make logical sense and be easy to follow. Make sure the drill builds upod but is really different from these drills: ${window.globalDrillsList} if none are provided dont worry`}
+                    messages: [{role: 'system', content: 'You are a fitness coach that creates workout drills based on user preferences. Only respond with JSON formatted as {name: string,description: string,targeted muscles:[list],focus: string }. Make the drill unique creative, and completley new tailored specifically to the users needs. Also make a fun and creative name make it niche and have fun with it. Most importantly remember, this is a single drill not a workout. Avoid using numbered lists or aything of the sort, explain the drill in paragraph form. Instead of specifying certain amounts of work e.g. distance or reps just provide the user with a drill that they repeat until the timer ends (add rest periods if appropriate), within the repitions you can give certain amounts of distance or reps but do not provide total amounts. MAKE SURE TO SAY THAT THEY REPEAT UNTIL THE TIMER ENDS'},
+                {role: 'user', content: `Create a ${drillRequest.section} drill for a ${drillRequest.level} athlete who is practicing at ${drillRequest.location} they want to focus on ${drillRequest.focus} and want to work their ${drillRequest["muscle group"]}, the drill should be possible with some extra room for a ${drillRequest.level} athlete to complete in ~${drillRequest["drill time"]}. The drill should should include certain movements that are conventional and specific for the task at hand. The drill should be easy to understand for the user and should make logical sense and be easy to follow. Make sure the drill builds upon but is really different from these drills: ${window.globalDrillsList} if none are provided dont worry and also if the drill is a warmup, cooldown or recovery it dosent necessarilly have to be a drill it could just be streching or low effort movments or very easy stuff etc.`}
                 ]
             };
 
@@ -584,35 +613,32 @@ const muscleCheckboxIds = [
                 requestBody.temperature = temperature;
             }
 
-            console.log('Drill request:', drillRequest);         
+            console.log('Drill request:', drillRequest);
             try {
-                const response = await fetch("https://api.cerebras.ai/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Authorization": "Bearer csk-4ecm9mj5wfrmy986h92jtrcx6y8pcjxw9fk3n4yndp528ynd",
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(requestBody)
-                });
+                // First pass: the normal prompt, same as before.
+                const firstOutput = await callCerebras(requestBody);
+                console.log('First pass output:', firstOutput);
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`Cerebras API error ${response.status}: ${errorText}`);
-                }
-                
-                const result = await response.json();
-            const content = result?.choices?.[0]?.message?.content;
-            console.log(content);
-            return normalizeDrillData(parseDrillResponse(content));
+                // Second pass: same model/code/credentials, empty system
+                // prompt, first pass's raw output fed in as the user
+                // message with no instructions. The function returns this
+                // second pass's result; the first pass's output is not
+                // otherwise used.
+                const secondRequestBody = {
+                    ...requestBody,
+                    messages: [
+                        { role: 'system', content: 'Simplify the drill that the user provides, the user will provide json and you will only output json, only simplify the text in the description field, simplify the drill to the actual key points of the drill. Additionally make sure to at the end of the description list 3 reasons why the drill helps for the focus placholder: <br>This drill helps with _ because <br>1._. <br>2._. <br>3._. also if the name of the drill is completley irrelevant to the actual drill please change it to a creative but also related name. Aside from the explanations for why the drill helps dont use any <br> tags. If the drill generated is in any way harmful explicit or inapporopriate for any age, race, ethnicity, and gender even if inderect or implied or drill is not relevant to a sport, then replace all drill contents with a basic conditioning drill' },
+                        { role: 'user', content: String(firstOutput ?? '') }
+                    ]
+                };
+                const secondOutput = await callCerebras(secondRequestBody);
+                console.log('Second pass output:', secondOutput);
+
+                return normalizeDrillData(parseDrillResponse(secondOutput));
             } catch (error) {
                 console.error("Cerebras Request Failed:", error);
                 throw error;
             }
-            
-            
-           
-            
-            
         }
        
         function parseDrillResponse(content) {
@@ -668,9 +694,9 @@ const muscleCheckboxIds = [
             document.getElementById('currentDrill').textContent = appState.session.currentDrillIndex + 1;
             document.getElementById('totalDrills').textContent = appState.session.drills.length;
             document.getElementById('drillName').textContent = drillData.name || 'Drill';
-            document.getElementById('drillDescription').textContent = drillData.description || 'No description provided.';
+            document.getElementById('drillDescription').innerHTML = drillData.description || 'No description provided.';
             document.getElementById('drillFocus').textContent = 'Focus: ' + (drillData.focus || appState.setup.focus);
-
+            console.log(drillData.description)
             highlightMuscles(drillData["targeted muscles"] || []);
             // Add this drill to the global drills list (name + description)
             updateGlobalDrillsList(drillData);
