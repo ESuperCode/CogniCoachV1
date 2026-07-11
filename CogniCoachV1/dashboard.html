@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex,follow">
+    <title>My Dashboard | CogniCoachAI</title>
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="apple-touch-icon" href="logo-192.png">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="styles/style.css" rel="stylesheet">
+    <link href="styles/nav.css" rel="stylesheet">
+    <link href="styles/dashboard.css" rel="stylesheet">
+</head>
+<body>
+    <site-nav></site-nav>
+
+    <!-- Animated Background -->
+    <div class="animated-bg">
+        <div class="bg-orb orb-1"></div>
+        <div class="bg-orb orb-2"></div>
+        <div class="bg-orb orb-3"></div>
+        <div class="pointer-glow"></div>
+        <div class="grid-pattern"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <div class="logo-container">
+                <div class="logo-placeholder">
+                    <img src="logo.png" alt="CogniCoachAI logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 20px;" onerror="this.style.display='none'; this.parentElement.textContent='CC';">
+                </div>
+                <h1>CogniCoachAI</h1>
+            </div>
+            <p class="tagline">YOUR DASHBOARD</p>
+        </header>
+
+        <div id="smartActions"></div>
+
+        <div class="dash-grid">
+
+            <!-- Stats overview -->
+            <div class="card dash-card dash-span-12">
+                <h2 class="card-title">Overview</h2>
+                <div class="stat-row">
+                    <div class="stat-pill">
+                        <div class="stat-value" id="statCurrentStreak">0</div>
+                        <div class="stat-label">Day Streak</div>
+                    </div>
+                    <div class="stat-pill">
+                        <div class="stat-value" id="statLongestStreak">0</div>
+                        <div class="stat-label">Longest Streak</div>
+                    </div>
+                    <div class="stat-pill">
+                        <div class="stat-value" id="statTotalSessions">0</div>
+                        <div class="stat-label">Total Sessions</div>
+                    </div>
+                    <div class="stat-pill">
+                        <div class="stat-value" id="statWeekSessions">0</div>
+                        <div class="stat-label">This Week</div>
+                    </div>
+                    <div class="stat-pill">
+                        <div class="stat-value" id="statWeekMinutes">0</div>
+                        <div class="stat-label">Minutes This Week</div>
+                    </div>
+                    <div class="stat-pill">
+                        <div class="stat-value" id="statFavoriteSport">—</div>
+                        <div class="stat-label">Favorite Sport</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Streak calendar -->
+            <div class="card dash-card dash-span-8">
+                <h2 class="card-title">Streak Calendar</h2>
+                <div class="heatmap-scroll">
+                    <div class="heatmap-grid" id="heatmapGrid"></div>
+                </div>
+                <div class="heatmap-legend">
+                    <span>Less</span>
+                    <div class="heatmap-cell" data-level="0"></div>
+                    <div class="heatmap-cell" data-level="1"></div>
+                    <div class="heatmap-cell" data-level="2"></div>
+                    <div class="heatmap-cell" data-level="3"></div>
+                    <span>More</span>
+                </div>
+            </div>
+
+            <!-- Weekly goal -->
+            <div class="card dash-card dash-span-4">
+                <h2 class="card-title">Weekly Goal</h2>
+                <div class="goal-row">
+                    <label for="weeklyGoalInput">Sessions per week:</label>
+                    <input type="number" id="weeklyGoalInput" class="goal-input" min="1" max="14" value="3">
+                </div>
+                <div class="goal-progress-track">
+                    <div class="goal-progress-fill" id="goalProgressFill" style="width:0%;"></div>
+                </div>
+                <div class="goal-progress-text" id="goalProgressText">0 of 3 sessions this week.</div>
+            </div>
+
+            <!-- Badges -->
+            <div class="card dash-card dash-span-12">
+                <div class="dash-card-header">
+                    <h2 class="card-title" style="margin-bottom:0;">Badges</h2>
+                    <span class="stat-label" id="badgeCount">0 / 0</span>
+                </div>
+                <div class="badge-grid" id="badgeGrid"></div>
+            </div>
+
+            <!-- Recommendations -->
+            <div class="card dash-card dash-span-12">
+                <h2 class="card-title">Recommended For You</h2>
+                <div class="recommend-grid" id="recommendGrid"></div>
+            </div>
+
+            <!-- Empty state -->
+            <div class="card dash-card dash-span-12 dash-empty" id="dashEmptyState" style="display:none;">
+                No sessions logged yet. Complete a workout in the app and it'll show up here — streak, stats, and all.
+            </div>
+
+            <!-- Data management -->
+            <div class="card dash-card dash-span-12 text-center">
+                <h2 class="card-title">Your Data</h2>
+                <p class="text-muted" style="color: var(--text-gray); font-size: 0.8rem; margin-bottom: 12px;">
+                    All dashboard data lives in this browser's local storage — nothing is sent to a server.
+                </p>
+                <div class="danger-row">
+                    <button class="btn btn-secondary" id="exportDataBtn">Export Data</button>
+                    <button class="btn btn-danger" id="clearHistoryBtn">Clear History</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="scripts/nav.js"></script>
+    <script src="scripts/dashboard.js"></script>
+</body>
+</html>

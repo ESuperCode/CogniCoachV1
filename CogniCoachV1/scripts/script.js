@@ -1073,6 +1073,7 @@ function sessionComplete() {
         clearInterval(appState.session.timerInterval);
     }
 
+    logSessionToHistory(true);
     document.getElementById('drillContent').classList.add('hidden');
     document.getElementById('sessionComplete').classList.remove('hidden');
 }
@@ -1083,7 +1084,38 @@ function endSessionEarly() {
         if (appState.session.timerInterval) {
             clearInterval(appState.session.timerInterval);
         }
+        logSessionToHistory(false);
         returnToSetup();
+    }
+}
+
+// Log a completed (or partially completed) session for the dashboard's
+// streak calendar, goals, badges, and recommendations. Sessions where
+// zero drills were done aren't logged, since nothing happened.
+function logSessionToHistory(completed) {
+    const drillsTotal = appState.session.drills.length;
+    const drillsCompleted = completed ? drillsTotal : appState.session.currentDrillIndex;
+
+    if (drillsCompleted <= 0) return;
+
+    const record = {
+        date: new Date().toISOString(),
+        sport: appState.setup.sport || 'General',
+        location: appState.setup.location || '',
+        focus: appState.setup.focus || '',
+        level: appState.setup.level || 'intermediate',
+        workoutLength: appState.setup.workoutLength || 0,
+        drillsCompleted: drillsCompleted,
+        drillsTotal: drillsTotal,
+        completed: !!completed
+    };
+
+    try {
+        const history = JSON.parse(localStorage.getItem('cognicoach-history') || '[]');
+        history.push(record);
+        localStorage.setItem('cognicoach-history', JSON.stringify(history));
+    } catch (e) {
+        console.error('Failed to log session history:', e);
     }
 }
 

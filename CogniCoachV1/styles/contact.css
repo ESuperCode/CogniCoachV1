@@ -1,0 +1,58 @@
+/* ==========================================================================
+   Contact page styles — extends style.css + nav.css.
+   Load this AFTER styles/style.css and styles/nav.css.
+   ========================================================================== */
+
+.contact-grid {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.contact-card {
+    width: 100%;
+    max-width: 620px;
+}
+
+.contact-intro {
+    color: var(--text-gray);
+    font-size: 0.88rem;
+    line-height: 1.6;
+    margin-bottom: 26px;
+}
+
+/* Honeypot — invisible to real visitors, present in the DOM for bots */
+.contact-honeypot {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
+.contact-status {
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    min-height: 1.2em;
+}
+
+.contact-status.success {
+    color: #4ade80;
+}
+
+.contact-status.error {
+    color: #f87171;
+}
+
+.contact-status.sending {
+    color: var(--text-gray);
+}
+
+.contact-submit-btn {
+    width: 100%;
+}
+
+.contact-submit-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

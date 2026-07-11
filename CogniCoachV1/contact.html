@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Get in touch with the CogniCoachAI team.">
+    <title>Contact Us | CogniCoachAI</title>
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="apple-touch-icon" href="logo-192.png">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="styles/style.css" rel="stylesheet">
+    <link href="styles/nav.css" rel="stylesheet">
+    <link href="styles/contact.css" rel="stylesheet">
+</head>
+<body>
+    <site-nav></site-nav>
+
+    <!-- Animated Background -->
+    <div class="animated-bg">
+        <div class="bg-orb orb-1"></div>
+        <div class="bg-orb orb-2"></div>
+        <div class="bg-orb orb-3"></div>
+        <div class="pointer-glow"></div>
+        <div class="grid-pattern"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <div class="logo-container">
+                <div class="logo-placeholder">
+                    <img src="logo.png" alt="CogniCoachAI logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 20px;" onerror="this.style.display='none'; this.parentElement.textContent='CC';">
+                </div>
+                <h1>CogniCoachAI</h1>
+            </div>
+            <p class="tagline">CONTACT US</p>
+        </header>
+
+        <div class="contact-grid">
+
+            <!-- Contact form -->
+            <div class="card contact-card">
+                <h2 class="card-title">Send Us a Message</h2>
+                <p class="contact-intro">
+                    Questions, bug reports, feature ideas — we read everything. Fill this out and
+                    it'll land straight in our inbox.
+                </p>
+
+                <form id="contactForm" novalidate>
+                    <div class="form-group">
+                        <label for="contactName">Name</label>
+                        <input type="text" id="contactName" name="name" placeholder="Your name" required maxlength="80">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="contactEmail">Email</label>
+                        <input type="email" id="contactEmail" name="email" placeholder="you@example.com" required maxlength="120">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="contactSubject">Subject</label>
+                        <input type="text" id="contactSubject" name="subject" placeholder="What's this about?" required maxlength="150">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="contactMessage">Message</label>
+                        <textarea id="contactMessage" name="message" rows="6" placeholder="Tell us what's on your mind..." required maxlength="4000"></textarea>
+                    </div>
+
+                    <!-- Honeypot field — hidden from real people, catches simple bots -->
+                    <div class="contact-honeypot" aria-hidden="true">
+                        <label for="contactCompany">Company</label>
+                        <input type="text" id="contactCompany" name="company" tabindex="-1" autocomplete="off">
+                    </div>
+
+                    <div id="contactStatus" class="contact-status" role="status"></div>
+
+                    <button type="submit" class="btn btn-primary contact-submit-btn" id="contactSubmitBtn">
+                        Send Message
+                    </button>
+                </form>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Contact form submits to a Google Apps Script Web App — see apps-script/Code.gs and scripts/contact.js -->
+    <script src="scripts/nav.js"></script>
+    <script src="scripts/contact.js"></script>
+</body>
+</html>
