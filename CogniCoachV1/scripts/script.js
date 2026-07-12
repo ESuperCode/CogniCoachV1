@@ -565,7 +565,7 @@ async function loadCurrentDrill() {
         document.getElementById('loadingContainer').classList.remove('active');
         document.getElementById('drillContent').classList.remove('hidden');
         document.getElementById('drillName').textContent = 'Error Loading Drill';
-        document.getElementById('drillDescription').textContent = 'There was an error loading the drill. Please try again.';
+        document.getElementById('drillDescription').innerHTML = 'There was an error loading the drill. Please try again.';
         document.getElementById('timerStatus').textContent = 'Unable to load the drill.';
     }
 }
@@ -692,7 +692,8 @@ function renderDrill(drill, drillData) {
     document.getElementById('currentDrill').textContent = appState.session.currentDrillIndex + 1;
     document.getElementById('totalDrills').textContent = appState.session.drills.length;
     document.getElementById('drillName').textContent = drillData.name || 'Drill';
-    document.getElementById('drillDescription').textContent = drillData.description || 'No description provided.';
+    // This is innerHTML so <br> tags within the description are used as newlines instead of displaying <br> tags in the text
+    document.getElementById('drillDescription').innerHTML = drillData.description || 'No description provided.';
     document.getElementById('drillFocus').textContent = 'Focus: ' + (drillData.focus || appState.setup.focus);
 
     highlightMuscles(drillData["targeted muscles"] || []);
