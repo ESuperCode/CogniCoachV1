@@ -518,6 +518,7 @@ function startSession() {
     // Show session view
     document.getElementById('setupView').style.display = 'none';
     document.getElementById('sessionView').classList.add('active');
+    document.getElementById('marketingIntro').classList.add('hidden');
 
     // Load first drill
     loadCurrentDrill();
@@ -1137,6 +1138,7 @@ function returnToSetup() {
     document.getElementById('sessionView').classList.remove('active');
     document.getElementById('sessionComplete').classList.add('hidden');
     document.getElementById('setupView').style.display = 'block';
+    document.getElementById('marketingIntro').classList.remove('hidden');
     document.getElementById('drillContent').classList.add('hidden');
     document.getElementById('loadingContainer').classList.remove('active');
 
@@ -1180,6 +1182,7 @@ function loadState() {
                 // Show session view
                 document.getElementById('setupView').style.display = 'none';
                 document.getElementById('sessionView').classList.add('active');
+                document.getElementById('marketingIntro').classList.add('hidden');
                 
                 // Reload current drill
                 loadCurrentDrill();
