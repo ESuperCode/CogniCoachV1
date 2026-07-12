@@ -1,26 +1,20 @@
 // ==========================================================================
-// Contact form — sends messages to a Google Sheet via Google Apps Script.
+// Contact form — sends messages to the Cloudflare Worker, which relays
+// them to a Google Sheet via Google Apps Script.
 //
-// SETUP:
-//   1. Follow the instructions at the top of apps-script/Code.gs to deploy
-//      the Apps Script as a Web App connected to a Google Sheet.
-//   2. Paste the deployed Web App URL (ends in /exec) into GOOGLE_SCRIPT_URL
-//      below.
-//
-// Until GOOGLE_SCRIPT_URL is filled in, the form will show an error and
-// people can still use the mailto fallback link on the page.
-//
-// Note on the request: Content-Type is set to 'text/plain' on purpose.
-// Apps Script Web Apps don't implement CORS preflight (OPTIONS) requests,
-// so sending JSON as 'text/plain' keeps this a "simple request" that
-// skips the preflight the browser would otherwise block on. Code.gs still
-// parses the body as JSON on the way in.
+// The Apps Script Web App URL used to live here in plain sight, which
+// meant anyone could read it from this file and POST directly to the
+// sheet. It now lives only on the Worker as a secret (GOOGLE_SCRIPT_URL),
+// so this file just talks to our own backend — same as script.js does
+// for drill generation.
 // ==========================================================================
 
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyK8x6_qrZ466tNnnIQVpLqA7KapHUF011YVw47_CHWrn--piJPPGiH8uiYGDJ_JtLT/exec';
+// Same backend the drill generator uses.
+const CONTACT_API_URL = "https://cognicoach-backend.bodhishanbhag.workers.dev/api/contact";
+const PRODUCTION_URL = "https://cognicoachai.com/CogniCoachV1/";
 
 function isConfigured() {
-    return GOOGLE_SCRIPT_URL.startsWith('http');
+    return CONTACT_API_URL.startsWith('http');
 }
 
 function setStatus(message, type) {
@@ -31,6 +25,25 @@ function setStatus(message, type) {
 
 function isValidEmail(value) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+// Same dev-password flow script.js uses: production requests need no
+// password (allowed via Origin check on the Worker), anything else
+// prompts once per tab and remembers it in sessionStorage.
+function getAppPassword() {
+    const isProduction = window.location.href.startsWith(PRODUCTION_URL);
+    if (isProduction) {
+        return null;
+    }
+
+    let password = sessionStorage.getItem("cognicoach_dev_password");
+    if (!password) {
+        password = window.prompt("This isn't the production site. Enter the dev password to send a message:");
+        if (password) {
+            sessionStorage.setItem("cognicoach_dev_password", password);
+        }
+    }
+    return password;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -75,15 +88,26 @@ document.addEventListener('DOMContentLoaded', () => {
         setStatus('Sending...', 'sending');
 
         try {
-            const res = await fetch(GOOGLE_SCRIPT_URL, {
+            const headers = { 'Content-Type': 'application/json' };
+            const appPassword = getAppPassword();
+            if (appPassword) {
+                headers['X-App-Password'] = appPassword;
+            }
+
+            const res = await fetch(CONTACT_API_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                headers,
                 body: JSON.stringify({ name, email, subject, message })
             });
+
+            if (res.status === 401) {
+                sessionStorage.removeItem("cognicoach_dev_password");
+            }
+
             const data = await res.json();
 
             if (data.result !== 'success') {
-                throw new Error(data.message || 'Unknown error');
+                throw new Error(data.error || 'Unknown error');
             }
 
             setStatus('Message sent — thanks! We\'ll get back to you soon.', 'success');
