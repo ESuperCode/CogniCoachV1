@@ -576,6 +576,54 @@ async function loadCurrentDrill() {
 const DRILL_API_URL = "https://cognicoach-backend.bodhishanbhag.workers.dev/api/drill";
 const PRODUCTION_URL = "https://cognicoachai.com/CogniCoachV1/";
 
+// Turnstile site keys are public by design (unlike the secret key, which
+// only lives on the Worker) — safe to have here in plain view.
+const TURNSTILE_SITE_KEY = "0x4AAAAAAD1cShM7YT2v5dHL";
+
+// ---- Invisible Turnstile bot check for drill generation ----------------
+// Rendered once, in "invisible" mode (no checkbox, no visible UI at all
+// unless Cloudflare decides an interactive challenge is actually needed).
+// Each drill in a session calls getDrill() separately, and a token can
+// only be used once, so we reset + re-execute the same widget fresh
+// before every request instead of reusing one token.
+let turnstileWidgetId = null;
+let pendingTurnstileResolve = null;
+let pendingTurnstileReject = null;
+
+function onTurnstileLoad() {
+    turnstileWidgetId = turnstile.render('#turnstileContainer', {
+        sitekey: TURNSTILE_SITE_KEY,
+        size: 'invisible',
+        callback: (token) => {
+            if (pendingTurnstileResolve) {
+                pendingTurnstileResolve(token);
+                pendingTurnstileResolve = null;
+                pendingTurnstileReject = null;
+            }
+        },
+        'error-callback': () => {
+            if (pendingTurnstileReject) {
+                pendingTurnstileReject(new Error('Bot check failed to load. Please refresh and try again.'));
+                pendingTurnstileResolve = null;
+                pendingTurnstileReject = null;
+            }
+        }
+    });
+}
+
+function getTurnstileToken() {
+    return new Promise((resolve, reject) => {
+        if (typeof turnstile === 'undefined' || turnstileWidgetId === null) {
+            reject(new Error('Bot check isn\'t ready yet. Please wait a moment and try again.'));
+            return;
+        }
+        pendingTurnstileResolve = resolve;
+        pendingTurnstileReject = reject;
+        turnstile.reset(turnstileWidgetId);
+        turnstile.execute(turnstileWidgetId);
+    });
+}
+
 // sessionStorage clears automatically when the tab is closed, which
 // is exactly the "remember for this tab only" behavior we want.
 function getAppPassword() {
@@ -598,9 +646,18 @@ async function getDrill(drillRequest) {
     const temperatureInput = document.getElementById("temperature").value;
     const temperature = Number(temperatureInput);
 
+    let turnstileToken;
+    try {
+        turnstileToken = await getTurnstileToken();
+    } catch (error) {
+        console.error("Turnstile check failed:", error);
+        throw new Error("Bot check failed. Please refresh the page and try again.");
+    }
+
     const payload = {
         ...drillRequest,
-        recentDrills: window.globalDrillsList
+        recentDrills: window.globalDrillsList,
+        turnstileToken
     };
     if (Number.isFinite(temperature)) {
         payload.temperature = temperature;
