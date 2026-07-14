@@ -583,18 +583,33 @@ const TURNSTILE_SITE_KEY = "0x4AAAAAAD1cShM7YT2v5dHL";
 // ---- Invisible Turnstile bot check for drill generation ----------------
 // Rendered once, in "invisible" mode (no checkbox, no visible UI at all
 // unless Cloudflare decides an interactive challenge is actually needed).
-// Each drill in a session calls getDrill() separately, and a token can
-// only be used once, so we reset + re-execute the same widget fresh
-// before every request instead of reusing one token.
+//
+// Tokens are single-use and expire ~5 minutes after being issued, so we
+// can't fetch all 8 drills' tokens once and stockpile them — by drill 5
+// or 6 an early one would likely be stale. Instead we PREFETCH one token
+// ahead of time and hide the wait behind time the user is already
+// spending elsewhere:
+//   - The very first token starts fetching the moment Turnstile's script
+//     loads, in parallel with the person filling out the setup form.
+//   - Every subsequent token starts fetching immediately after the
+//     current one gets used, hidden behind the time they spend on that
+//     drill before clicking "Next Drill."
+// If a prefetched token turns out to be stale by the time it's used
+// (e.g. someone lingers on a drill for a while), getDrill() transparently
+// retries once with a freshly fetched token instead of showing an error.
 let turnstileWidgetId = null;
 let pendingTurnstileResolve = null;
 let pendingTurnstileReject = null;
+let turnstileBusy = false;       // true while an execute() call is in flight
+let prefetchedToken = null;      // a token fetched ahead of time, ready to use
+let prefetchInFlight = null;     // promise for a prefetch currently running
 
 function onTurnstileLoad() {
     turnstileWidgetId = turnstile.render('#turnstileContainer', {
         sitekey: TURNSTILE_SITE_KEY,
         size: 'invisible',
         callback: (token) => {
+            turnstileBusy = false;
             if (pendingTurnstileResolve) {
                 pendingTurnstileResolve(token);
                 pendingTurnstileResolve = null;
@@ -602,6 +617,7 @@ function onTurnstileLoad() {
             }
         },
         'error-callback': () => {
+            turnstileBusy = false;
             if (pendingTurnstileReject) {
                 pendingTurnstileReject(new Error('Bot check failed to load. Please refresh and try again.'));
                 pendingTurnstileResolve = null;
@@ -609,19 +625,66 @@ function onTurnstileLoad() {
             }
         }
     });
+
+    // Start warming up the first token right away, while the person is
+    // still filling out the setup form — by the time they click "Begin
+    // Session," this is usually already done.
+    prefetchNextToken();
 }
 
+// Low-level: actually asks Cloudflare for one fresh token.
 function getTurnstileToken() {
     return new Promise((resolve, reject) => {
         if (typeof turnstile === 'undefined' || turnstileWidgetId === null) {
             reject(new Error('Bot check isn\'t ready yet. Please wait a moment and try again.'));
             return;
         }
+        if (turnstileBusy) {
+            reject(new Error('Bot check already in progress.'));
+            return;
+        }
+        turnstileBusy = true;
         pendingTurnstileResolve = resolve;
         pendingTurnstileReject = reject;
         turnstile.reset(turnstileWidgetId);
         turnstile.execute(turnstileWidgetId);
     });
+}
+
+// Kicks off a background token fetch and stashes the result for later use.
+// Safe to call repeatedly — won't start a second fetch while one's running.
+function prefetchNextToken() {
+    if (prefetchInFlight) return prefetchInFlight;
+
+    prefetchInFlight = getTurnstileToken()
+        .then((token) => {
+            prefetchedToken = token;
+        })
+        .catch((error) => {
+            console.warn('Prefetching Turnstile token failed:', error);
+            // Leave prefetchedToken null — a fresh fetch will be tried
+            // the next time a token is actually needed.
+        })
+        .finally(() => {
+            prefetchInFlight = null;
+        });
+
+    return prefetchInFlight;
+}
+
+// Hands back a token for immediate use — the prefetched one if it's
+// ready, or fetches one fresh on the spot as a fallback (e.g. if the
+// person clicks through faster than the prefetch could finish).
+async function consumeToken() {
+    if (prefetchInFlight) {
+        await prefetchInFlight;
+    }
+    if (prefetchedToken) {
+        const token = prefetchedToken;
+        prefetchedToken = null;
+        return token;
+    }
+    return getTurnstileToken();
 }
 
 // sessionStorage clears automatically when the tab is closed, which
@@ -642,17 +705,9 @@ function getAppPassword() {
     return password;
 }
 
-async function getDrill(drillRequest) {
+async function requestDrillFromApi(drillRequest, turnstileToken) {
     const temperatureInput = document.getElementById("temperature").value;
     const temperature = Number(temperatureInput);
-
-    let turnstileToken;
-    try {
-        turnstileToken = await getTurnstileToken();
-    } catch (error) {
-        console.error("Turnstile check failed:", error);
-        throw new Error("Bot check failed. Please refresh the page and try again.");
-    }
 
     const payload = {
         ...drillRequest,
@@ -670,16 +725,41 @@ async function getDrill(drillRequest) {
     }
 
     console.log('Drill request:', payload);
-    try {
-        const response = await fetch(DRILL_API_URL, {
-            method: "POST",
-            headers,
-            body: JSON.stringify(payload)
-        });
+    const response = await fetch(DRILL_API_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload)
+    });
 
-        if (response.status === 401) {
-            // Wrong/missing password — clear it so the next attempt re-prompts.
-            sessionStorage.removeItem("cognicoach_dev_password");
+    if (response.status === 401) {
+        // Wrong/missing password — clear it so the next attempt re-prompts.
+        sessionStorage.removeItem("cognicoach_dev_password");
+    }
+
+    return response;
+}
+
+async function getDrill(drillRequest) {
+    let turnstileToken;
+    try {
+        turnstileToken = await consumeToken();
+    } catch (error) {
+        console.error("Turnstile check failed:", error);
+        throw new Error("Bot check failed. Please refresh the page and try again.");
+    }
+
+    try {
+        let response = await requestDrillFromApi(drillRequest, turnstileToken);
+
+        if (response.status === 403) {
+            // Likely a stale prefetched token (e.g. the person lingered
+            // on the previous drill past the ~5 minute token lifetime).
+            // Retry once, transparently, with a freshly fetched token
+            // rather than surfacing an error for something the person
+            // didn't actually do wrong.
+            console.warn("Drill request rejected (403) — retrying with a fresh Turnstile token.");
+            const freshToken = await getTurnstileToken();
+            response = await requestDrillFromApi(drillRequest, freshToken);
         }
 
         if (!response.ok) {
@@ -689,6 +769,10 @@ async function getDrill(drillRequest) {
 
         const { content } = await response.json();
         console.log('Drill content:', content);
+
+        // Start warming up the token for the NEXT drill now, hidden
+        // behind the time the person spends on this one.
+        prefetchNextToken();
 
         return normalizeDrillData(parseDrillResponse(content));
     } catch (error) {
