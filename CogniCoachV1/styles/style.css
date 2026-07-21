@@ -1624,3 +1624,177 @@ main .info a {
     filter: drop-shadow(0 0 2px rgba(98, 184, 255, 0.45)) !important;
     opacity: 1 !important;
 }
+/* ==========================================================================
+   Mobile fixes (added — see commit notes)
+   1) Hide SEO-only marketing copy on small screens. It stays in the HTML
+      for search engines/crawlers, it's just visually hidden here so it
+      doesn't clutter the phone layout.
+   2) Extra small-phone sizing pass beyond the existing 768px breakpoint.
+   3) Touch devices don't have real hover — neutralize the hover-only
+      transform/glow effects there so buttons/cards don't look "stuck" or
+      lit up after a tap. :active supplies tap feedback instead.
+   4) Visual feedback + touch-action for the touch drag-and-drop shim in
+      scripts/script.js (native HTML5 drag-and-drop does not fire on touch
+      devices, so the workout-timeline builder needed a touch equivalent).
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    #marketingIntro .seo-intro,
+    #marketingIntro .seo-links,
+    #marketingIntro .seo-section {
+        display: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        padding: 18px 12px;
+    }
+
+    h1 {
+        font-size: 1.9rem;
+        letter-spacing: -1px;
+    }
+
+    .tagline {
+        font-size: 0.9rem;
+        letter-spacing: 1px;
+    }
+
+    .logo-placeholder {
+        width: 60px;
+        height: 60px;
+        font-size: 30px;
+    }
+
+    .card {
+        padding: 18px;
+        border-radius: 14px;
+    }
+
+    .card-title {
+        font-size: 1.3rem;
+        margin-bottom: 20px;
+    }
+
+    .btn {
+        padding: 14px 22px;
+        font-size: 0.95rem;
+        letter-spacing: 1px;
+        width: 100%;
+    }
+
+    .flex-center .btn {
+        width: auto;
+        flex: 1 1 140px;
+    }
+
+    .drill-square {
+        width: 44px;
+        height: 44px;
+        font-size: 0.7rem;
+    }
+
+    .timer-display {
+        font-size: 2.75rem;
+    }
+
+    body {
+        padding-top: 60px;
+    }
+}
+
+/* Drop-target highlight used by the touch drag-and-drop shim */
+.drop-target-active {
+    outline: 2px dashed var(--primary-blue);
+    outline-offset: 2px;
+}
+
+/* Let the JS drag shim own touch gestures on drill squares instead of the
+   browser trying to scroll the page when a drag starts on one. */
+.drill-square {
+    touch-action: none;
+}
+
+/* Neutralize hover-only effects on devices with no real hover capability */
+@media (hover: none) {
+    .card:hover {
+        background: var(--surface);
+        border-color: var(--line);
+        box-shadow: var(--soft-shadow);
+        transform: none;
+    }
+
+    .btn-primary:hover {
+        transform: none;
+        box-shadow: 0 18px 36px rgba(31, 122, 224, 0.25);
+    }
+
+    .btn-secondary:hover {
+        background: #ffffff;
+        color: #bf5f17;
+        box-shadow: 0 14px 30px rgba(30, 50, 80, 0.12);
+    }
+
+    .btn-danger:hover {
+        background: rgba(230, 71, 71, 0.08);
+        color: #c63737;
+        box-shadow: 0 14px 30px rgba(30, 50, 80, 0.12);
+    }
+
+    .drill-square:hover {
+        transform: none;
+        box-shadow: 0 12px 24px rgba(30, 50, 80, 0.18);
+    }
+
+    .seo-section summary:hover {
+        color: var(--primary-blue);
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+        transform: none;
+        box-shadow: 0 10px 22px rgba(31, 122, 224, 0.28);
+    }
+
+    .btn-primary:active {
+        transform: scale(0.97);
+    }
+
+    .btn-secondary:active,
+    .btn-danger:active {
+        opacity: 0.85;
+    }
+
+    .drill-square:active {
+        transform: scale(1.05);
+    }
+
+    .site-nav-link:hover {
+        color: #FFF;
+    }
+
+    /* Muscle diagram: on touch, tapping a muscle leaves it in a "stuck"
+       :hover state (browsers apply :hover on tap and only clear it on the
+       next tap elsewhere). That stuck hover fill has the same visual
+       weight as the real selected-state fill, so deselecting a muscle
+       looked like it went from "blue + outline" to "blue, no outline"
+       instead of back to grey. Since this is scoped to hover:none, mouse
+       users on desktop keep the normal hover-preview behavior untouched. */
+    .muscle-groups svg g g[id]:hover:not(.manual-selected):not(.ai-selected) path {
+        fill: #d9e1ec !important;
+        stroke: rgba(138, 161, 189, 0.35) !important;
+        stroke-width: 0.5px !important;
+        opacity: 1 !important;
+    }
+
+    /* Same stuck-hover problem, but for a muscle the program already
+       picked (ai-selected, shown in orange): tapping it on/off should
+       just toggle the blue "you also picked this" outline — the orange
+       fill itself shouldn't change. Without this, untapping it left the
+       stuck hover-blue showing instead of the program's orange. */
+    .muscle-groups svg g g[id].ai-selected:hover:not(.manual-selected) path {
+        fill: var(--secondary-orange) !important;
+        stroke: var(--secondary-orange) !important;
+        opacity: 1 !important;
+    }
+}

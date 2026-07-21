@@ -205,6 +205,16 @@ function ensureSkipToEndButton() {
 }
 
 function initializeInteractiveBackground() {
+    // Touch devices don't have a meaningful "pointer position" to track —
+    // driving this effect off touchmove meant the background tilted and
+    // shifted on every scroll drag, which just looked janky and fought
+    // with scrolling. Skip it entirely on coarse/no-hover (touch) devices.
+    const isTouchDevice = window.matchMedia &&
+        window.matchMedia('(hover: none), (pointer: coarse)').matches;
+    if (isTouchDevice) {
+        return;
+    }
+
     const root = document.documentElement;
     const updatePointer = (clientX, clientY) => {
         const x = Math.max(0, Math.min(100, (clientX / window.innerWidth) * 100));
@@ -241,13 +251,6 @@ function initializeInteractiveBackground() {
 
     window.addEventListener('pointermove', event => {
         updatePointer(event.clientX, event.clientY);
-    }, { passive: true });
-
-    window.addEventListener('touchmove', event => {
-        const touch = event.touches && event.touches[0];
-        if (touch) {
-            updatePointer(touch.clientX, touch.clientY);
-        }
     }, { passive: true });
 }
 // Update slider display
@@ -408,10 +411,17 @@ function drop(ev) {
     const data = ev.dataTransfer.getData("text");
     const source = ev.dataTransfer.getData("source");
     const section = ev.dataTransfer.getData("section");
+    performDrop({ data, source, section, clientX: ev.clientX, targetEl: ev.target });
+}
+
+// Shared drop logic used by both the native (mouse) drag-and-drop handler
+// above and the touch drag-and-drop shim below, since touch devices never
+// fire dragstart/dragover/drop at all.
+function performDrop({ data, source, section, clientX, targetEl }) {
     const draggedElement = document.getElementById(data);
-    const dropTarget = ev.target.closest('.drill-square');
-    const droppedInTimeline = ev.target.id === 'timelineBar' || ev.target.closest('#timelineBar');
-    const droppedInTrash = ev.target.id === 'trashBin' || ev.target.closest('#trashBin');
+    const dropTarget = targetEl.closest('.drill-square');
+    const droppedInTimeline = targetEl.id === 'timelineBar' || targetEl.closest('#timelineBar');
+    const droppedInTrash = targetEl.id === 'trashBin' || targetEl.closest('#trashBin');
 
     if (draggedElement) {
         draggedElement.classList.remove('dragging');
@@ -437,7 +447,7 @@ function drop(ev) {
         };
 
         if (dropTarget && dropTarget.dataset.source === 'timeline') {
-            const insertIndex = getDropInsertIndex(dropTarget, ev);
+            const insertIndex = getDropInsertIndex(dropTarget, { clientX });
             appState.setup.timeline.splice(insertIndex, 0, newDrill);
         } else {
             appState.setup.timeline.push(newDrill);
@@ -457,7 +467,7 @@ function drop(ev) {
         const [movedDrill] = appState.setup.timeline.splice(draggedIndex, 1);
 
         if (dropTarget && dropTarget !== draggedElement && dropTarget.dataset.source === 'timeline') {
-            let insertIndex = getDropInsertIndex(dropTarget, ev);
+            let insertIndex = getDropInsertIndex(dropTarget, { clientX });
             const targetIndexAfterRemoval = appState.setup.timeline.findIndex(drill => drill.id === dropTarget.id);
 
             if (targetIndexAfterRemoval !== -1 && insertIndex > targetIndexAfterRemoval + 1) {
@@ -473,6 +483,130 @@ function drop(ev) {
         saveState();
     }
 }
+
+// ---------------------------------------------------------------------
+// Touch drag-and-drop shim.
+//
+// The workout timeline builder uses the native HTML5 drag-and-drop API
+// (draggable="true" / dragstart / dragover / drop), which simply never
+// fires on touch devices — so on a phone, dragging drill squares into the
+// timeline (or into the trash) did nothing at all. This listens for touch
+// gestures on .drill-square elements directly and reuses performDrop()
+// above, so touch and mouse behave the same way.
+// ---------------------------------------------------------------------
+(function initializeTouchDragAndDrop() {
+    const DRAG_THRESHOLD_PX = 8;
+    let touchDrag = null;
+
+    function createGhost(square) {
+        const rect = square.getBoundingClientRect();
+        const ghost = square.cloneNode(true);
+        ghost.removeAttribute('id');
+        ghost.classList.add('drag-ghost');
+        ghost.style.position = 'fixed';
+        ghost.style.left = rect.left + 'px';
+        ghost.style.top = rect.top + 'px';
+        ghost.style.width = rect.width + 'px';
+        ghost.style.height = rect.height + 'px';
+        ghost.style.margin = '0';
+        ghost.style.pointerEvents = 'none';
+        ghost.style.zIndex = '9999';
+        ghost.style.transform = 'scale(1.08)';
+        ghost.style.opacity = '0.95';
+        document.body.appendChild(ghost);
+        return ghost;
+    }
+
+    function clearDropHighlight() {
+        document.querySelectorAll('.drop-target-active').forEach(el => {
+            el.classList.remove('drop-target-active');
+        });
+    }
+
+    function elementUnderTouch(x, y, ghost) {
+        // Hide the ghost so elementFromPoint doesn't just return it.
+        ghost.style.display = 'none';
+        const el = document.elementFromPoint(x, y);
+        ghost.style.display = '';
+        return el;
+    }
+
+    document.addEventListener('touchstart', event => {
+        const square = event.target.closest && event.target.closest('.drill-square');
+        if (!square) return;
+        const touch = event.touches[0];
+        touchDrag = {
+            id: square.id,
+            source: square.dataset.source || 'timeline',
+            section: square.dataset.section || '',
+            startX: touch.clientX,
+            startY: touch.clientY,
+            moved: false,
+            ghost: null,
+            original: square
+        };
+    }, { passive: true });
+
+    document.addEventListener('touchmove', event => {
+        if (!touchDrag) return;
+        const touch = event.touches[0];
+
+        if (!touchDrag.moved) {
+            const dx = Math.abs(touch.clientX - touchDrag.startX);
+            const dy = Math.abs(touch.clientY - touchDrag.startY);
+            if (dx < DRAG_THRESHOLD_PX && dy < DRAG_THRESHOLD_PX) return;
+            touchDrag.moved = true;
+            touchDrag.original.classList.add('dragging');
+            touchDrag.ghost = createGhost(touchDrag.original);
+        }
+
+        // We're now dragging — stop the page itself from scrolling.
+        event.preventDefault();
+
+        touchDrag.ghost.style.left = (touch.clientX - touchDrag.ghost.offsetWidth / 2) + 'px';
+        touchDrag.ghost.style.top = (touch.clientY - touchDrag.ghost.offsetHeight / 2) + 'px';
+
+        const under = elementUnderTouch(touch.clientX, touch.clientY, touchDrag.ghost);
+        clearDropHighlight();
+        if (!under) return;
+
+        const dropSquare = under.closest('.drill-square');
+        const dropZone = under.closest('#timelineBar') || under.closest('#trashBin');
+        if (dropSquare && dropSquare !== touchDrag.original) {
+            dropSquare.classList.add('drop-target-active');
+        } else if (dropZone) {
+            dropZone.classList.add('drop-target-active');
+        }
+    }, { passive: false });
+
+    function endTouchDrag(event) {
+        if (!touchDrag) return;
+        clearDropHighlight();
+        touchDrag.original.classList.remove('dragging');
+        if (touchDrag.ghost) {
+            touchDrag.ghost.remove();
+        }
+
+        if (touchDrag.moved && event.changedTouches && event.changedTouches[0]) {
+            const touch = event.changedTouches[0];
+            const under = document.elementFromPoint(touch.clientX, touch.clientY);
+            if (under) {
+                performDrop({
+                    data: touchDrag.id,
+                    source: touchDrag.source,
+                    section: touchDrag.section,
+                    clientX: touch.clientX,
+                    targetEl: under
+                });
+            }
+        }
+
+        touchDrag = null;
+    }
+
+    document.addEventListener('touchend', endTouchDrag);
+    document.addEventListener('touchcancel', endTouchDrag);
+})();
 
 // Update timeline colors
 function updateTimelineColors() {
