@@ -151,6 +151,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Ensure the Skip-to-End button exists BEFORE loadState() runs.
+    // loadState() can synchronously resume an in-progress session (when the
+    // current drill was already cached, loadCurrentDrill() never hits an
+    // `await`), which calls prepareTimer() immediately. If the button isn't
+    // in the DOM yet at that point, prepareTimer()'s attempt to show it is
+    // silently a no-op and it stays hidden until the next drill loads.
+    ensureSkipToEndButton();
+
     loadState();
 
     const params = new URLSearchParams(window.location.search);
@@ -172,23 +180,29 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Update slider value on change
     document.getElementById('workoutLength').addEventListener('input', updateSliderValue);
-
-    // Ensure Skip-to-End button exists next to the start button
-    const startBtn = document.getElementById('startTimerBtn');
-    if (startBtn) {
-        let skipBtn = document.getElementById('skipToEndBtn');
-        if (!skipBtn) {
-            skipBtn = document.createElement('button');
-            skipBtn.id = 'skipToEndBtn';
-            skipBtn.className = 'btn btn-secondary';
-            skipBtn.style.display = 'none';
-            skipBtn.style.marginLeft = '8px';
-            skipBtn.textContent = 'Skip to End';
-            skipBtn.addEventListener('click', skipToEnd);
-            startBtn.parentNode.insertBefore(skipBtn, startBtn.nextSibling);
-        }
-    }
 });
+
+// Create the Skip-to-End button next to the start button if it doesn't
+// already exist. Safe to call multiple times. Called both on page load
+// (before loadState()) and defensively at the top of prepareTimer(), so
+// the button is guaranteed to exist by the time anything tries to show it,
+// regardless of call order.
+function ensureSkipToEndButton() {
+    const startBtn = document.getElementById('startTimerBtn');
+    if (!startBtn) return;
+
+    let skipBtn = document.getElementById('skipToEndBtn');
+    if (!skipBtn) {
+        skipBtn = document.createElement('button');
+        skipBtn.id = 'skipToEndBtn';
+        skipBtn.className = 'btn btn-secondary';
+        skipBtn.style.display = 'none';
+        skipBtn.style.marginLeft = '8px';
+        skipBtn.textContent = 'Skip to End';
+        skipBtn.addEventListener('click', skipToEnd);
+        startBtn.parentNode.insertBefore(skipBtn, startBtn.nextSibling);
+    }
+}
 
 function initializeInteractiveBackground() {
     const root = document.documentElement;
@@ -1006,6 +1020,7 @@ function prepareTimer(seconds) {
 
     document.getElementById('nextDrillContainer').style.display = 'none';
     document.getElementById('startTimerBtn').style.display = 'inline-block';
+    ensureSkipToEndButton();
     const skipBtnEl = document.getElementById('skipToEndBtn');
     if (skipBtnEl) skipBtnEl.style.display = 'inline-block';
     document.getElementById('pauseBtn').textContent = 'Pause';

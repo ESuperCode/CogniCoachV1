@@ -30,7 +30,6 @@ class SiteNav extends HTMLElement {
         }).join('');
 
         this.highlightCurrentPage();
-        this.wireBrandLink();
         this.wireScrollBehavior();
     }
 
@@ -41,18 +40,6 @@ class SiteNav extends HTMLElement {
             if (link.getAttribute('href') === path) {
                 link.classList.add('active');
             }
-        });
-    }
-
-    wireBrandLink() {
-        // The brand link always takes you to a blank setup form, rather
-        // than resuming whatever sport/session was last saved.
-        const brandLink = this.querySelector('.site-nav-brand');
-        if (!brandLink) return;
-        brandLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            localStorage.removeItem('cognicoach-state');
-            window.location.href = brandLink.getAttribute('href');
         });
     }
 
