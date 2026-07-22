@@ -1644,6 +1644,29 @@ main .info a {
     #marketingIntro .seo-section {
         display: none;
     }
+
+    /* The muscle diagram SVG is normally pulled out of flow and pinned to
+       the bottom-right corner of .muscle-groups for a side-overlap layout
+       next to the muscle list. At mobile widths that fixed-height,
+       negative-offset positioning pushed it past the container's edge,
+       where overflow:hidden on .muscle-groups clipped it. Let it sit in
+       normal flow below the list instead, scaled to fit. */
+    .muscle-diagram-container {
+        position: static;
+        margin: 1.25rem 0 0.5rem;
+        justify-content: center;
+    }
+
+    .muscle-groups svg {
+        position: static;
+        right: auto;
+        bottom: auto;
+        display: block;
+        width: 100%;
+        max-width: 260px;
+        height: auto;
+        margin: 0 auto;
+    }
 }
 
 @media (max-width: 480px) {
