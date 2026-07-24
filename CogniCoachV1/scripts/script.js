@@ -94,6 +94,14 @@ function applySportPresetFromQuery() {
         if (sportInput) {
             sportInput.value = sport;
         }
+        // Keep the Quick Start sport switcher (scripts/profile.js) in sync
+        // so clicking "Start Quick Workout" doesn't stomp this back to the
+        // saved default sport.
+        if (typeof window !== 'undefined') {
+            window.__quickStartSportOverride = sport;
+        }
+        if (typeof renderSportSwitcher === 'function') renderSportSwitcher();
+        if (typeof prefillQuickStartFields === 'function') prefillQuickStartFields(sport);
     }
 
     if (location) {
@@ -645,6 +653,12 @@ function startSession() {
     if (appState.setup.timeline.length === 0) {
         alert('Please add at least one drill to your workout!');
         return;
+    }
+
+    // Teach the personalization system what was actually chosen, so
+    // Quick Start gets smarter defaults next time (see scripts/profile.js).
+    if (typeof recordSessionPreferences === 'function') {
+        recordSessionPreferences(appState.setup);
     }
 
     // Calculate drill times (smart, human-friendly distribution)

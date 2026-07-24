@@ -31,6 +31,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link href="styles/style.css" rel="stylesheet">
     <link href="styles/nav.css" rel="stylesheet">
+    <link href="styles/profile.css" rel="stylesheet">
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -158,86 +159,122 @@
 
         <!-- Setup View -->
         <div id="setupView">
-            <!-- Basic Information -->
-            <div class="card">
-                <h2 class="card-title">Workout Configuration</h2>
-                
-                <div class="form-group">
-                    <label for="sport">Sport</label>
-                    <input type="text" id="sport" placeholder="e.g., Basketball, Soccer, Tennis">
+            <!-- Quick Start: the fast path. Returning users only ever need
+                 to touch location / duration / focus — everything else is
+                 inferred from scripts/profile.js's learned preferences. -->
+            <div class="card quick-start-card" id="quickStartCard">
+                <div class="quick-start-header">
+                    <h2 class="card-title" style="margin-bottom: 6px;">Quick Start</h2>
+                    <button type="button" class="btn-chip" id="openSettingsBtn" title="Advanced Settings">&#9881; Settings</button>
                 </div>
+                <p class="quick-start-sub">Your saved preferences fill in the rest.</p>
 
-                <div class="form-group">
-                    <label for="location">Location</label>
-                    <input type="text" id="location" placeholder="e.g., Gym, Park, Court">
-                </div>
+                <div class="sport-switcher" id="sportSwitcher"><!-- populated by profile.js --></div>
 
-                <div class="form-group">
-                    <label for="focus">Focus (Optional)</label>
-                    <input type="text" id="focus" placeholder="e.g., Technique, Speed, Endurance">
-                </div>
-
-                <div class="form-group">
-                    <label for="muscleGroup">Muscle Focus (Optional)</label>
-                    <input type="text" id="muscleGroup" placeholder="e.g., Legs, Core, Arms">
-                </div>
-                <div class="form-group">
-                    <label for="muscleGroup">temperature</label>
-                    <input type="text" id="temperature" placeholder="e.g., 0.7, 1, 0.1 higher = more creative, lower = less creative more predictable">
-                </div>
-                <div class="form-group">
-                    <label for="level">Level</label>
-                    <select id="level">
-                        <option value="learning">Learning</option>
-                        <option value="beginner">Beginner</option>
-                        <option value="intermediate" selected>Intermediate</option>
-                        <option value="advanced">Advanced</option>
-                        <option value="professional">Professional</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="workoutLength">Workout Duration (minutes)</label>
-                    <div class="slider-container">
-                        <input type="range" id="workoutLength" min="15" max="180" value="60" step="5">
-                        <span class="slider-value" id="workoutLengthValue">60 min</span>
+                <div class="quick-start-grid">
+                    <div class="form-group">
+                        <label for="location">Where are you practicing?</label>
+                        <input type="text" id="location" placeholder="e.g., Gym, Park, Court">
                     </div>
-                </div>
-            </div>
-
-            <!-- Workout Timeline Configuration -->
-            <div class="card">
-                <h2 class="card-title">Workout Structure</h2>
-                
-                <div class="bank-title">Define Section Colors:</div>
-                <div class="color-legend" id="colorLegend">
-                    <!-- Color pickers will be added here -->
-                </div>
-
-                <div class="bank-title">Workout Timeline:</div>
-                <div class="timeline-bar" id="timelineBar" ondrop="drop(event)" ondragover="allowDrop(event)">
-                    <!-- Drill squares will be added here -->
-                </div>
-
-                <div class="bank-title">Drill Bank (Drag to add drills):</div>
-                <div class="drill-bank" id="drillBank" ondrop="drop(event)" ondragover="allowDrop(event)">
-                    <!-- Available drills will be shown here -->
-                </div>
-
-                <div class="bank-title">Trash Bin:</div>
-                <div class="trash-bin" id="trashBin" ondrop="drop(event)" ondragover="allowDrop(event)">
-                    Drag timeline drills here to delete them
-                </div>
-
-                <div class="flex-center mt-4">
-                    <button class="btn btn-secondary" onclick="useDefaultWorkout()">Use Default Plan</button>
-                    <button class="btn btn-secondary" onclick="clearTimeline()">Clear Timeline</button>
+                    <div class="form-group">
+                        <label for="workoutLength">How long?</label>
+                        <div class="slider-container">
+                            <input type="range" id="workoutLength" min="15" max="180" value="60" step="5">
+                            <span class="slider-value" id="workoutLengthValue">60 min</span>
+                        </div>
+                    </div>
+                    <div class="form-group quick-start-full">
+                        <label for="focus">What do you want to work on? (Optional)</label>
+                        <input type="text" id="focus" placeholder="e.g., Shooting, Speed, Ball Control">
+                    </div>
                 </div>
 
                 <div class="text-center mt-4">
-                    <button class="btn btn-primary" onclick="startSession()">Begin Session</button>
+                    <button class="btn btn-primary" id="quickStartBtn">Start Quick Workout</button>
                 </div>
+                <p class="quick-start-hint" id="quickStartHint"></p>
             </div>
+
+            <!-- Advanced Setup: full manual control, collapsed by default -->
+            <details class="advanced-setup" id="advancedSetup">
+                <summary>Advanced Setup — sport, muscle focus, level &amp; custom timeline</summary>
+                <div class="advanced-setup-inner">
+
+                    <div class="card">
+                        <h2 class="card-title">Workout Configuration</h2>
+
+                        <div class="form-group">
+                            <label for="sport">Sport</label>
+                            <input type="text" id="sport" placeholder="e.g., Basketball, Soccer, Tennis" list="sportOptionsList">
+                            <datalist id="sportOptionsList">
+                                <option value="Basketball"></option>
+                                <option value="Soccer"></option>
+                                <option value="Tennis"></option>
+                                <option value="Football"></option>
+                                <option value="Baseball"></option>
+                                <option value="Volleyball"></option>
+                                <option value="Swimming"></option>
+                                <option value="Cricket"></option>
+                                <option value="Rugby"></option>
+                                <option value="Golf"></option>
+                            </datalist>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="muscleGroup">Muscle Focus (Optional)</label>
+                            <input type="text" id="muscleGroup" placeholder="e.g., Legs, Core, Arms">
+                        </div>
+                        <div class="form-group">
+                            <label for="temperature">temperature</label>
+                            <input type="text" id="temperature" placeholder="e.g., 0.7, 1, 0.1 higher = more creative, lower = less creative more predictable">
+                        </div>
+                        <div class="form-group">
+                            <label for="level">Level</label>
+                            <select id="level">
+                                <option value="learning">Learning</option>
+                                <option value="beginner">Beginner</option>
+                                <option value="intermediate" selected>Intermediate</option>
+                                <option value="advanced">Advanced</option>
+                                <option value="professional">Professional</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Workout Timeline Configuration -->
+                    <div class="card">
+                        <h2 class="card-title">Workout Structure</h2>
+
+                        <div class="bank-title">Define Section Colors:</div>
+                        <div class="color-legend" id="colorLegend">
+                            <!-- Color pickers will be added here -->
+                        </div>
+
+                        <div class="bank-title">Workout Timeline:</div>
+                        <div class="timeline-bar" id="timelineBar" ondrop="drop(event)" ondragover="allowDrop(event)">
+                            <!-- Drill squares will be added here -->
+                        </div>
+
+                        <div class="bank-title">Drill Bank (Drag to add drills):</div>
+                        <div class="drill-bank" id="drillBank" ondrop="drop(event)" ondragover="allowDrop(event)">
+                            <!-- Available drills will be shown here -->
+                        </div>
+
+                        <div class="bank-title">Trash Bin:</div>
+                        <div class="trash-bin" id="trashBin" ondrop="drop(event)" ondragover="allowDrop(event)">
+                            Drag timeline drills here to delete them
+                        </div>
+
+                        <div class="flex-center mt-4">
+                            <button class="btn btn-secondary" onclick="useDefaultWorkout()">Use Default Plan</button>
+                            <button class="btn btn-secondary" onclick="clearTimeline()">Clear Timeline</button>
+                        </div>
+
+                        <div class="text-center mt-4">
+                            <button class="btn btn-primary" onclick="startSession()">Begin Session</button>
+                        </div>
+                    </div>
+                </div>
+            </details>
         </div>
 
         <!-- Session View -->
@@ -319,6 +356,7 @@
         </div>
     </div>    
 <script src="scripts/nav.js"></script>
+<script src="scripts/profile.js"></script>
 <!-- Invisible bot check for drill generation only — see scripts/script.js (getTurnstileToken) -->
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" async defer></script>
 <div id="turnstileContainer" style="display:none;"></div>
