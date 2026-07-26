@@ -258,8 +258,8 @@
     padding: 14px 40px;
     background: linear-gradient(135deg, rgba(255, 109, 5, 0.95), rgba(190, 74, 0, 0.95));
     border-top: 1px solid rgba(255, 255, 255, 0.15);
-    border-bottom-left-radius: 20px;
-    border-bottom-right-radius: 20px;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
 }
 
 .settings-modal-footer .btn {
