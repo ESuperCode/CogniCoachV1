@@ -646,7 +646,13 @@ function startSession() {
     appState.setup.location = document.getElementById('location').value || 'Any';
     appState.setup.focus = document.getElementById('focus').value || 'General';
     appState.setup.muscleGroup = document.getElementById('muscleGroup').value || 'Full Body';
-    appState.setup.level = document.getElementById('level').value;
+    // The #level select is "Auto" (blank) by default — if it's blank,
+    // getLevelFieldForApi() sends the user's raw age instead, so the level
+    // field the worker sees is either an explicit skill-level word or a
+    // number, depending on whether the user overrode it.
+    appState.setup.level = (typeof getLevelFieldForApi === 'function')
+        ? getLevelFieldForApi(document.getElementById('level').value, appState.setup.sport)
+        : (document.getElementById('level').value || 'intermediate');
     appState.setup.workoutLength = parseInt(document.getElementById('workoutLength').value);
 
     // Validate
@@ -1469,7 +1475,9 @@ function loadState() {
             if (loadedState.setup.location) document.getElementById('location').value = loadedState.setup.location;
             if (loadedState.setup.focus) document.getElementById('focus').value = loadedState.setup.focus;
             if (loadedState.setup.muscleGroup) document.getElementById('muscleGroup').value = loadedState.setup.muscleGroup;
-            if (loadedState.setup.level) document.getElementById('level').value = loadedState.setup.level;
+            if (loadedState.setup.level && typeof PROFILE_LEVELS !== 'undefined' && PROFILE_LEVELS.includes(loadedState.setup.level)) {
+                document.getElementById('level').value = loadedState.setup.level;
+            }
             if (loadedState.setup.workoutLength) {
                 document.getElementById('workoutLength').value = loadedState.setup.workoutLength;
                 updateSliderValue();

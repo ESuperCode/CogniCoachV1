@@ -155,6 +155,35 @@ function recordSessionPreferences(setup) {
     saveProfile(profile);
 }
 
+// True if the user has explicitly chosen a skill level for this sport
+// somewhere in Settings (a per-sport override, or auto-suggest turned off
+// with a manual default level) — as opposed to just letting age drive it.
+function hasExplicitLevel(profile, sport) {
+    const sp = profile.sportProfiles[sport] || {};
+    if (sp.levelOverride) return true;
+    if (!profile.autoLevel) return true;
+    return false;
+}
+
+// Resolves what should actually be sent in the API's "level" field.
+//   1. The Advanced Setup dropdown on this page wins if the user touched it.
+//   2. A saved per-sport override / manual default from Settings counts as
+//      an explicit choice too.
+//   3. Otherwise, no level has been explicitly chosen — send the raw age
+//      (from date of birth) so the worker can tailor the drill instead of
+//      forcing it into one of five buckets.
+//   4. No DOB on file either (user skipped it) — fall back to a sane
+//      default level string.
+function getLevelFieldForApi(dropdownValue, sport) {
+    if (dropdownValue) return dropdownValue;
+
+    const profile = loadProfile();
+    if (hasExplicitLevel(profile, sport)) return getEffectiveLevel(profile, sport);
+    if (profile.age != null) return profile.age;
+
+    return 'intermediate';
+}
+
 function getSmartDefaults(sport) {
     const profile = loadProfile();
     const sp = profile.sportProfiles[sport] || {};
@@ -189,12 +218,12 @@ function closeProfileModal() {
     if (el) el.remove();
 }
 
-function openProfileModal(innerHtml, { dismissible = true } = {}) {
+function openProfileModal(innerHtml, { dismissible = true, extraClass = '' } = {}) {
     closeProfileModal();
     const overlay = document.createElement('div');
     overlay.id = 'profileModalOverlay';
     overlay.className = 'profile-modal-overlay';
-    overlay.innerHTML = `<div class="profile-modal card">${innerHtml}</div>`;
+    overlay.innerHTML = `<div class="profile-modal card${extraClass ? ' ' + extraClass : ''}">${innerHtml}</div>`;
     if (dismissible) {
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) closeProfileModal();
@@ -286,13 +315,11 @@ function renderSportSwitcher() {
 
     const profile = loadProfile();
     const sport = currentSport();
-    const level = getEffectiveLevel(profile, sport);
 
     container.innerHTML = `
         <div class="sport-switcher-row">
             <span class="sport-switcher-label">Training for</span>
             <span class="sport-switcher-current">${sport || 'Not set'}</span>
-            <span class="sport-switcher-level" title="Suggested skill level for this sport">${level}</span>
             <button type="button" class="btn-chip" id="sportSwitcherToggle">Change</button>
         </div>
         <div class="sport-switcher-panel hidden" id="sportSwitcherPanel">
@@ -366,7 +393,10 @@ function prefillQuickStartFields(sport) {
     if (locationInput && !locationInput.dataset.userEdited) locationInput.value = defaults.location;
     if (focusInput && !focusInput.dataset.userEdited) focusInput.value = defaults.focus;
     if (muscleInput && !muscleInput.dataset.userEdited) muscleInput.value = defaults.muscleGroup;
-    if (levelSelect && !levelSelect.dataset.userEdited) levelSelect.value = defaults.level;
+    // Leave the level select on "Auto" unless the user has explicitly
+    // picked something — script.js's getLevelFieldForApi() is what
+    // actually resolves age -> the API's level field, not this prefill.
+    if (levelSelect && !levelSelect.dataset.userEdited) levelSelect.value = '';
     if (lengthInput && !lengthInput.dataset.userEdited) {
         lengthInput.value = defaults.workoutLength;
         if (typeof updateSliderValue === 'function') updateSliderValue();
@@ -457,6 +487,7 @@ function openAdvancedSettings() {
     const sportsWithData = Object.keys(profile.sportProfiles);
 
     const overlay = openProfileModal(`
+        <div class="settings-modal-scroll">
         <div class="profile-modal-header">
             <h2 class="card-title">Advanced Settings</h2>
             <button type="button" class="btn-chip" id="settingsCloseBtn">Close</button>
@@ -514,13 +545,16 @@ function openAdvancedSettings() {
             <button type="button" class="btn btn-secondary" id="redoOnboardingBtn">Redo Setup Wizard</button>
             <button type="button" class="btn btn-danger" id="resetProfileBtn">Reset All Preferences</button>
         </div>
+        </div>
 
-        <div class="profile-modal-actions">
+        <div class="settings-modal-footer">
+            <button type="button" class="btn btn-secondary" id="settingsDiscardBtn">Discard Changes</button>
             <button type="button" class="btn btn-primary" id="settingsSaveBtn">Save Changes</button>
         </div>
-    `);
+    `, { extraClass: 'profile-modal--footer' });
 
     overlay.querySelector('#settingsCloseBtn').addEventListener('click', closeProfileModal);
+    overlay.querySelector('#settingsDiscardBtn').addEventListener('click', closeProfileModal);
 
     const autoLevelBox = overlay.querySelector('#setAutoLevel');
     const manualLevelGroup = overlay.querySelector('#manualLevelGroup');
@@ -609,7 +643,6 @@ function renderProfileSummaryCard() {
 
     const profile = loadProfile();
     const sport = profile.defaultSport || '—';
-    const level = getEffectiveLevel(profile, profile.defaultSport);
     const sportsTrained = Object.keys(profile.sportProfiles).length;
 
     container.innerHTML = `
@@ -618,10 +651,6 @@ function renderProfileSummaryCard() {
             <div class="stat-pill">
                 <div class="stat-value">${profile.age != null ? profile.age : '—'}</div>
                 <div class="stat-label">Age</div>
-            </div>
-            <div class="stat-pill">
-                <div class="stat-value" style="font-size:1.1rem;">${level}</div>
-                <div class="stat-label">Suggested Level</div>
             </div>
             <div class="stat-pill">
                 <div class="stat-value" style="font-size:1.1rem;">${sport}</div>
