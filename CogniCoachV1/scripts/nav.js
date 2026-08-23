@@ -13,6 +13,7 @@
 const NAV_LINKS = [
     { href: 'index.html', label: 'CogniCoach', brand: true },
     { href: 'dashboard.html', label: 'Dashboard' },
+    { href: 'competition.html', label: 'Competition' },
     { href: 'about.html', label: 'About Us' },
     { href: 'contact.html', label: 'Contact' }
 ];

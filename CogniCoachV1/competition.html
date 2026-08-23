@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex,follow">
+    <title>Competition Mode | CogniCoachAI</title>
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="apple-touch-icon" href="logo-192.png">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="styles/style.css" rel="stylesheet">
+    <link href="styles/nav.css" rel="stylesheet">
+    <link href="styles/dashboard.css" rel="stylesheet">
+    <link href="styles/profile.css" rel="stylesheet">
+    <link href="styles/competition.css" rel="stylesheet">
+</head>
+<body>
+    <site-nav></site-nav>
+
+    <!-- Animated Background -->
+    <div class="animated-bg">
+        <div class="bg-orb orb-1"></div>
+        <div class="bg-orb orb-2"></div>
+        <div class="bg-orb orb-3"></div>
+        <div class="pointer-glow"></div>
+        <div class="grid-pattern"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <div class="logo-container">
+                <div class="logo-placeholder">
+                    <img src="logo.png" alt="CogniCoachAI logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 20px;" onerror="this.style.display='none'; this.parentElement.textContent='CC';">
+                </div>
+                <h1>CogniCoachAI</h1>
+            </div>
+            <p class="tagline">COMPETITION MODE</p>
+        </header>
+
+        <div class="dash-grid">
+
+            <!-- Sport picker -->
+            <div class="card dash-card dash-span-12">
+                <h2 class="card-title">Which sport are you competing in?</h2>
+                <p class="text-muted comp-subtext">
+                    Focus notes are built up automatically from your training sessions, sport by sport —
+                    they only show up here once you've trained for that sport at least once.
+                </p>
+                <div class="form-group comp-sport-picker">
+                    <select id="competitionSportSelect"></select>
+                </div>
+            </div>
+
+            <!-- Focus notes -->
+            <div class="card dash-card dash-span-6">
+                <div class="dash-card-header">
+                    <h2 class="card-title" style="margin-bottom:0;">Things to Focus On</h2>
+                    <button type="button" class="btn btn-secondary" id="generateNotesBtn">Generate Focus Notes</button>
+                </div>
+                <ul class="comp-notes-list hidden" id="competitionNotesList"></ul>
+                <p class="comp-notes-meta" id="competitionNotesMeta"></p>
+                <div class="dash-empty comp-notes-empty" id="competitionNotesEmpty">
+                    No focus notes yet for this sport. Complete a training session and notes will appear here
+                    automatically, or generate a starter set right now.
+                </div>
+            </div>
+
+            <!-- Chatbot -->
+            <div class="card dash-card dash-span-6 comp-chat-card">
+                <h2 class="card-title">Ask CogniCoach</h2>
+                <p class="text-muted comp-subtext">Questions about strategy, mindset, or prepping for your competition — sport-specific only.</p>
+                <div class="comp-chat-log" id="competitionChatLog"></div>
+                <form id="competitionChatForm" class="comp-chat-form">
+                    <input type="text" id="competitionChatInput" placeholder="Ask a question…" maxlength="1000" autocomplete="off">
+                    <button type="submit" class="btn btn-primary" id="competitionChatSendBtn">Send</button>
+                </form>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="scripts/nav.js"></script>
+    <script src="scripts/profile.js"></script>
+    <script src="scripts/sport-normalize.js"></script>
+    <!-- Invisible bot check for the notes/chat requests on this page — see scripts/competition.js -->
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <div id="competitionTurnstileContainer" style="display:none;"></div>
+    <script src="scripts/competition.js"></script>
+</body>
+</html>

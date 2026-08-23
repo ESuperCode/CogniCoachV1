@@ -1,0 +1,122 @@
+/* Competition Mode — notes list + chatbot, layered on top of the shared
+   card/grid/button system from style.css and dashboard.css. */
+
+.text-muted {
+    color: var(--text-gray);
+}
+
+.comp-subtext {
+    font-size: 0.85rem;
+    margin-bottom: 14px;
+}
+
+.comp-sport-picker select {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--medium-gray);
+    border: 1px solid var(--light-gray);
+    border-radius: 8px;
+    color: var(--text-white);
+    font-family: inherit;
+    font-size: 0.95rem;
+}
+
+.comp-notes-list {
+    list-style: none;
+    margin: 0 0 8px 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.comp-notes-list li {
+    background: var(--medium-gray);
+    border: 1px solid var(--light-gray);
+    border-left: 3px solid var(--primary-blue);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.comp-notes-meta {
+    color: var(--text-gray);
+    font-size: 0.75rem;
+    margin: 4px 0 0 0;
+}
+
+.comp-notes-empty {
+    font-size: 0.85rem;
+}
+
+.comp-chat-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.comp-chat-log {
+    flex: 1;
+    min-height: 220px;
+    max-height: 340px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 2px;
+    margin-bottom: 10px;
+}
+
+.comp-chat-msg {
+    max-width: 85%;
+    padding: 9px 13px;
+    border-radius: 12px;
+    font-size: 0.88rem;
+    line-height: 1.4;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+
+.comp-chat-assistant {
+    align-self: flex-start;
+    background: var(--medium-gray);
+    border: 1px solid var(--light-gray);
+    color: var(--text-white);
+}
+
+.comp-chat-user {
+    align-self: flex-end;
+    background: var(--primary-blue);
+    color: #fff;
+}
+
+.comp-chat-typing {
+    opacity: 0.6;
+    font-style: italic;
+}
+
+.comp-chat-form {
+    display: flex;
+    gap: 8px;
+}
+
+.comp-chat-form input {
+    flex: 1;
+    padding: 10px 12px;
+    background: var(--medium-gray);
+    border: 1px solid var(--light-gray);
+    border-radius: 8px;
+    color: var(--text-white);
+    font-family: inherit;
+    font-size: 0.9rem;
+}
+
+.comp-chat-form input:disabled {
+    opacity: 0.6;
+}
+
+@media (max-width: 720px) {
+    .comp-chat-log {
+        max-height: 260px;
+    }
+}

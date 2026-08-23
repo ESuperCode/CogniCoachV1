@@ -630,7 +630,7 @@ function updateTimelineColors() {
 }
 
 // Start session
-function startSession() {
+async function startSession() {
     const hasCurrentWorkoutData = appState.session.drills.length > 0;
 
     if (hasCurrentWorkoutData) {
@@ -643,6 +643,22 @@ function startSession() {
 
     // Collect form data
     appState.setup.sport = document.getElementById('sport').value || 'General';
+
+    // Canonicalize the sport name (e.g. "swim" -> "Swimming") BEFORE it's
+    // used for anything else below, so learned preferences, session
+    // history, and Competition Mode notes all group under one consistent
+    // key regardless of exactly how it was typed this time. See
+    // scripts/sport-normalize.js.
+    if (typeof normalizeSportName === 'function') {
+        try {
+            appState.setup.sport = await normalizeSportName(appState.setup.sport);
+            const sportInput = document.getElementById('sport');
+            if (sportInput) sportInput.value = appState.setup.sport;
+        } catch (e) {
+            console.warn('Sport normalization failed, continuing with the raw value:', e);
+        }
+    }
+
     appState.setup.location = document.getElementById('location').value || 'Any';
     appState.setup.focus = document.getElementById('focus').value || 'General';
     appState.setup.muscleGroup = document.getElementById('muscleGroup').value || 'Full Body';
@@ -665,6 +681,13 @@ function startSession() {
     // Quick Start gets smarter defaults next time (see scripts/profile.js).
     if (typeof recordSessionPreferences === 'function') {
         recordSessionPreferences(appState.setup);
+    }
+
+    // Kick off Competition Mode's background note-taking for this sport.
+    // Deliberately NOT awaited — this should never delay the workout the
+    // person is about to do. See scripts/competition.js.
+    if (typeof generateCompetitionNotes === 'function') {
+        generateCompetitionNotes({ ...appState.setup });
     }
 
     // Calculate drill times (smart, human-friendly distribution)
