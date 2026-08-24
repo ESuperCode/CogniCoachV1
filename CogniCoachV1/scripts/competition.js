@@ -68,6 +68,9 @@ function saveCompetitionNotesStore(store) {
 
 let competitionTurnstileWidgetId = null;
 let competitionTurnstileReadyPromise = null;
+let competitionTurnstileBusy = false; // true while an execute() call is in flight
+let pendingCompetitionTurnstileResolve = null;
+let pendingCompetitionTurnstileReject = null;
 
 function waitForTurnstileGlobal(timeoutMs = 15000) {
     return new Promise((resolve, reject) => {
@@ -92,9 +95,33 @@ function ensureCompetitionTurnstile() {
 
     if (!competitionTurnstileReadyPromise) {
         competitionTurnstileReadyPromise = waitForTurnstileGlobal().then(() => {
+            // execution: 'execute' stops Turnstile from auto-firing (and
+            // burning) a challenge the instant it's rendered — without
+            // this, that silent auto-run consumes the token before we
+            // ever call execute() ourselves below, so the token we send
+            // the Worker is already-redeemed and siteverify (correctly)
+            // 403s it. See script.js's onTurnstileLoad for the same
+            // pattern on the drill-generation widget.
             competitionTurnstileWidgetId = turnstile.render('#competitionTurnstileContainer', {
                 sitekey: COMPETITION_TURNSTILE_SITE_KEY,
-                size: 'invisible'
+                size: 'invisible',
+                execution: 'execute',
+                callback: (token) => {
+                    competitionTurnstileBusy = false;
+                    if (pendingCompetitionTurnstileResolve) {
+                        pendingCompetitionTurnstileResolve(token);
+                        pendingCompetitionTurnstileResolve = null;
+                        pendingCompetitionTurnstileReject = null;
+                    }
+                },
+                'error-callback': () => {
+                    competitionTurnstileBusy = false;
+                    if (pendingCompetitionTurnstileReject) {
+                        pendingCompetitionTurnstileReject(new Error('Bot check failed. Please refresh and try again.'));
+                        pendingCompetitionTurnstileResolve = null;
+                        pendingCompetitionTurnstileReject = null;
+                    }
+                }
             });
         });
     }
@@ -104,10 +131,19 @@ function ensureCompetitionTurnstile() {
 async function getCompetitionTurnstileToken() {
     await ensureCompetitionTurnstile();
     return new Promise((resolve, reject) => {
-        turnstile.execute(competitionTurnstileWidgetId, {
-            callback: (token) => resolve(token),
-            'error-callback': () => reject(new Error('Bot check failed. Please refresh and try again.'))
-        });
+        if (competitionTurnstileBusy) {
+            reject(new Error('Bot check already in progress.'));
+            return;
+        }
+        competitionTurnstileBusy = true;
+        pendingCompetitionTurnstileResolve = resolve;
+        pendingCompetitionTurnstileReject = reject;
+        // Reset before every execute() — without this, a second call on
+        // an already-fired widget replays the same spent token instead
+        // of getting a fresh one, which the same way redeems a token
+        // that's no longer valid and gets 403'd by the Worker.
+        turnstile.reset(competitionTurnstileWidgetId);
+        turnstile.execute(competitionTurnstileWidgetId);
     });
 }
 
