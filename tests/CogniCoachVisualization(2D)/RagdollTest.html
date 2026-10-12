@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>CogniCoachVisualization</title>    
+    <link rel="stylesheet" href="TemplateData/style.css">
+  <script src="TemplateData/profiler.js"></script>
+  <style>
+    #motion-controls {
+      position: fixed;
+      left: 16px;
+      top: 16px;
+      z-index: 20;
+      width: 380px;
+      max-width: calc(100vw - 32px);
+      box-sizing: border-box;
+      padding: 10px;
+      font-family: Arial, sans-serif;
+      color: #222;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid #c8c8c8;
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+      pointer-events: auto;
+    }
+
+    #motion-controls textarea {
+      width: 100%;
+      min-height: 120px;
+      max-height: 220px;
+      box-sizing: border-box;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 13px;
+      line-height: 1.35;
+      padding: 8px;
+      resize: vertical;
+    }
+
+    .motion-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 8px 0;
+    }
+
+    .motion-row:first-child {
+      margin-top: 0;
+    }
+
+    .motion-row label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #frame-slider {
+      flex: 1 1 260px;
+    }
+
+    #motion-status {
+      min-height: 20px;
+      font-size: 13px;
+      color: #444;
+    }
+
+    #drag-help {
+      margin: 4px 0 8px;
+      font-size: 12px;
+      color: #555;
+    }
+
+    @media (max-width: 700px) {
+      #motion-controls {
+        left: 8px;
+        right: 8px;
+        top: 8px;
+        width: auto;
+      }
+    }
+  </style>
+  </head>
+  <body>
+    <div id="unity-container" class="unity-desktop">
+      <canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas>
+      <div id="unity-loading-bar">
+        <div id="unity-logo"></div>
+        <div id="unity-progress-bar-empty">
+          <div id="unity-progress-bar-full"></div>
+        </div>
+      </div>
+      <div id="unity-warning"> </div>
+      <div id="unity-footer">
+        <div id="unity-logo-title-footer"></div>
+        <div id="unity-fullscreen-button"></div>
+        <div id="unity-build-title">CogniCoachVisualization</div>
+      </div>
+    </div>
+    <div id="motion-controls">
+      <div class="motion-row">
+        <button id="load-frames-button" type="button">Load JSON Frames</button>
+        <button id="play-motion-button" type="button">Play</button>
+        <button id="prev-frame-button" type="button">Previous</button>
+        <button id="next-frame-button" type="button">Next</button>
+        <label>FPS <input id="fps-input" type="number" min="1" max="60" value="8"></label>
+        <label>Frame <input id="frame-number-input" type="number" min="1" value="1"></label>
+      </div>
+      <div class="motion-row">
+        <input id="frame-slider" type="range" min="0" max="0" value="0">
+        <span id="frame-count-label">1 / 1</span>
+      </div>
+      <div id="drag-help">Use Up/Down arrows for positionx and Left/Right arrows for positiony.</div>
+      <textarea id="bodycode-frames-input" spellcheck="false"></textarea>
+      <div id="motion-status">Unity is loading. Controls will send frames when the build is ready.</div>
+    </div>
+    <script>
+      
+      var canvas = document.querySelector("#unity-canvas");
+      var motionControls = document.querySelector("#motion-controls");
+      var unityMotionInstance = null;
+      var motionAnimationId = null;
+      var motionFrameStartedAt = 0;
+      var currentFrameIndex = 0;
+      var bodyPosition = {
+        "positionx": 0,
+        "positiony": 0,
+        "positionz": 0
+      };
+
+      function isMotionControlFocused() {
+        return !!(document.activeElement && motionControls && motionControls.contains(document.activeElement));
+      }
+
+      function installHtmlInputKeyboardGuard() {
+        if (window.htmlInputKeyboardGuardInstalled) {
+          return;
+        }
+
+        window.htmlInputKeyboardGuardInstalled = true;
+        var originalAddEventListener = EventTarget.prototype.addEventListener;
+
+        EventTarget.prototype.addEventListener = function(type, listener, options) {
+          var isKeyboardEvent =
+            type === "keydown" ||
+            type === "keypress" ||
+            type === "keyup";
+          var isUnityKeyboardTarget =
+            this === window ||
+            this === document ||
+            this === document.body ||
+            this === canvas;
+
+          if (isKeyboardEvent && isUnityKeyboardTarget && typeof listener === "function") {
+            var guardedListener = function(event) {
+              if (isMotionControlFocused()) {
+                return;
+              }
+
+              return listener.call(this, event);
+            };
+
+            return originalAddEventListener.call(this, type, guardedListener, options);
+          }
+
+          return originalAddEventListener.call(this, type, listener, options);
+        };
+      }
+
+      installHtmlInputKeyboardGuard();
+
+      var DEFAULT_BODY_CODE = {
+        "hipx": 0,
+        "hipy": 0,
+        "hipz": 0,
+        "lefthipx": 0,
+        "lefthipy": 0,
+        "lefthipz": 0,
+        "righthipx": 0,
+        "righthipy": 0,
+        "righthipz": 0,
+        "leftkneex": 0,
+        "leftkneey": 0,
+        "leftkneez": 0,
+        "rightkneex": 0,
+        "rightkneey": 0,
+        "rightkneez": 0,
+        "spinex": 0,
+        "spiney": 0,
+        "spinez": 0,
+        "neckx": 0,
+        "necky": 0,
+        "neckz": 0,
+        "leftshoulderx": 0,
+        "leftshouldery": 0,
+        "leftshoulderz": 0,
+        "rightshoulderx": 0,
+        "rightshouldery": 0,
+        "rightshoulderz": 0,
+        "leftelbowx": 0,
+        "leftelbowy": 0,
+        "leftelbowz": 0,
+        "rightelbowx": 0,
+        "rightelbowy": 0,
+        "rightelbowz": 0,
+        "positionx": 0,
+        "positiony": 0,
+        "positionz": 0
+      };
+
+      var motionFrames = [
+        
+        {"lefthipx":30,
+        "leftkneex":-30        
+        },
+        {"lefthipx":15,
+          "positionx":-5,
+          "righthipx":-15
+        },        
+        {"righthipx":30,
+        "rightkneex":-30,  
+             
+        },
+        {"righthipx":15,
+          "positionx":-5,
+          "lefthipx":-15
+        },
+                 
+
+      ];
+
+      // Shows a temporary message banner/ribbon for a few seconds, or
+      // a permanent error message on top of the canvas if type=='error'.
+      // If type=='warning', a yellow highlight color is used.
+      // Modify or remove this function to customize the visually presented
+      // way that non-critical warnings and error messages are presented to the
+      // user.
+      function relativityCalculation(json){
+        json.hipx=json.positionx+json.hipx
+        json.hipy=json.positiony+json.hipy
+        json.hipz=json.positionz+json.hipz
+        json.spinex=json.positionx+json.spinex
+        json.spiney=json.positiony+json.spiney
+        json.spinez=json.positionz+json.spinez
+        json.lefthipx=json.hipx+json.lefthipx
+        json.lefthipy=json.hipy+json.lefthipy
+        json.lefthipz=json.hipz+json.lefthipz
+        json.righthipx=json.hipx+json.righthipx
+        json.righthipy=json.hipy+json.righthipy
+        json.righthipz=json.hipz+json.righthipz
+        json.leftkneex=json.lefthipx+json.leftkneex
+        json.leftkneey=json.lefthipy+json.leftkneey
+        json.leftkneez=json.lefthipz+json.leftkneez
+        json.rightkneex=json.righthipx+json.rightkneex
+        json.rightkneey=json.righthipy+json.rightkneey
+        json.rightkneez=json.righthipz+json.rightkneez
+        json.rightshoulderx=json.spinex+json.rightshoulderx
+        json.rightshouldery=json.spiney+json.rightshouldery
+        json.rightshoulderz=json.spinez+json.rightshoulderz
+        json.leftshoulderx=json.spinex+json.leftshoulderx
+        json.leftshouldery=json.spiney+json.leftshouldery
+        json.leftshoulderz=json.spinez+json.leftshoulderz
+        json.leftelbowx=json.leftshoulderx+json.leftelbowx
+        json.leftelbowy=json.leftshouldery+json.leftelbowy
+        json.leftelbowz=json.leftshoulderz+json.leftelbowz
+        json.rightelbowx=json.rightshoulderx+json.rightelbowx
+        json.rightelbowy=json.rightshouldery+json.rightelbowy
+        json.rightelbowz=json.rightshoulderz+json.rightelbowz
+        json.neckx=json.neckx+json.spinex
+        json.necky=json.necky+json.spiney
+        json.neckz=json.neckz+json.spinez
+        return JSON.stringify(json)
+      }
+
+      function cloneBodyCode(frame) {
+        return Object.assign({}, DEFAULT_BODY_CODE, bodyPosition, frame || {});
+      }
+
+      function interpolateAngleDegrees(fromValue, toValue, amount) {
+        var difference = ((toValue - fromValue + 540) % 360) - 180;
+        return fromValue + difference * amount;
+      }
+
+      function shouldWrapAngle(key) {
+        return key !== "positionx" && key !== "positiony" && key !== "positionz";
+      }
+
+      function interpolateBodyCode(fromFrame, toFrame, amount) {
+        var fromBody = cloneBodyCode(fromFrame);
+        var toBody = cloneBodyCode(toFrame);
+        var blendedBody = {};
+
+        Object.keys(DEFAULT_BODY_CODE).forEach(function(key) {
+          var fromValue = Number(fromBody[key]) || 0;
+          var toValue = Number(toBody[key]) || 0;
+          blendedBody[key] = shouldWrapAngle(key)
+            ? interpolateAngleDegrees(fromValue, toValue, amount)
+            : fromValue + (toValue - fromValue) * amount;
+        });
+
+        return blendedBody;
+      }
+
+      function getFrameInputElements() {
+        return {
+          textarea: document.querySelector("#bodycode-frames-input"),
+          loadButton: document.querySelector("#load-frames-button"),
+          playButton: document.querySelector("#play-motion-button"),
+          prevButton: document.querySelector("#prev-frame-button"),
+          nextButton: document.querySelector("#next-frame-button"),
+          fpsInput: document.querySelector("#fps-input"),
+          numberInput: document.querySelector("#frame-number-input"),
+          slider: document.querySelector("#frame-slider"),
+          countLabel: document.querySelector("#frame-count-label"),
+          status: document.querySelector("#motion-status")
+        };
+      }
+
+      function setMotionStatus(message, isError) {
+        var controls = getFrameInputElements();
+        controls.status.textContent = message;
+        controls.status.style.color = isError ? "#a40000" : "#444";
+      }
+
+      function updateFrameControls() {
+        var controls = getFrameInputElements();
+        var totalFrames = motionFrames.length;
+        controls.slider.max = Math.max(0, totalFrames - 1);
+        controls.slider.value = currentFrameIndex;
+        controls.numberInput.max = totalFrames;
+        controls.numberInput.value = currentFrameIndex + 1;
+        controls.countLabel.textContent = (currentFrameIndex + 1) + " / " + totalFrames;
+      }
+
+      function sendCurrentFrame() {
+        if (!unityMotionInstance || !motionFrames.length) {
+          return;
+        }
+
+        var frame = cloneBodyCode(motionFrames[currentFrameIndex]);
+        unityMotionInstance.SendMessage('WebBridge', 'UpdateMotion', relativityCalculation(frame));
+        updateFrameControls();
+        setMotionStatus("Showing frame " + (currentFrameIndex + 1) + " of " + motionFrames.length + ".");
+      }
+
+      function sendInterpolatedFrame(amount) {
+        if (!unityMotionInstance || !motionFrames.length) {
+          return;
+        }
+
+        var nextFrameIndex = (currentFrameIndex + 1) % motionFrames.length;
+        var frame = interpolateBodyCode(
+          motionFrames[currentFrameIndex],
+          motionFrames[nextFrameIndex],
+          amount
+        );
+        unityMotionInstance.SendMessage('WebBridge', 'UpdateMotion', relativityCalculation(frame));
+        updateFrameControls();
+      }
+
+      function getPlaybackBlendAmount(now, fps) {
+        var frameDuration = 1000 / fps;
+        var elapsed = now - motionFrameStartedAt;
+
+        while (elapsed >= frameDuration) {
+          currentFrameIndex = (currentFrameIndex + 1) % motionFrames.length;
+          motionFrameStartedAt += frameDuration;
+          elapsed = now - motionFrameStartedAt;
+        }
+
+        return Math.max(0, Math.min(1, elapsed / frameDuration));
+      }
+
+      function resendCurrentPose() {
+        if (motionAnimationId) {
+          var controls = getFrameInputElements();
+          var fps = Math.max(1, Math.min(60, Number(controls.fpsInput.value) || 8));
+          sendInterpolatedFrame(getPlaybackBlendAmount(performance.now(), fps));
+        } else {
+          sendCurrentFrame();
+        }
+      }
+
+      function syncFramesTextarea() {
+        var controls = getFrameInputElements();
+        controls.textarea.value = JSON.stringify(motionFrames, null, 2);
+      }
+
+      function formatBodyPosition() {
+        return "position: x " + bodyPosition.positionx.toFixed(2) +
+          ", y " + bodyPosition.positiony.toFixed(2) +
+          ", z " + bodyPosition.positionz.toFixed(2) + ".";
+      }
+
+      function showFrame(index) {
+        currentFrameIndex = Math.max(0, Math.min(motionFrames.length - 1, index));
+        sendCurrentFrame();
+      }
+
+      function stopMotionLoop() {
+        var controls = getFrameInputElements();
+        if (motionAnimationId) {
+          cancelAnimationFrame(motionAnimationId);
+          motionAnimationId = null;
+        }
+        controls.playButton.textContent = "Play";
+      }
+
+      function startMotionLoop() {
+        var controls = getFrameInputElements();
+        var fps = Math.max(1, Math.min(60, Number(controls.fpsInput.value) || 8));
+        stopMotionLoop();
+        controls.fpsInput.value = fps;
+        controls.playButton.textContent = "Pause";
+        motionFrameStartedAt = performance.now();
+
+        function animateMotion(now) {
+          sendInterpolatedFrame(getPlaybackBlendAmount(now, fps));
+          setMotionStatus(
+            "Playing frame " + (currentFrameIndex + 1) +
+            " toward frame " + (((currentFrameIndex + 1) % motionFrames.length) + 1) + "."
+          );
+          motionAnimationId = requestAnimationFrame(animateMotion);
+        }
+
+        motionAnimationId = requestAnimationFrame(animateMotion);
+      }
+
+      function parseMotionFrames() {
+        var controls = getFrameInputElements();
+        var parsed = JSON.parse(controls.textarea.value);
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+          throw new Error("The bodycode input must be a non-empty JSON array of frame objects.");
+        }
+        parsed.forEach(function(frame, index) {
+          if (!frame || Array.isArray(frame) || typeof frame !== "object") {
+            throw new Error("Frame " + (index + 1) + " must be a JSON object.");
+          }
+        });
+        return parsed;
+      }
+
+      function setupMotionControls() {
+        var controls = getFrameInputElements();
+        if (!controls.textarea.value.trim()) {
+          controls.textarea.value = JSON.stringify(motionFrames, null, 2);
+        }
+        updateFrameControls();
+
+        controls.loadButton.onclick = function() {
+          try {
+            motionFrames = parseMotionFrames();
+            currentFrameIndex = 0;
+            stopMotionLoop();
+            syncFramesTextarea();
+            sendCurrentFrame();
+            setMotionStatus("Loaded " + motionFrames.length + " animation frames.");
+          } catch (error) {
+            setMotionStatus(error.message, true);
+          }
+        };
+
+        controls.playButton.onclick = function() {
+          if (motionAnimationId) {
+            stopMotionLoop();
+            sendCurrentFrame();
+          } else {
+            startMotionLoop();
+          }
+        };
+
+        controls.prevButton.onclick = function() {
+          stopMotionLoop();
+          showFrame(currentFrameIndex - 1);
+        };
+
+        controls.nextButton.onclick = function() {
+          stopMotionLoop();
+          showFrame(currentFrameIndex + 1);
+        };
+
+        controls.slider.oninput = function() {
+          stopMotionLoop();
+          showFrame(Number(controls.slider.value));
+        };
+
+        controls.numberInput.onchange = function() {
+          stopMotionLoop();
+          showFrame((Number(controls.numberInput.value) || 1) - 1);
+        };
+
+        controls.fpsInput.onchange = function() {
+          if (motionAnimationId) {
+            startMotionLoop();
+          }
+        };
+
+      }
+
+      setupMotionControls();
+
+      function keepControlsInteractive() {
+        if (typeof WebGLInput !== "undefined") {
+          WebGLInput.captureAllKeyboardInput = false;
+        }
+
+        if (motionControls.dataset.controlsInteractive === "true") {
+          return;
+        }
+
+        motionControls.dataset.controlsInteractive = "true";
+
+        ["pointerdown", "mousedown", "mouseup", "click", "dblclick", "keydown", "keyup", "keypress"].forEach(function(eventName) {
+          motionControls.addEventListener(eventName, function(event) {
+            event.stopPropagation();
+          });
+        });
+      }
+
+      keepControlsInteractive();
+
+      function setupPositionArrowKeys() {
+        var positionStep = 1;
+
+        window.addEventListener("keydown", function(event) {
+          var activeTag = document.activeElement && document.activeElement.tagName;
+          if (activeTag === "TEXTAREA" || activeTag === "INPUT") {
+            return;
+          }
+
+          if (
+            event.key !== "ArrowUp" &&
+            event.key !== "ArrowDown" &&
+            event.key !== "ArrowLeft" &&
+            event.key !== "ArrowRight"
+          ) {
+            return;
+          }
+
+          if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+            var xDirection = event.key === "ArrowUp" ? 1 : -1;
+            bodyPosition.positionx += xDirection * positionStep;
+          } else {
+            var yDirection = event.key === "ArrowRight" ? 1 : -1;
+            bodyPosition.positiony += yDirection * positionStep;
+          }
+
+          resendCurrentPose();
+          setMotionStatus("Global " + formatBodyPosition());
+          event.preventDefault();
+        });
+      }
+
+      setupPositionArrowKeys();
+      function unityShowBanner(msg, type) {
+        var warningBanner = document.querySelector("#unity-warning");
+        function updateBannerVisibility() {
+          warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
+        }
+        var div = document.createElement('div');
+        div.innerHTML = msg;
+        warningBanner.appendChild(div);
+        if (type == 'error') div.style = 'background: red; padding: 10px;';
+        else {
+          if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
+          setTimeout(function() {
+            warningBanner.removeChild(div);
+            updateBannerVisibility();
+          }, 5000);
+        }
+        updateBannerVisibility();
+      }
+
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/Builds.loader.js";
+      var config = {
+        arguments: [],
+        dataUrl: buildUrl + "/Builds.data",
+        frameworkUrl: buildUrl + "/Builds.framework.js",
+        codeUrl: buildUrl + "/Builds.wasm",
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: "DefaultCompany",
+        productName: "CogniCoachVisualization",
+        productVersion: "1.0",
+        showBanner: unityShowBanner,
+        // errorHandler: function(err, url, line) {
+        //    alert("error " + err + " occurred at line " + line);
+        //    // Return 'true' if you handled this error and don't want Unity
+        //    // to process it further, 'false' otherwise.
+        //    return true;
+        // },
+      };
+
+      // By default, Unity keeps WebGL canvas render target size matched with
+      // the DOM size of the canvas element (scaled by window.devicePixelRatio)
+      // Set this to false if you want to decouple this synchronization from
+      // happening inside the engine, and you would instead like to size up
+      // the canvas DOM size and WebGL render target sizes yourself.
+      // config.matchWebGLToCanvasSize = false;
+
+      // If you would like all file writes inside Unity Application.persistentDataPath
+      // directory to automatically persist so that the contents are remembered when
+      // the user revisits the site the next time, uncomment the following line:
+      // config.autoSyncPersistentDataPath = true;
+      // This autosyncing is currently not the default behavior to avoid regressing
+      // existing user projects that might rely on the earlier manual
+      // JS_FileSystem_Sync() behavior, but in future Unity version, this will be
+      // expected to change.
+
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+        // Mobile device style: fill the whole browser client area with the game canvas:
+
+        var meta = document.createElement('meta');
+        meta.name = 'viewport';
+        meta.content = 'width=device-width, height=device-height, initial-scale=1.0, user-scalable=no, shrink-to-fit=yes';
+        document.getElementsByTagName('head')[0].appendChild(meta);
+        document.querySelector("#unity-container").className = "unity-mobile";
+        canvas.className = "unity-mobile";
+
+        // To lower canvas resolution on mobile devices to gain some
+        // performance, uncomment the following line:
+        // config.devicePixelRatio = 1;
+
+
+      } else {
+        // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:
+        canvas.style.width = "960px";
+        canvas.style.height = "600px";
+      }
+
+      document.querySelector("#unity-loading-bar").style.display = "block";
+
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = () => {
+        createUnityInstance(canvas, config, (progress) => {
+            
+          document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
+              }).then((unityInstance) => {
+                document.querySelector("#unity-loading-bar").style.display = "none";
+                document.querySelector("#unity-fullscreen-button").onclick = () => {
+                  unityInstance.SetFullscreen(1);
+                };
+                unityMotionInstance = unityInstance;
+                keepControlsInteractive();
+                setupMotionControls();
+                sendCurrentFrame();
+                var profile = unityProfiler.createButton(unityInstance);
+                profile.style.marginLeft = '5px';
+                document.querySelector("#unity-build-title").appendChild(profile);
+
+                // Unloading web content from DOM so that browser GC can run can be tricky to get right.
+                // This code snippet shows how to correctly implement a Unity content Unload mechanism to a web page.
+
+                // Unloading Unity content enables a web page to reclaim the memory used by Unity, e.g. for
+                // the purpose of later loading another Unity content instance on the _same_ web page.
+
+                // When using this functionality, take caution to carefully make sure to clear all JavaScript code,
+                // DOM element and event handler references to the old content you may have retained, or
+                // otherwise the browser's garbage collector will be unable to reclaim the old page.
+
+                // N.b. Unity content does _not_ need to be manually unloaded when the user is navigating away from
+                // the current page to another web page. The browser will take care to clear memory of old visited
+                // pages automatically. This functionality is only needed if you want to switch between loading
+                // multiple Unity builds on a single web page.
+                var quit = document.createElement("button");
+                quit.style = "margin-left: 5px; background-color: lightgray; border: none; padding: 5px; cursor: pointer";
+                quit.innerHTML = "Unload";
+                document.querySelector("#unity-build-title").appendChild(quit);
+                quit.onclick = () => {
+                  // Quit Unity application execution
+                  stopMotionLoop();
+                  unityInstance.Quit().then(() => {
+                    unityProfiler.shutDown();
+                    // Remove DOM elements from the page so GC can run
+                    document.querySelector("#unity-container").remove();
+                    canvas = null;
+                    // Remover script elements from the page so GC can run
+                    script.remove();
+                    script = null;
+                  });
+                };
+              }).catch((message) => {
+                alert(message);
+              });
+            };
+
+      document.body.appendChild(script);
+     
+    </script>
+  </body>
+</html>
+

@@ -1,0 +1,1675 @@
+<meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ECoach Sports Training</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(-45deg, #0b0275, #52007b, #11005c, #27004e);
+      background-size: 400% 400%;
+      animation: gradient 15s ease infinite;
+      height: 100vh;
+      min-height: 100vh;
+      color: #fff;
+      position: relative;
+      overflow-x: hidden;
+      text-align: center;
+    }
+    @keyframes gradient {
+	0% {
+		background-position: 0% 50%;
+	}
+	50% {
+		background-position: 100% 50%;
+	}
+	100% {
+		background-position: 0% 50%;
+	}
+}
+
+.loader {
+  width: 150px;
+  height: 150px;
+  line-height: 150px;
+  margin: 100px auto;
+  position: relative;
+  box-sizing: border-box;
+  text-align: center;
+  
+  text-transform: uppercase;
+}
+  
+    
+.loader:before,
+.loader:after {
+  opacity: 0;
+  box-sizing: border-box;
+  content: "\0020";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 100px;
+  border: 5px solid #0718ff;
+  box-shadow: 0 0 50px #00f8ef, inset 0 0 50px #ffffff00;
+}
+
+.loader:after {  
+  -webkit-animation: gogoloader 2s infinite 1s;
+  animation: gogoloader 2s infinite 1s;
+}
+
+.loader:before {  
+  -webkit-animation: gogoloader 2s infinite;
+  animation: gogoloader 2s infinite;
+}
+
+@-webkit-keyframes gogoloader {
+  0% {
+    -webkit-transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    -webkit-transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes gogoloader {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+#particles-js{
+  width: 100%;
+  height: 100%;
+  ;
+}
+    .progress-ring-container {
+        position: relative;
+        width: 200px;
+        height: 200px;
+        justify-content: center;
+        margin: 20px auto;
+    }
+
+    .progress-ring {
+        transform: rotate(-90deg);
+    }
+
+    .progress-ring-circle {
+        fill: transparent;
+        stroke: #e6f0ff;
+        stroke-width: 20;
+    }
+
+    .progress-ring-fill {
+        fill: transparent;
+        stroke: #4d9fff;
+        stroke-width: 10;
+        stroke-linecap: round;
+        stroke-dasharray: 565.48; /* 2πr (r = 90) */
+        stroke-dashoffset: 565.48;
+        transition: stroke-dashoffset 0.8s ease-out, stroke 0.3s ease;
+    }
+
+    .progress-ring-center {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+    }
+
+    .progress-value {
+        font-size: 3rem;
+        font-weight: bold;
+        color: #2a7de1;
+        margin-bottom: 5px;
+    }
+
+    .progress-label {
+        font-size: 1.2rem;
+        color: #6b9ed8;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .difficulty-control {
+        position: absolute;
+        bottom: -80px;
+        width: 100%;
+        text-align: center;
+    }                                                                                                   
+            
+   
+    .ecoach-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+      position: relative;      
+    }
+    .ecoach-title {
+      text-align: center;
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      text-shadow: 0 4px 8px rgba(0,0,0,0.3);
+      background: linear-gradient(45deg, #4ac1ff, #ffffff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .ecoach-form-group {
+      margin: 1.5rem 0;
+    }
+    .ecoach-label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+    .ecoach-input {
+      width: 100%;
+      padding: 1rem;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      background: rgba(255,255,255,0.9);
+      
+      transition: all 0.3s;
+    }
+    .ecoach-input:focus {
+      outline: none;
+      background: rgba(255,255,255,1);
+      transform: translateY(-2px);      
+    }
+    .ecoach-slider-container {
+      text-align: center;
+    }       
+    .ecoach-slider {        
+      position: relative;
+      width: 96%;
+      height: 10%;
+      border-radius: 1%;
+      
+      background: rgb(255, 255, 255);          
+      margin: auto auto;
+    }
+    .ecoach-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: #4ac1ff;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .ecoach-slider::-webkit-slider-thumb:hover {
+      transform: scale(2);
+    }
+    .ecoach-slider-value {
+      font-size: 2rem;
+      font-weight: bold;
+      color: #4ac1ff;
+      margin: 0.5rem 0;
+    }
+    .ecoach-slider-level {
+      font-size: 1.2rem;
+      color: #b8c6db;
+    }
+    .ecoach-button {
+      background: linear-gradient(45deg, #4ac1ff, #2196f3);
+      color: #fff;
+      border: none;
+      padding: 1rem 2rem;
+      border-radius: 50px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 4px 15px rgba(74, 193, 255, 0.4);
+      display: block;
+      width: 100%;
+      margin: 1rem 0;
+    }
+    .ecoach-button:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 8px 25px rgba(74, 193, 255, 0.6);
+    }
+    .ecoach-toggle-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 1.5rem 0;
+    }
+    .ecoach-toggle-label {
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+    .ecoach-toggle {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 34px;
+    }
+    .ecoach-toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .ecoach-toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgb(78, 78, 78);
+      transition: 0.4s;
+      border-radius: 34px;
+    }
+    .ecoach-toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: 0.4s;
+      border-radius: 50%;
+    }
+    input:checked + .ecoach-toggle-slider {
+      background-color: #4ac1ff;
+    }
+    input:checked + .ecoach-toggle-slider:before {
+      transform: translateX(26px);
+    }
+    .ecoach-loading-container {
+      display: none;
+      text-align: center;
+      margin: 2rem 0;
+    }
+    .ecoach-loading-animation {
+      display: inline-block;
+      position: relative;
+      width: 80px;
+      height: 80px;
+    }
+    .ecoach-loading-animation div {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #4ac1ff;
+      animation: ecoach-loading 1.2s linear infinite;
+    }
+    @keyframes ecoach-loading {
+      0%, 100% { opacity: 1; transform: scale(1) }
+      50% { opacity: .5; transform: scale(.5) }
+    }
+    .ecoach-drill-container {
+      margin: 1.5rem 0;
+      padding: 1.5rem;
+      background-color: rgba(0,0,0,0.4);
+      border-radius: 10px;
+      border-left: 4px solid #4ac1ff;
+      animation: ecoach-fadeIn .5s ease-out;
+    }
+    @keyframes ecoach-fadeIn {
+      from { opacity: 0; transform: translateY(10px) }
+      to { opacity: 1; transform: translateY(0) }
+    }
+    .ecoach-btn-group {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin: 1rem 0;
+      flex-wrap: wrap;
+    }
+    .ecoach-btn-group .ecoach-button {
+      flex: 1;
+      min-width: 120px;
+    }
+    .ecoach-btn-success { background: linear-gradient(45deg, #4caf50, #45a049) !important; }
+    .ecoach-btn-warning { background: linear-gradient(45deg, #ff9800, #f57c00) !important; }
+    .ecoach-btn-danger { background: linear-gradient(45deg, #f44336, #d32f2f) !important; }
+    .ecoach-btn-gotit { background: linear-gradient(45deg, #2196f3, #1976d2) !important; }
+    .ecoach-btn-skip { background: linear-gradient(45deg, #9e9e9e, #757575) !important; }
+    .ecoach-explain-btn { background: linear-gradient(45deg, #673ab7, #512da8) !important; }
+    .ecoach-feedback-message {
+      background: rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 1rem;
+      color: #fff;
+    }
+    .ecoach-end-session-btn {
+      background: linear-gradient(45deg, #f44336, #d32f2f) !important;
+      margin-bottom: 1rem;
+    }
+    .ecoach-btn-row {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      margin: 1rem 0;
+      flex-wrap: wrap;
+    }
+    .ecoach-btn-row .ecoach-button {
+      flex: 1;
+      min-width: 150px;
+      font-size: 0.9rem;
+      padding: 0.8rem 1rem;
+    }
+    .ecoach-modal-bg {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.65);      
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .ecoach-modal {
+      background: #23243a;
+      color: #fff;
+      border-radius: 12px;
+      padding: 2rem 2.5rem;
+      min-width: 320px;
+      max-width: 95vw;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      position: relative;
+    }
+    .ecoach-modal h2 {
+      color: #4ac1ff;
+      margin-top: 0;
+      margin-bottom: 1rem;
+    }
+    .ecoach-modal input, .ecoach-modal button {
+      margin: 0.5rem 0;
+    }
+    .ecoach-modal input {
+      width: 100%;
+      padding: 0.8rem;
+      border-radius: 6px;
+      border: none;
+      font-size: 1rem;
+    }
+    .ecoach-modal .ecoach-modal-btns {
+      display: flex;
+      gap: 1rem;
+      justify-content: flex-end;
+      margin-top: 1rem;
+    }
+    .ecoach-modal-close {
+      position: absolute;
+      right: 1rem;
+      top: 1rem;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 1.5rem;
+      cursor: pointer;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ecoach-benchmark-list {
+      margin: 1rem 0;
+    }
+    .ecoach-benchmark-list li {
+      margin-bottom: 0.5rem;
+      list-style: none;
+      padding: 0.5rem;
+      background: rgba(255,255,255,0.1);
+      border-radius: 5px;
+    }
+    .ecoach-benchmark-graph {
+      width: 100%;
+      max-width: 400px;
+      height: 220px;
+      margin: 1rem auto;
+      background: #fff;
+      border-radius: 8px;
+      display: block;
+    }
+
+    /* Add new CSS for linear progress bars (insert near other styles) */
+.linear-bars-row {
+  display:flex;
+  gap:18px;
+  justify-content:center;
+  align-items:flex-end;
+  margin-top:24px;
+  padding: 12px 0;
+}
+
+.linear-bar-container {
+  width: 260px;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:8px;
+}
+
+.linear-bar-labels {
+  display:flex;
+  justify-content:space-between;
+  font-size:0.95rem;
+  color:#b8c6db;
+}
+
+.linear-bar {
+  height: 14px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+}
+
+.linear-bar-fill {
+  height:100%;
+  width:0%;
+  background: #4d9fff;
+  transition: width 0.6s ease, background 0.3s ease;
+  border-radius: 8px;
+}
+
+.linear-bar-value {
+  text-align:center;
+  font-weight:700;
+  color:#2a7de1;
+  margin-top:4px;
+}
+
+/* Fixed container for linear bars */
+.linear-bars-fixed {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  padding: 12px 16px;
+  background: rgba(7,10,25,0.65);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 -6px 24px rgba(0,0,0,0.5);
+  z-index: 9999;
+  transition: transform 320ms cubic-bezier(.2,.9,.2,1), opacity 260ms ease;
+  transform: translateY(0); /* visible by default */
+  opacity: 1;
+  pointer-events: auto;
+}
+/* reuse existing linear-bar-container width; adjust for small screens */
+.linear-bars-fixed .linear-bar-container { width: 260px; }
+@media (max-width:800px) {
+  .linear-bars-fixed { gap: 10px; padding: 8px; }
+  .linear-bars-fixed .linear-bar-container { width: calc(33% - 20px); min-width: 100px; }
+}
+
+/* Hidden state: slide down off-screen */
+.linear-bars-fixed.hidden {
+	transform: translateY(110%);
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* Optional visible class (keeps explicit state) */
+.linear-bars-fixed.visible {
+	transform: translateY(0);
+	opacity: 1;
+	pointer-events: auto;
+}
+  </style>
+
+
+
+
+
+
+
+
+<div class="ecoach-container">
+  <h1 class="loading-texth1">ECoach Sports</h1>
+  <h6 style="text-align: center;">v2.2.3</h6>
+  <h6 style="text-align: center;">*By continuing you have read and agreed to <a href="https://www.adaptiveaisports.com/terms-of-use" style="color:SkyBlue;">Terms of Use</a>*</h6>
+  
+  <button class="ecoach-button ecoach-end-session-btn" id="ecoach-endSession" style="display:none">End Session</button>
+  
+  
+  <div class="ecoach-btn-row" id="ecoach-benchmarkBtns" style="margin-bottom:1rem;">
+    <button class="ecoach-button" id="ecoach-addBenchmarkBtn" style="background: linear-gradient(45deg, #4caf50, #45a049);">Add Data</button>
+    <button class="ecoach-button" id="ecoach-viewBenchmarkBtn" style="background: linear-gradient(45deg, #2196f3, #1976d2);">View Progress</button>
+    <button class="ecoach-button" id="ecoach-changeGoalsBtn" style="background: linear-gradient(45deg, #673ab7, #512da8);">Set Goals</button>
+  </div>
+  
+  <div id="ecoach-setupSection">
+    <div class="ecoach-form-group">
+      <label class="ecoach-label" for="ecoach-sport">Enter Your Sport:</label>
+      <input type="text" class="ecoach-input" id="ecoach-sport" placeholder="Sport">
+    </div>
+    <div class="ecoach-form-group ecoach-slider-container">
+      <label class="ecoach-label" for="ecoach-skillSlider">Select Your Difficulty Level:</label>
+      <div class="ecoach-slider-surrond"></div>
+      <div class="ecoach-slider-surrond">
+        <input type="range" min="1" max="100" value="50" class="ecoach-slider" id="ecoach-skillSlider">
+      </div>
+      <div class="ecoach-slider-value" id="ecoach-skillValue">50</div>
+      <div class="ecoach-slider-level" id="ecoach-skillLevel">Intermediate</div>
+    </div>
+    
+<div class="ecoach-form-group ecoach-slider-container">
+  <label class="ecoach-label" for="ecoach-skillLevelSlider">Select Your Skill Level:</label>
+  <input type="range" min="1" max="100" value="50" class="ecoach-slider" id="ecoach-skillLevelSlider">
+  <div class="ecoach-slider-value" id="ecoach-skillLevelValue">50</div>
+  <div class="ecoach-slider-level" id="ecoach-skillLevelText">Intermediate</div>
+</div>
+
+
+<div class="ecoach-form-group ecoach-slider-container">
+  <label class="ecoach-label" for="ecoach-modeToggleButton">Select Training Mode:</label>
+  <button type="button" class="ecoach-button" id="ecoach-modeToggleButton" style="width:80%; margin:auto;">Practice</button>
+  <div class="ecoach-slider-level" style="display:flex; justify-content:space-between; width:80%; margin:8px auto 0;">    
+  </div>
+</div>
+    <div class="ecoach-form-group">
+      <label class="ecoach-label" for="ecoach-focus">Enter Training Focus:</label>
+      <input type="text" class="ecoach-input" id="ecoach-focus" placeholder="What you want to work on during this training session">
+    </div>
+    <div class="ecoach-toggle-container">
+      <span class="ecoach-toggle-label">Solo Drills Only:</span>
+      <label class="ecoach-toggle">
+        <input type="checkbox" id="ecoach-soloToggle">
+        <span class="ecoach-toggle-slider"></span>
+      </label>
+    </div>
+    <div class="ecoach-form-group">
+      <label class="ecoach-label" for="ecoach-material">Optional: Materials</label>
+      <input type="text" class="ecoach-input" id="ecoach-material" placeholder="E.g. cones, fins, weights etc.">
+    </div>
+    
+    <button class="ecoach-button" id="ecoach-startTraining">Start Training</button>
+  </div>
+  
+  <div id="ecoach-trainingSection" style="display:none">
+    <div class="ecoach-loading-container" id="ecoach-loadingSection">
+      <div class="ecoach-loading">
+        <div class="loader">
+          <div class="container">
+              <div class="outerring">
+                  <div class="innerring">
+                  </div>
+              </div>
+          </div>
+        </div>  
+      </div>
+    </div>
+    
+    <div class="ecoach-drill-container" id="ecoach-currentDrill" style="display:none">
+      <div class="ecoach-drill-title" id="ecoach-drillTitle" style="font-size: 200%;">Name:</div>
+      <div class="ecoach-drill-description" id="ecoach-drillDescription"></div>
+      <div class="ecoach-drill-instructions" id="ecoach-drillInstructions">
+        <h4>How to Perform This Drill:</h4>
+        <ol id="ecoach-instructionsList" style="text-align: left;"></ol>
+      </div>
+      <div class="ecoach-drill-stats" style="text-align: center;">        
+        <span>Duration: <span id="ecoach-drillDuration">—</span></span><br>
+        <span>Reps: <span id="ecoach-drillReps">—</span></span><br>
+        <span>Focus: <span id="ecoach-drillFocus">—</span></span>
+      </div>
+      
+    </div>
+
+    
+    <div id="ecoach-readySection" style="margin-top: 1.5rem;">
+      <div class="ecoach-btn-group">
+        <button class="ecoach-button ecoach-btn-success" id="ecoach-readyButton">I'm Ready!</button>        
+      </div>
+    </div>
+
+    
+    <div id="ecoach-countdownDisplay" style="display:none; text-align:center; margin:1rem 0;">
+      <div style="font-size:3rem; color:#4ac1ff;" id="ecoach-countdownNumber"></div>
+      <div style="font-size:1.2rem;">Get Ready!</div>
+    </div>
+
+    
+    <div id="ecoach-timerDisplay" style="display:none; text-align:center; margin:1rem 0;">
+      <div style="font-size:2.5rem; color:#4ac1ff;" id="ecoach-timerValue">0:00</div>
+      <div class="ecoach-btn-group">
+        <button class="ecoach-button ecoach-btn-warning" id="ecoach-pauseTimer">Pause</button>
+        <button class="ecoach-button ecoach-btn-success" id="ecoach-doneTimer">Done!</button>
+      </div>
+    </div>
+
+    
+    <div id="ecoach-feedbackSection" style="display:none; margin-top:1.5rem;">
+      <h4 style="color:#4ac1ff; text-align:center;">How was that drill?</h4>
+      <div class="ecoach-btn-group">
+        <button class="ecoach-button ecoach-btn-danger" id="ecoach-tooHard">Too Hard</button>
+        <button class="ecoach-button ecoach-btn-success" id="ecoach-justRight">Just Right</button>
+        <button class="ecoach-button ecoach-btn-warning" id="ecoach-tooEasy">Too Easy</button>
+      </div>
+    </div>
+    <div id="ecoach-feedbackinputSection" style="display:none; margin-top:1.5rem;">
+      <h4 style="color:#4ac1ff; text-align:center;">Provide Your Feedback:</h4>
+      <input type="text" class="ecoach-input" id="ecoach-feedbackInput" rows="4" placeholder="What did you like or dislike about this drill?">
+      <button class="ecoach-button" id="ecoach-submitFeedback">Submit Feedback</button>
+    </div>         
+    <div class="ecoach-feedback-message" id="ecoach-feedbackMessage" style="display:none;">
+      <div id="ecoach-feedbackText"></div>
+      <button class="ecoach-button ecoach-btn-gotit" id="ecoach-gotItButton">Got It!</button>
+    </div>
+          
+    <button class="ecoach-button" id="ecoach-nextDrill" style="display:none; margin-top:1rem;">Next Drill</button>
+    <button class="ecoach-button  ecoach-explain-btn" id="ecoach-Feedback" style="display:none; margin-top: 1rem;">Generate Feedback</button>
+      
+      
+  </div>
+</div>
+<br>
+<br>
+<br>
+<br>
+
+
+<div class="ecoach-modal-bg" id="ecoach-modal-bg">
+  <div class="ecoach-modal" id="ecoach-modal-content">
+    
+  </div>
+</div>
+<script>
+   (function () {
+  const _0x2149ba = ['Learn', 'Practice', "Improve"];
+  function _0x272b87(_0x5da2e3) {
+    _0x5da2e3 = Number(_0x5da2e3) || 0x32;
+    if (_0x5da2e3 <= 0x14) {
+      return "Beginner";
+    }
+    if (_0x5da2e3 <= 0x28) {
+      return 'Novice';
+    }
+    if (_0x5da2e3 <= 0x3c) {
+      return "Intermediate";
+    }
+    if (_0x5da2e3 <= 0x50) {
+      return "Advanced";
+    }
+    return "Expert";
+  }
+  function _0x55c333(_0x270544, _0x5639c4, _0xf3cbba) {
+    _0x5639c4 /= 0x64;
+    _0xf3cbba /= 0x64;
+    const _0x504331 = (0x1 - Math.abs(0x2 * _0xf3cbba - 0x1)) * _0x5639c4;
+    const _0x50b325 = _0x504331 * (0x1 - Math.abs(_0x270544 / 0x3c % 0x2 - 0x1));
+    const _0x5c1e4a = _0xf3cbba - _0x504331 / 0x2;
+    let _0x11742c;
+    let _0x1e4988;
+    let _0x3c801d;
+    if (_0x270544 < 0x3c) {
+      [_0x11742c, _0x1e4988, _0x3c801d] = [_0x504331, _0x50b325, 0x0];
+    } else {
+      if (_0x270544 < 0x78) {
+        [_0x11742c, _0x1e4988, _0x3c801d] = [_0x50b325, _0x504331, 0x0];
+      } else {
+        if (_0x270544 < 0xb4) {
+          [_0x11742c, _0x1e4988, _0x3c801d] = [0x0, _0x504331, _0x50b325];
+        } else {
+          if (_0x270544 < 0xf0) {
+            [_0x11742c, _0x1e4988, _0x3c801d] = [0x0, _0x50b325, _0x504331];
+          } else {
+            if (_0x270544 < 0x12c) {
+              [_0x11742c, _0x1e4988, _0x3c801d] = [_0x50b325, 0x0, _0x504331];
+            } else {
+              [_0x11742c, _0x1e4988, _0x3c801d] = [_0x504331, 0x0, _0x50b325];
+            }
+          }
+        }
+      }
+    }
+    return '#' + Math.round((_0x11742c + _0x5c1e4a) * 0xff).toString(0x10).padStart(0x2, '0') + Math.round((_0x1e4988 + _0x5c1e4a) * 0xff).toString(0x10).padStart(0x2, '0') + Math.round((_0x3c801d + _0x5c1e4a) * 0xff).toString(0x10).padStart(0x2, '0');
+  }
+  function _0x47dae5(_0x496cfa) {
+    _0x496cfa = Math.max(0x1, Math.min(0x64, Number(_0x496cfa) || 0x32));
+    const _0x36fbae = 0x78 - (_0x496cfa - 0x1) / 0x63 * 0x78;
+    return _0x55c333(_0x36fbae, 0x64, 0x32);
+  }
+  function _0x2a180b(_0x6872c) {
+    try {
+      return atob(atob(_0x6872c));
+    } catch {
+      return '';
+    }
+  }
+  function _0x486c4c(_0x4a8ee3, _0x578127) {
+    if (!_0x4a8ee3) {
+      return;
+    }
+    _0x578127 = Math.max(0x0, Math.min(0x64, Number(_0x578127) || 0x0));
+    if (_0x4a8ee3.tagName && _0x4a8ee3.tagName.toLowerCase() === "circle" && _0x4a8ee3.r && _0x4a8ee3.r.baseVal) {
+      const _0x17021a = _0x4a8ee3.r.baseVal.value;
+      const _0x263783 = 0x2 * Math.PI * _0x17021a;
+      _0x4a8ee3.style.strokeDasharray = '' + _0x263783;
+      const _0x5c092d = _0x263783 - _0x578127 / 0x64 * _0x263783;
+      _0x4a8ee3.style.strokeDashoffset = _0x5c092d;
+      _0x4a8ee3.style.stroke = _0x47dae5(_0x578127);
+      return;
+    }
+    _0x4a8ee3.style.width = _0x578127 + '%';
+    _0x4a8ee3.style.background = _0x47dae5(_0x578127);
+    if (_0x4a8ee3.setAttribute) {
+      _0x4a8ee3.setAttribute("aria-valuenow", String(_0x578127));
+    }
+  }
+  function _0x22d0e5() {
+    const _0x43863a = Number(localStorage.getItem('difficulty') || (document.getElementById("ecoach-skillSlider") || {}).value || 0x32);
+    const _0x3bc183 = Number(localStorage.getItem("adaptation") || (document.getElementById("ecoach-adaptationSlider") || {}).value || 0x5);
+    const _0x13604d = Number(localStorage.getItem("skillLevel") || (document.getElementById("ecoach-skillLevelSlider") || {}).value || 0x32);
+    _0x486c4c(document.getElementById("progress-difficulty"), _0x43863a);
+    _0x486c4c(document.getElementById("progress-adaptation"), Math.max(0x1, Math.min(0x64, _0x3bc183 * 0xa)));
+    _0x486c4c(document.getElementById('progress-skill'), _0x13604d);
+    const _0x2444c6 = document.getElementById("progress-value");
+    if (_0x2444c6) {
+      _0x2444c6.textContent = _0x43863a;
+    }
+    const _0x335897 = document.getElementById('progress-adaptation-value');
+    if (_0x335897) {
+      _0x335897.textContent = Math.max(0x1, Math.min(0x64, _0x3bc183 * 0xa));
+    }
+    const _0x57bf69 = document.getElementById("progress-skill-value");
+    if (_0x57bf69) {
+      _0x57bf69.textContent = _0x13604d;
+    }
+    const _0x1128c7 = document.getElementById("progress-value-label");
+    if (_0x1128c7) {
+      _0x1128c7.textContent = _0x43863a;
+    }
+    const _0x409172 = document.getElementById("progress-adaptation-label");
+    if (_0x409172) {
+      _0x409172.textContent = Math.max(0x1, Math.min(0x64, _0x3bc183 * 0xa));
+    }
+    const _0x306d19 = document.getElementById("progress-skill-label");
+    if (_0x306d19) {
+      _0x306d19.textContent = _0x13604d;
+    }
+  }
+  function _0x357e41(_0x3c7282, _0x59846c) {
+    const _0x24075a = document.getElementById("ecoach-modal-bg");
+    const _0x109232 = document.getElementById("ecoach-modal-content");
+    _0x109232.innerHTML = _0x3c7282;
+    _0x24075a.style.display = "flex";
+    const _0x42969a = _0x109232.querySelector(".ecoach-modal-close");
+    if (_0x42969a) {
+      _0x42969a.onclick = () => {
+        _0x24075a.style.display = "none";
+        if (_0x59846c) {
+          _0x59846c();
+        }
+      };
+    }
+    _0x24075a.onclick = _0x33fd90 => {
+      if (_0x33fd90.target === _0x24075a) {
+        _0x24075a.style.display = 'none';
+        if (_0x59846c) {
+          _0x59846c();
+        }
+      }
+    };
+  }
+  function _0x4dbe28() {
+    document.getElementById("ecoach-modal-bg").style.display = "none";
+  }
+  function _0x5ab05c() {
+    try {
+      return JSON.parse(localStorage.getItem("ecoach_benchmarks")) || [];
+    } catch {
+      return [];
+    }
+  }
+  function _0x1d2eb0(_0xfa4a43) {
+    localStorage.setItem("ecoach_benchmarks", JSON.stringify(_0xfa4a43));
+  }
+  function _0x2036f0() {
+    localStorage.removeItem("ecoach_benchmark_data");
+    localStorage.removeItem("ecoach_benchmark_time");
+  }
+  function _0x4c8eae() {
+    try {
+      return JSON.parse(localStorage.getItem("ecoach_benchmark_data")) || [];
+    } catch {
+      return [];
+    }
+  }
+  function _0x325e7f() {
+    return _0x2a180b("WTNOckxUUmxZMjA1YldvMWQyWnliWGs1T0Rab09USnFkSEpqZURaNU9IQmphbmgzT1dack0yNDBlVzVrY0RVeU9IbHVaQT09");
+  }
+  function _0x39f42c() {
+    try {
+      return JSON.parse(localStorage.getItem("ecoach_benchmark_time")) || [];
+    } catch {
+      return [];
+    }
+  }
+  function _0x557bc6(_0x6f5ed9) {
+    const _0x580f51 = _0x4c8eae();
+    const _0x327835 = _0x39f42c();
+    _0x580f51.push(_0x6f5ed9);
+    _0x327835.push(Date.now());
+    localStorage.setItem("ecoach_benchmark_data", JSON.stringify(_0x580f51));
+    localStorage.setItem("ecoach_benchmark_time", JSON.stringify(_0x327835));
+  }
+  function _0x4b3a69(_0x498707 = false) {
+    const _0x197c56 = _0x5ab05c();
+    _0x357e41("\n      <button class=\"ecoach-modal-close\" title=\"Close\">&times;</button>\n      <h2>" + (_0x498707 ? "Change Your Benchmark Goals" : "Set Your 3 Benchmark Goals") + "</h2>\n      <form id=\"ecoach-benchmarkForm\">\n        <input type=\"text\" id=\"ecoach-bench1\" placeholder=\"Benchmark Goal 1 (e.g., Push-ups)\" value=\"" + (_0x197c56[0x0] || '') + "\" required><br>\n        <input type=\"text\" id=\"ecoach-bench2\" placeholder=\"Benchmark Goal 2 (e.g., Sit-ups)\" value=\"" + (_0x197c56[0x1] || '') + "\" required><br>\n        <input type=\"text\" id=\"ecoach-bench3\" placeholder=\"Benchmark Goal 3 (e.g., Plank seconds)\" value=\"" + (_0x197c56[0x2] || '') + "\" required><br>\n        <div class=\"ecoach-modal-btns\">\n          <button type=\"submit\" class=\"ecoach-button\">" + (_0x498707 ? "Save Goals" : "Set Goals") + "</button>\n        </div>\n      </form>\n    ", null);
+    document.getElementById("ecoach-benchmarkForm").onsubmit = function (_0x110910) {
+      _0x110910.preventDefault();
+      const _0x7a9f51 = [document.getElementById("ecoach-bench1").value.trim(), document.getElementById("ecoach-bench2").value.trim(), document.getElementById('ecoach-bench3').value.trim()];
+      _0x1d2eb0(_0x7a9f51);
+      if (_0x498707) {
+        _0x2036f0();
+      }
+      localStorage.setItem('ecoach_first_time', 'false');
+      _0x4dbe28();
+      alert("Benchmark goals saved successfully!");
+    };
+  }
+  function _0x3f9f6f() {
+    const _0x1128bd = _0x5ab05c();
+    if (!_0x1128bd.length) {
+      _0x4b3a69();
+      return;
+    }
+    _0x357e41("\n      <button class=\"ecoach-modal-close\" title=\"Close\">&times;</button>\n      <h2>Add Benchmark Data</h2>\n      <form id=\"ecoach-benchmarkDataForm\">\n        <ul class=\"ecoach-benchmark-list\">\n          <li>" + _0x1128bd[0x0] + ": <input type=\"number\" step=\"any\" id=\"ecoach-benchval1\" placeholder=\"Enter value\" required></li>\n          <li>" + _0x1128bd[0x1] + ": <input type=\"number\" step=\"any\" id=\"ecoach-benchval2\" placeholder=\"Enter value\" required></li>\n          <li>" + _0x1128bd[0x2] + ": <input type=\"number\" step=\"any\" id=\"ecoach-benchval3\" placeholder=\"Enter value\" required></li>\n        </ul>\n        <div class=\"ecoach-modal-btns\">\n          <button type=\"submit\" class=\"ecoach-button\">Save Data</button>\n        </div>\n      </form>\n    ", null);
+    document.getElementById("ecoach-benchmarkDataForm").onsubmit = function (_0x42aad) {
+      _0x42aad.preventDefault();
+      const _0x363260 = [parseFloat(document.getElementById('ecoach-benchval1').value), parseFloat(document.getElementById("ecoach-benchval2").value), parseFloat(document.getElementById("ecoach-benchval3").value)];
+      _0x557bc6(_0x363260);
+      _0x4dbe28();
+      alert("Benchmark data saved successfully!");
+    };
+  }
+  function _0x4220e6() {
+    const _0x417fc9 = _0x5ab05c();
+    const _0x225b23 = _0x4c8eae();
+    if (!_0x417fc9.length) {
+      _0x4b3a69();
+      return;
+    }
+    _0x357e41("\n      <button class=\"ecoach-modal-close\" title=\"Close\">&times;</button>\n      <h2>Benchmark Progress</h2>\n      <canvas id=\"ecoach-benchmark-graph\" class=\"ecoach-benchmark-graph\"></canvas>\n      <ul class=\"ecoach-benchmark-list\">\n        <li style=\"color:#4ac1ff;\">■ " + _0x417fc9[0x0] + "</li>\n        <li style=\"color:#f44336;\">■ " + _0x417fc9[0x1] + "</li>\n        <li style=\"color:#ffeb3b;\">■ " + _0x417fc9[0x2] + "</li>\n      </ul>\n      <div class=\"ecoach-modal-btns\">\n        <button class=\"ecoach-button\" id=\"ecoach-changeBenchmarksBtn\">Change Goals</button>\n      </div>\n    ", null);
+    setTimeout(() => {
+      _0x31d0c1("ecoach-benchmark-graph", _0x417fc9, _0x225b23);
+      document.getElementById("ecoach-changeBenchmarksBtn").onclick = function () {
+        if (confirm("Changing goals will clear all previous benchmark data. Continue?")) {
+          _0x4b3a69(true);
+        }
+      };
+    }, 0x64);
+  }
+  function _0x31d0c1(_0x3e4683, _0x5e394b, _0x10e632) {
+    const _0x3e3453 = document.getElementById(_0x3e4683);
+    if (!_0x3e3453) {
+      return;
+    }
+    const _0x118e55 = _0x3e3453.getContext('2d');
+    _0x3e3453.width = 0x190;
+    _0x3e3453.height = 0xdc;
+    _0x118e55.fillStyle = "#fff";
+    _0x118e55.fillRect(0x0, 0x0, 0x190, 0xdc);
+    const _0x47acb7 = ['#4ac1ff', "#f44336", "#ffeb3b"];
+    _0x118e55.strokeStyle = "#333";
+    _0x118e55.lineWidth = 0x2;
+    _0x118e55.beginPath();
+    _0x118e55.moveTo(0x28, 0x28);
+    _0x118e55.lineTo(0x28, 180);
+    _0x118e55.moveTo(0x28, 180);
+    _0x118e55.lineTo(360, 180);
+    _0x118e55.stroke();
+    _0x118e55.fillStyle = "#333";
+    _0x118e55.font = "12px Arial";
+    _0x118e55.fillText("Time", 0xc8, 0xd2);
+    _0x118e55.save();
+    _0x118e55.translate(0xf, 0x78);
+    _0x118e55.rotate(-Math.PI / 0x2);
+    _0x118e55.fillText("Value", 0x0, 0x0);
+    _0x118e55.restore();
+    if (!_0x10e632.length) {
+      _0x118e55.fillText("No data yet. Add some benchmark data to see your progress!", 0x50, 0x78);
+      return;
+    }
+    const _0x3e9d5d = _0x10e632.flat();
+    const _0x3d0787 = Math.min(..._0x3e9d5d);
+    const _0x25dc0e = Math.max(..._0x3e9d5d);
+    const _0x1e9c97 = _0x25dc0e - _0x3d0787 || 0x1;
+    for (let _0x41f480 = 0x0; _0x41f480 < 0x3; _0x41f480++) {
+      _0x118e55.strokeStyle = _0x47acb7[_0x41f480];
+      _0x118e55.lineWidth = 0x3;
+      _0x118e55.beginPath();
+      for (let _0xdfd3df = 0x0; _0xdfd3df < _0x10e632.length; _0xdfd3df++) {
+        const _0x183d35 = 0x28 + _0xdfd3df / Math.max(0x1, _0x10e632.length - 0x1) * 320;
+        const _0x2ca452 = 180 - (_0x10e632[_0xdfd3df][_0x41f480] - _0x3d0787) / _0x1e9c97 * 140;
+        if (_0xdfd3df === 0x0) {
+          _0x118e55.moveTo(_0x183d35, _0x2ca452);
+        } else {
+          _0x118e55.lineTo(_0x183d35, _0x2ca452);
+        }
+      }
+      _0x118e55.stroke();
+      _0x118e55.fillStyle = _0x47acb7[_0x41f480];
+      for (let _0x495f73 = 0x0; _0x495f73 < _0x10e632.length; _0x495f73++) {
+        const _0x32f639 = 0x28 + _0x495f73 / Math.max(0x1, _0x10e632.length - 0x1) * 320;
+        const _0x51a149 = 180 - (_0x10e632[_0x495f73][_0x41f480] - _0x3d0787) / _0x1e9c97 * 140;
+        _0x118e55.beginPath();
+        _0x118e55.arc(_0x32f639, _0x51a149, 0x4, 0x0, 0x2 * Math.PI);
+        _0x118e55.fill();
+      }
+    }
+  }
+  async function _0x59cb6f(_0x4f6ac6, _0x459c92, _0x853d26, _0x4b24ba, _0xbc881b, _0x1c8557) {
+    const _0x3b6015 = localStorage.getItem('trainingMode') || document.getElementById("ecoach-modeToggleButton").textContent || "Practice";
+    const _0x2de95b = localStorage.getItem("difficulty") || (document.getElementById('ecoach-skillSlider') || {}).value || 0x32;
+    const _0x4b744c = localStorage.getItem('skillLevel') || (document.getElementById("ecoach-skillLevelSlider") || {}).value || 0x32;
+    const _0x56db6d = "Generate a training drill for:\n- Sport: " + _0x4f6ac6 + "\n- The user is in the " + _0x4b744c + " percentile of " + _0x4f6ac6 + ", and wants an exersise at " + _0x2de95b + "% effort level please.\n- Training Focus: " + _0x459c92 + "\n- Solo Drills Only: " + _0x4b24ba + "\n- Duration: 7.5-10 minutes\n- the user wants to " + _0x3b6015 + ", if learn make this a drill to teach them a new skill, if practice make it a drill to practice a skill they know, if improve make it a drill to push their limits and improve their skill.\n- Materials: " + _0xbc881b + "\n- Previous Drill: " + (JSON.stringify(_0x1c8557) || '') + "\n\nResponse format (JSON only): { \"name\": \"...\", \"description\":\"...\", \"duration\":\"5 minutes\", \"reps\":\"...\", \"focus\":\"...\", \"instructions\":[\"s1\",\"s2\",\"s3\",\"s4\",\"s5\"] }";
+    try {
+      const _0x176fc1 = _0x325e7f && typeof _0x325e7f === "function" ? _0x325e7f() : '';
+      const _0x504f0f = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+        'method': "POST",
+        'headers': {
+          'Authorization': "Bearer " + _0x176fc1,
+          'Content-Type': "application/json"
+        },
+        'body': JSON.stringify({
+          'model': "qwen-3-32b",
+          'messages': [{
+            'role': "system",
+            'content': "You are a sports training coach. Respond with JSON only."
+          }, {
+            'role': 'user',
+            'content': _0x56db6d
+          }]
+        })
+      });
+      if (!_0x504f0f.ok) {
+        const _0x2ca232 = await _0x504f0f.text();
+        throw new Error("API " + _0x504f0f.status + ": " + _0x2ca232);
+      }
+      const _0x5a324d = await _0x504f0f.json();
+      const _0x40b64e = _0x5a324d.choices?.[0x0]?.['message']?.["content"] ?? '';
+      try {
+        return JSON.parse(_0x40b64e);
+      } catch {
+        const _0x43f040 = _0x40b64e.match(/\{[\s\S]*\}/);
+        if (_0x43f040) {
+          return JSON.parse(_0x43f040[0x0]);
+        }
+        return JSON.parse(_0x420d85([]));
+      }
+    } catch (_0x36af18) {
+      console.warn("AI drill generation failed, using fallback.", _0x36af18);
+      return JSON.parse(_0x420d85([]));
+    }
+  }
+  function _0x357e41(_0x51e9c0, _0x1e3819) {
+    const _0x20fc68 = document.getElementById("ecoach-modal-bg");
+    const _0x119eaa = document.getElementById("ecoach-modal-content");
+    if (!_0x20fc68 || !_0x119eaa) {
+      return;
+    }
+    _0x119eaa.innerHTML = _0x51e9c0;
+    _0x20fc68.style.display = "flex";
+    const _0x3a5333 = _0x119eaa.querySelector(".ecoach-modal-close");
+    if (_0x3a5333) {
+      _0x3a5333.onclick = () => {
+        _0x20fc68.style.display = "none";
+        if (_0x1e3819) {
+          _0x1e3819();
+        }
+      };
+    }
+    _0x20fc68.onclick = _0x32078c => {
+      if (_0x32078c.target === _0x20fc68) {
+        _0x20fc68.style.display = "none";
+        if (_0x1e3819) {
+          _0x1e3819();
+        }
+      }
+    };
+  }
+  function _0x4dbe28() {
+    const _0x335f9f = document.getElementById("ecoach-modal-bg");
+    if (_0x335f9f) {
+      _0x335f9f.style.display = 'none';
+    }
+  }
+  function _0x5ab05c() {
+    try {
+      return JSON.parse(localStorage.getItem("ecoach_benchmarks")) || [];
+    } catch {
+      return [];
+    }
+  }
+  function _0x1d2eb0(_0x2db9db) {
+    localStorage.setItem("ecoach_benchmarks", JSON.stringify(_0x2db9db));
+  }
+  function _0x557bc6(_0x5e20a2) {
+    const _0x2fc974 = JSON.parse(localStorage.getItem("ecoach_benchmark_data") || '[]');
+    const _0x2711b5 = JSON.parse(localStorage.getItem("ecoach_benchmark_time") || '[]');
+    _0x2fc974.push(_0x5e20a2);
+    _0x2711b5.push(Date.now());
+    localStorage.setItem("ecoach_benchmark_data", JSON.stringify(_0x2fc974));
+    localStorage.setItem("ecoach_benchmark_time", JSON.stringify(_0x2711b5));
+  }
+  function _0x10e7d8(_0xcf7d) {
+    const _0x57d8d0 = String(_0xcf7d).match(/(\d+)/);
+    const _0x2bf538 = _0x57d8d0 ? Number(_0x57d8d0[0x1]) : 0x5;
+    return _0x2bf538 * 0x3c;
+  }
+  let _0x6992b4 = null;
+  let _0x4a1214 = null;
+  let _0x4379fd = 0x0;
+  let _0x22063f = false;
+  let _0x5bf8e5 = null;
+  function _0x23211b() {
+    const _0x32e83a = Math.floor(_0x4379fd / 0x3c);
+    const _0x573745 = _0x4379fd % 0x3c;
+    const _0x590258 = document.getElementById("ecoach-timerValue");
+    if (_0x590258) {
+      _0x590258.textContent = _0x32e83a + ':' + String(_0x573745).padStart(0x2, '0');
+    }
+  }
+  function _0x58c1e8() {
+    let _0x32d8ef = 0x3;
+    const _0x56dac8 = document.getElementById("ecoach-readySection");
+    if (_0x56dac8) {
+      _0x56dac8.style.display = "none";
+    }
+    const _0x4c03ac = document.getElementById("ecoach-countdownDisplay");
+    if (_0x4c03ac) {
+      _0x4c03ac.style.display = 'block';
+    }
+    if (_0x4a1214) {
+      clearInterval(_0x4a1214);
+    }
+    _0x4a1214 = setInterval(() => {
+      const _0x192dc1 = document.getElementById("ecoach-countdownNumber");
+      if (_0x192dc1) {
+        _0x192dc1.textContent = String(_0x32d8ef);
+      }
+      _0x32d8ef--;
+      if (_0x32d8ef < 0x0) {
+        clearInterval(_0x4a1214);
+        if (_0x4c03ac) {
+          _0x4c03ac.style.display = 'none';
+        }
+        _0xa1aff8();
+      }
+    }, 0x3e8);
+  }
+  function _0xa1aff8() {
+    if (!_0x5bf8e5) {
+      return;
+    }
+    _0x4379fd = _0x10e7d8(_0x5bf8e5.duration || '5');
+    _0x22063f = false;
+    const _0x4d69ea = document.getElementById('ecoach-timerDisplay');
+    if (_0x4d69ea) {
+      _0x4d69ea.style.display = 'block';
+    }
+    _0x23211b();
+    if (_0x6992b4) {
+      clearInterval(_0x6992b4);
+    }
+    _0x6992b4 = setInterval(() => {
+      if (!_0x22063f) {
+        _0x4379fd--;
+        _0x23211b();
+        if (_0x4379fd <= 0x0) {
+          clearInterval(_0x6992b4);
+          _0x30da48();
+        }
+      }
+    }, 0x3e8);
+  }
+  function _0x151c93() {
+    _0x22063f = !_0x22063f;
+    const _0x20e924 = document.getElementById('ecoach-pauseTimer');
+    if (_0x20e924) {
+      _0x20e924.textContent = _0x22063f ? "Resume" : "Pause";
+    }
+  }
+  function _0x3d3afe() {
+    clearInterval(_0x6992b4);
+    _0x30da48();
+  }
+  function _0x30da48() {
+    const _0x1beee7 = document.getElementById('ecoach-timerDisplay');
+    if (_0x1beee7) {
+      _0x1beee7.style.display = "none";
+    }
+    const _0xa843b = document.getElementById("ecoach-feedbackSection");
+    if (_0xa843b) {
+      _0xa843b.style.display = "block";
+    }
+  }
+  function _0x3be614(_0x4f363e) {
+    const _0x1f07e6 = document.getElementById("ecoach-feedbackSection");
+    if (_0x1f07e6) {
+      _0x1f07e6.style.display = "none";
+    }
+    const _0x3f50ed = document.getElementById("ecoach-nextDrill");
+    if (_0x3f50ed) {
+      _0x3f50ed.style.display = 'block';
+    }
+    let _0x1cdbaa = Number(localStorage.getItem("adaptation") || 0x5);
+    let _0x21d786 = Number(localStorage.getItem("difficulty") || document.getElementById("ecoach-skillSlider").value || 0x32);
+    if (_0x4f363e === 'too-hard') {
+      _0x21d786 = _0x21d786 - _0x1cdbaa;
+      _0x1cdbaa = _0x1cdbaa - 0x1;
+    } else {
+      if (_0x4f363e === "too-easy") {
+        _0x21d786 = _0x21d786 + _0x1cdbaa;
+        _0x1cdbaa = _0x1cdbaa + 0x1;
+      } else if (_0x4f363e === 'just-right') {
+        _0x1cdbaa = _0x1cdbaa - 0x1;
+      }
+    }
+    _0x1cdbaa = Math.max(0x1, Math.min(0xa, _0x1cdbaa));
+    _0x21d786 = Math.max(0x1, Math.min(0x64, _0x21d786));
+    localStorage.setItem("feeling", _0x4f363e);
+    localStorage.setItem("difficulty", _0x21d786);
+    localStorage.setItem("adaptation", _0x1cdbaa);
+    document.getElementById("ecoach-skillSlider").value = _0x21d786;
+    _0x22d0e5();
+    const _0x570a34 = document.getElementById("ecoach-Feedback");
+    if (_0x570a34) {
+      _0x570a34.style.display = "block";
+    }
+  }
+  function _0x12a3e6(_0x47271d) {
+    if (!_0x47271d) {
+      return '';
+    }
+    const _0x36ece7 = _0x47271d.indexOf('>');
+    if (_0x36ece7 === -0x1) {
+      return _0x47271d;
+    }
+    const _0x324e07 = _0x47271d.indexOf('>', _0x36ece7 + 0x1);
+    if (_0x324e07 === -0x1) {
+      return _0x47271d;
+    }
+    return _0x47271d.substring(_0x324e07 + 0x1);
+  }
+  async function _0x17411d(_0x4c1688, _0x1b47f2) {
+    const _0x39aa38 = localStorage.getItem("sport") || document.getElementById("ecoach-sport").value;
+    const _0x87af9d = localStorage.getItem('focus') || document.getElementById("ecoach-focus").value;
+    const _0x28a5cb = localStorage.getItem("feeling") || "unknown";
+    const _0xde0bed = "Provide feedback on the following training drill for " + _0x39aa38 + " focusing on " + _0x87af9d + ". The user felt " + _0x28a5cb + " and said: " + _0x4c1688 + ". Drill: " + _0x1b47f2;
+    try {
+      const _0x3463bf = _0x325e7f && typeof _0x325e7f === 'function' ? _0x325e7f() : '';
+      const _0x37f554 = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+        'method': "POST",
+        'headers': {
+          'Authorization': "Bearer " + _0x3463bf,
+          'Content-Type': "application/json"
+        },
+        'body': JSON.stringify({
+          'model': "qwen-3-32b",
+          'messages': [{
+            'role': 'system',
+            'content': "You are a sports training coach; reply with 1-2 short sport-appropriate sentences."
+          }, {
+            'role': "user",
+            'content': _0xde0bed
+          }]
+        })
+      });
+      if (!_0x37f554.ok) {
+        const _0x3ae7ad = await _0x37f554.text();
+        throw new Error("API " + _0x37f554.status + ": " + _0x3ae7ad);
+      }
+      const _0x231e95 = await _0x37f554.json();
+      const _0x32c93d = _0x231e95.choices?.[0x0]?.["message"]?.["content"] ?? '';
+      return _0x12a3e6(_0x32c93d);
+    } catch (_0x43985a) {
+      console.warn("AI feedback failed", _0x43985a);
+      return "Thanks for the feedback.";
+    }
+  }
+  function _0x420d85() {
+    const _0x25133f = [{
+      'name': "Dynamic Warm-Up Circuit",
+      'description': "A comprehensive warm-up",
+      'duration': "5 minutes",
+      'reps': "2 rounds",
+      'focus': "Mobility and activation",
+      'instructions': ["Light jogging 1 minute", "Arm circles 10 each", "Leg swings 10 each leg", "High knees 30s", "Torso twists 10 each"]
+    }];
+    return JSON.stringify(_0x25133f[0x0]);
+  }
+  function _0x325e7f() {
+    try {
+      return _0x2a180b("WTNOckxUUmxZMjA1YldvMWQyWnliWGs1T0Rab09USnFkSEpqZURaNU9IQmphbmgzT1dack0yNDBlVzVrY0RVeU9IbHVaQT09");
+    } catch {
+      return '';
+    }
+  }
+  function _0x440686(_0x3effa7) {
+    if (!_0x3effa7) {
+      return;
+    }
+    const _0x4c3a1d = document.getElementById("ecoach-loadingSection");
+    if (_0x4c3a1d) {
+      _0x4c3a1d.style.display = 'none';
+    }
+    const _0x3f5987 = document.getElementById("ecoach-currentDrill");
+    if (_0x3f5987) {
+      _0x3f5987.style.display = "block";
+    }
+    const _0x3845e8 = document.getElementById("ecoach-drillTitle");
+    if (_0x3845e8) {
+      _0x3845e8.textContent = _0x3effa7.name || "Drill";
+    }
+    const _0x267411 = document.getElementById("ecoach-drillDescription");
+    if (_0x267411) {
+      _0x267411.textContent = _0x3effa7.description || '';
+    }
+    const _0x4d328e = document.getElementById("ecoach-drillDuration");
+    if (_0x4d328e) {
+      _0x4d328e.textContent = _0x3effa7.duration || '—';
+    }
+    const _0x360aa4 = document.getElementById("ecoach-drillReps");
+    if (_0x360aa4) {
+      _0x360aa4.textContent = _0x3effa7.reps || '—';
+    }
+    const _0x72db67 = document.getElementById("ecoach-drillFocus");
+    if (_0x72db67) {
+      _0x72db67.textContent = _0x3effa7.focus || '—';
+    }
+    const _0x48c7b9 = document.getElementById("ecoach-instructionsList");
+    if (_0x48c7b9) {
+      _0x48c7b9.innerHTML = '';
+      (_0x3effa7.instructions || []).forEach(_0x49d06e => {
+        const _0x563d74 = document.createElement('li');
+        _0x563d74.textContent = _0x49d06e;
+        _0x48c7b9.appendChild(_0x563d74);
+      });
+    }
+    _0x5bf8e5 = _0x3effa7;
+  }
+  document.addEventListener("DOMContentLoaded", function () {
+    document.getElementById("ecoach-sport").value = localStorage.getItem("sport");
+    document.getElementById("ecoach-focus").value = localStorage.getItem('focus');
+    document.getElementById("ecoach-material").value = localStorage.getItem("Materials") || '';
+    document.getElementById("ecoach-soloToggle").checked = localStorage.getItem("soloOnly") === 'true';
+    if (localStorage.getItem("Session") === "Started") {}
+    const _0xdbd98b = document.getElementById('ecoach-skillSlider');
+    const _0x5849b2 = document.getElementById("ecoach-skillLevelSlider");
+    const _0x551df3 = document.getElementById("ecoach-modeToggleButton");
+    const _0x2e696c = document.getElementById("ecoach-modeValue");
+    const _0x780174 = document.getElementById("ecoach-startTraining");
+    document.getElementById("ecoach-skillValue").textContent = localStorage.getItem("difficulty") || '50';
+    document.getElementById('ecoach-skillLevelValue').textContent = localStorage.getItem("skillLevel") || '50';
+    if (_0xdbd98b) {
+      _0xdbd98b.value = localStorage.getItem("difficulty") || _0xdbd98b.value || 0x32;
+    }
+    if (_0x5849b2) {
+      _0x5849b2.value = localStorage.getItem("skillLevel") || _0x5849b2.value || 0x32;
+    }
+    const _0x18178a = localStorage.getItem('trainingMode') || 'Practice';
+    let _0x562fb5 = _0x2149ba.indexOf(_0x18178a) >= 0x0 ? _0x2149ba.indexOf(_0x18178a) : 0x1;
+    if (_0x551df3) {
+      _0x551df3.textContent = _0x2149ba[_0x562fb5];
+      if (_0x2e696c) {
+        _0x2e696c.textContent = _0x2149ba[_0x562fb5];
+      }
+    }
+    _0x22d0e5();
+    const _0xdf7013 = Number(localStorage.getItem('difficulty') || (document.getElementById('ecoach-skillSlider') || {}).value || 0x32);
+    const _0xd611d3 = Number(localStorage.getItem('skillLevel') || (document.getElementById("ecoach-skillLevelSlider") || {}).value || 0x32);
+    const _0x3af276 = Number(localStorage.getItem("adaptation") || 0x5);
+    const _0x43d3eb = document.getElementById('progress-value-label');
+    if (_0x43d3eb) {
+      _0x43d3eb.textContent = String(_0xdf7013);
+    }
+    const _0x535fbb = document.getElementById('progress-value');
+    if (_0x535fbb) {
+      _0x535fbb.textContent = String(_0xdf7013);
+    }
+    const _0x130ff2 = document.getElementById("progress-skill-label");
+    if (_0x130ff2) {
+      _0x130ff2.textContent = String(_0xd611d3);
+    }
+    const _0xddf25d = document.getElementById("progress-skill-value");
+    if (_0xddf25d) {
+      _0xddf25d.textContent = String(_0xd611d3);
+    }
+    const _0x4da935 = document.getElementById('progress-adaptation-label');
+    if (_0x4da935) {
+      _0x4da935.textContent = String(Math.max(0x1, Math.min(0x64, _0x3af276 * 0xa)));
+    }
+    const _0x5f02cf = document.getElementById("progress-adaptation-value");
+    if (_0x5f02cf) {
+      _0x5f02cf.textContent = String(Math.max(0x1, Math.min(0x64, _0x3af276 * 0xa)));
+    }
+    if (_0xdbd98b) {
+      _0xdbd98b.addEventListener("input", function (_0x7e2dcf) {
+        const _0x2181a2 = Number(_0x7e2dcf.target.value);
+        const _0x377c7e = document.getElementById("ecoach-skillValue");
+        if (_0x377c7e) {
+          _0x377c7e.textContent = String(_0x2181a2);
+        }
+        const _0x2f3724 = document.getElementById("ecoach-skillLevel");
+        if (_0x2f3724) {
+          _0x2f3724.textContent = _0x272b87(_0x2181a2);
+        }
+        localStorage.setItem("difficulty", _0x2181a2);
+        _0x486c4c(document.getElementById("progress-difficulty"), _0x2181a2);
+        const _0x39f8b1 = Number(localStorage.getItem('adaptation') || 0x5);
+        _0x486c4c(document.getElementById("progress-adaptation"), Math.max(0x1, Math.min(0x64, _0x39f8b1 * 0xa)));
+        const _0x52b636 = document.getElementById('progress-value-label');
+        if (_0x52b636) {
+          _0x52b636.textContent = String(_0x2181a2);
+        }
+        const _0x391892 = document.getElementById("progress-value");
+        if (_0x391892) {
+          _0x391892.textContent = String(_0x2181a2);
+        }
+      });
+    }
+    if (_0x5849b2) {
+      _0x5849b2.addEventListener('input', function (_0x3bd8d4) {
+        const _0x3adc83 = Number(_0x3bd8d4.target.value);
+        const _0x4c6f6a = document.getElementById("ecoach-skillLevelValue");
+        if (_0x4c6f6a) {
+          _0x4c6f6a.textContent = String(_0x3adc83);
+        }
+        const _0x198337 = document.getElementById("ecoach-skillLevelText");
+        if (_0x198337) {
+          _0x198337.textContent = _0x272b87(_0x3adc83);
+        }
+        _0x486c4c(document.getElementById("progress-skill"), _0x3adc83);
+        localStorage.setItem("skillLevel", _0x3adc83);
+        const _0x75adec = document.getElementById("progress-skill-label");
+        if (_0x75adec) {
+          _0x75adec.textContent = String(_0x3adc83);
+        }
+        const _0x4942e7 = document.getElementById('progress-skill-value');
+        if (_0x4942e7) {
+          _0x4942e7.textContent = String(_0x3adc83);
+        }
+      });
+    }
+    if (_0x551df3) {
+      _0x551df3.addEventListener('click', function () {
+        _0x562fb5 = (_0x562fb5 + 0x1) % _0x2149ba.length;
+        _0x551df3.textContent = _0x2149ba[_0x562fb5];
+        if (_0x2e696c) {
+          _0x2e696c.textContent = _0x2149ba[_0x562fb5];
+        }
+        localStorage.setItem("trainingMode", _0x2149ba[_0x562fb5]);
+      });
+    }
+    if (_0x780174) {
+      _0x780174.addEventListener("click", async function () {
+        const _0x390a98 = (document.getElementById("ecoach-sport") || {}).value || '';
+        const _0x3e2f19 = (document.getElementById('ecoach-focus') || {}).value || '';
+        if (!_0x390a98.trim() || !_0x3e2f19.trim()) {
+          alert("Please fill in both sport and training focus fields.");
+          return;
+        }
+        const _0x352482 = !!(document.getElementById("ecoach-soloToggle") || {}).checked;
+        const _0x401196 = (document.getElementById("ecoach-material") || {}).value || '';
+        const _0x4e995b = Number((document.getElementById("ecoach-skillSlider") || {}).value || 0x32);
+        const _0xe180f6 = Number((document.getElementById('ecoach-skillLevelSlider') || {}).value || 0x32);
+        const _0x4ae030 = _0x2149ba[_0x562fb5] || "Practice";
+        localStorage.setItem("sport", _0x390a98);
+        localStorage.setItem("focus", _0x3e2f19);
+        localStorage.setItem('soloOnly', String(_0x352482));
+        localStorage.setItem("Materials", _0x401196);
+        localStorage.setItem('difficulty', _0x4e995b);
+        localStorage.setItem("skillLevel", _0xe180f6);
+        localStorage.setItem("trainingMode", _0x4ae030);
+        const _0x5dd066 = document.getElementById("ecoach-setupSection");
+        if (_0x5dd066) {
+          _0x5dd066.style.display = "none";
+        }
+        const _0x2f92d6 = document.getElementById("ecoach-trainingSection");
+        if (_0x2f92d6) {
+          _0x2f92d6.style.display = "block";
+        }
+        const _0x1ae4c8 = document.getElementById("ecoach-endSession");
+        if (_0x1ae4c8) {
+          _0x1ae4c8.style.display = 'block';
+        }
+        const _0x44e8b5 = document.getElementById("ecoach-loadingSection");
+        if (_0x44e8b5) {
+          _0x44e8b5.style.display = "block";
+        }
+        try {
+          localStorage.setItem('adaptation', 0x5);
+          const _0x1830e2 = JSON.parse(localStorage.getItem("userData") || "null");
+          _0x5bf8e5 = await _0x59cb6f(_0x390a98, _0x3e2f19, _0x4e995b, _0x352482, _0x401196, _0x1830e2);
+          _0x440686(_0x5bf8e5);
+          localStorage.setItem("userData", JSON.stringify(_0x5bf8e5));
+          const _0x396ead = document.getElementById("ecoach-readySection");
+          if (_0x396ead) {
+            _0x396ead.style.display = "block";
+          }
+        } catch (_0x3a90f8) {
+          console.error("Start training error:", _0x3a90f8);
+        }
+        _0x22d0e5();
+        localStorage.setItem('Session', 'Started');
+      });
+    }
+    document.getElementById("ecoach-endSession").addEventListener("click", function () {
+      if (confirm("Are you sure you want to end this training session?")) {
+        localStorage.removeItem("userData");
+        localStorage.removeItem("Session");
+        localStorage.removeItem("difficulty");
+        localStorage.removeItem("adaptation");
+        localStorage.removeItem("skillLevel");
+        localStorage.removeItem("sport");
+        localStorage.removeItem("focus");
+        localStorage.removeItem("Materials");
+        localStorage.removeItem("soloOnly");
+        location.reload();
+      }
+    });
+    const _0x24dabd = document.getElementById('ecoach-readyButton');
+    if (_0x24dabd) {
+      _0x24dabd.addEventListener('click', _0x58c1e8);
+    }
+    const _0x358584 = document.getElementById("ecoach-pauseTimer");
+    if (_0x358584) {
+      _0x358584.addEventListener('click', _0x151c93);
+    }
+    const _0x264352 = document.getElementById("ecoach-doneTimer");
+    if (_0x264352) {
+      _0x264352.addEventListener("click", _0x3d3afe);
+    }
+    const _0x5e527b = document.getElementById("ecoach-tooHard");
+    if (_0x5e527b) {
+      _0x5e527b.addEventListener("click", () => _0x3be614("too-hard"));
+    }
+    const _0x3d7382 = document.getElementById("ecoach-justRight");
+    if (_0x3d7382) {
+      _0x3d7382.addEventListener('click', () => _0x3be614("just-right"));
+    }
+    const _0x244321 = document.getElementById("ecoach-tooEasy");
+    if (_0x244321) {
+      _0x244321.addEventListener("click", () => _0x3be614("too-easy"));
+    }
+    document.getElementById("ecoach-gotItButton").addEventListener("click", function () {
+      document.getElementById("ecoach-feedbackMessage").style.display = "none";
+      document.getElementById("ecoach-feedbackSection").style.display = "none";
+      document.getElementById("ecoach-nextDrill").style.display = "block";
+    });
+    document.getElementById('ecoach-Feedback').addEventListener("click", async function () {
+      document.getElementById("ecoach-nextDrill").style.display = "none";
+      document.getElementById('ecoach-Feedback').style.display = "none";
+      document.getElementById("ecoach-feedbackinputSection").style.display = 'block';
+    });
+    document.getElementById("ecoach-submitFeedback").addEventListener('click', async function () {
+      const _0x548825 = document.getElementById("ecoach-feedbackInput").value;
+      if (!_0x548825) {
+        alert("Please select how you felt about the drill.");
+        return;
+      }
+      try {
+        document.getElementById("ecoach-feedbackMessage").style.display = 'block';
+        document.getElementById('ecoach-feedbackText').textContent = 'Loading...';
+        const _0x5f5864 = localStorage.getItem('userData');
+        const _0x3713ab = await _0x17411d(_0x548825, _0x5f5864);
+        document.getElementById('ecoach-feedbackText').textContent = _0x3713ab;
+        document.getElementById("ecoach-feedbackinputSection").style.display = "none";
+      } catch (_0x21d03b) {
+        console.error("Error getting AI feedback:", _0x21d03b);
+      }
+    });
+    document.getElementById("ecoach-addBenchmarkBtn").addEventListener("click", _0x3f9f6f);
+    document.getElementById('ecoach-viewBenchmarkBtn').addEventListener("click", _0x4220e6);
+    document.getElementById("ecoach-changeGoalsBtn").addEventListener("click", () => _0x4b3a69(true));
+    const _0x4b5448 = document.getElementById("ecoach-nextDrill");
+    if (_0x4b5448) {
+      _0x4b5448.addEventListener('click', async function () {
+        document.getElementById("ecoach-currentDrill").style.display = "none";
+        document.getElementById("ecoach-Feedback").style.display = "none";
+        document.getElementById("ecoach-nextDrill").style.display = "none";
+        document.getElementById('ecoach-loadingSection').style.display = "block";
+        try {
+          const _0x23ccbc = (document.getElementById("ecoach-sport") || {}).value || '';
+          const _0x19e1b8 = (document.getElementById("ecoach-focus") || {}).value || '';
+          const _0x4d50ad = !!(document.getElementById("ecoach-soloToggle") || {}).checked;
+          const _0x5b1139 = (document.getElementById("ecoach-material") || {}).value || '';
+          const _0xbc30f6 = Number((document.getElementById("ecoach-skillSlider") || {}).value || 0x32);
+          _0x5bf8e5 = await _0x59cb6f(_0x23ccbc, _0x19e1b8, _0xbc30f6, _0x4d50ad, _0x5b1139, JSON.parse(localStorage.getItem("userData") || 'null'));
+          _0x440686(_0x5bf8e5);
+          localStorage.setItem("userData", JSON.stringify(_0x5bf8e5));
+          document.getElementById("ecoach-readySection").style.display = "block";
+        } catch (_0x1adb1d) {
+          console.error("Next drill error:", _0x1adb1d);
+        }
+      });
+    }
+    try {
+      const _0x4156f9 = document.querySelector('.site-footer');
+      let _0x5a298c = window.scrollY;
+      window.addEventListener("scroll", () => {
+        if (!_0x4156f9) {
+          return;
+        }
+        if (window.scrollY > _0x5a298c) {
+          _0x4156f9.classList.add("active");
+        } else {
+          _0x4156f9.classList.remove('active');
+        }
+        _0x5a298c = window.scrollY;
+      });
+    } catch (_0x2f32e0) {}
+    _0x22d0e5();
+  });
+})();
+</script>
+
+
+
+<div class="linear-bars-fixed" id="ecoach-linearBarsFixed" aria-hidden="false">
+  <div class="linear-bar-container" role="group" aria-label="Difficulty progress">
+    <div class="linear-bar-labels"><span>Difficulty</span><span id="progress-value-label">0</span></div>
+    <div class="linear-bar" aria-hidden="true">
+      <div id="progress-difficulty" class="linear-bar-fill" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+    </div>
+    <div class="linear-bar-value" id="progress-value" style="display:none">0</div>
+  </div>
+
+  <div class="linear-bar-container" role="group" aria-label="Adaptation progress">
+    <div class="linear-bar-labels"><span>Adaptation</span><span id="progress-adaptation-label">0</span></div>
+    <div class="linear-bar" aria-hidden="true">
+      <div id="progress-adaptation" class="linear-bar-fill" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+    </div>
+    <div class="linear-bar-value" id="progress-adaptation-value" style="display:none">0</div>
+  </div>
+
+  <div class="linear-bar-container" role="group" aria-label="Skill progress">
+    <div class="linear-bar-labels"><span>Skill</span><span id="progress-skill-label">0</span></div>
+    <div class="linear-bar" aria-hidden="true">
+      <div id="progress-skill" class="linear-bar-fill" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+    </div>
+    <div class="linear-bar-value" id="progress-skill-value" style="display:none">0</div>
+  </div>
+</div>
+
+
+<script>
+// filepath: c:\Users\bshanbhag\Downloads\ECOACH\CodeVersions\NewUpdate(incomplete).html
+(function () {
+  const bar = document.getElementById('ecoach-linearBarsFixed');
+  if (!bar) return;
+
+  let lastY = window.scrollY || 0;
+  let ticking = false;
+
+  // On load ensure correct initial class
+  bar.classList.add('visible');
+
+  function onScroll() {
+    const y = window.scrollY || 0;
+    const delta = y - lastY;
+
+    // If scrolling down (delta > 0) => hide (slide up)
+    // If scrolling up (delta < 0) => show (slide down)
+    if (Math.abs(delta) > 5) {
+      if (delta > 0) {
+        bar.classList.add('hidden');
+        bar.classList.remove('visible');
+      } else {
+        bar.classList.remove('hidden');
+        bar.classList.add('visible');
+      }
+      lastY = y;
+    } else {
+      // small movement: do nothing
+      lastY = y;
+    }
+    ticking = false;
+  }
+
+  window.addEventListener('scroll', function () {
+    if (!ticking) {
+      window.requestAnimationFrame(onScroll);
+      ticking = true;
+    }
+  }, { passive: true });
+
+  // Also show when wheel/trackpad upwards even if scrollY is 0 -> listen to wheel to catch quick gestures
+  window.addEventListener('wheel', function (e) {
+    if (e.deltaY < 0) { bar.classList.remove('hidden'); bar.classList.add('visible'); }
+    else if (e.deltaY > 0) { bar.classList.add('hidden'); bar.classList.remove('visible'); }
+  }, { passive: true });
+
+  // Expose a simple API if needed elsewhere
+  window._ecoachFooterBar = {
+    show() { bar.classList.remove('hidden'); bar.classList.add('visible'); },
+    hide() { bar.classList.add('hidden'); bar.classList.remove('visible'); }
+  };
+})();
+</script>

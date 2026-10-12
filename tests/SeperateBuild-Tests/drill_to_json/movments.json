@@ -1,0 +1,36 @@
+{
+    "walking_lower":[
+        {"lefthipx":30,
+        "leftkneex":-30        
+        },
+        {"lefthipx":15,
+          "positionx":-5,
+          "righthipx":-15
+        },        
+        {"righthipx":30,
+        "rightkneex":-30             
+        },
+        {"righthipx":15,
+          "positionx":-5,
+          "lefthipx":-15
+        }               
+
+      ],
+    "walking_upper":[
+        {"rightshoulderx":15,
+         "leftshoulderx":-15,         
+        "spiney":15},
+        {"rightshoulderx":20,
+         "leftshoulderx":-20,
+        "spiney":20,
+        "rightelbowx":20},
+        {"leftshoulderx":15,
+         "rightshoulderx":-15,
+        "spiney":-15},
+        {"leftshoulderx":20,
+         "rightshoulderx":-20,
+        "spiney":-20,
+       "leftelbowx":20}
+            ]
+      
+}

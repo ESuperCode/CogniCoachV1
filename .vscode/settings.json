@@ -3,5 +3,6 @@
         "Cogni",
         "Congi",
         "proffesional"
-    ]
+    ],
+    "python-envs.defaultEnvManager": "ms-python.python:system"
 }
