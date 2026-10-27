@@ -15,10 +15,10 @@ Then open the updated RagdollTest.html in the browser and use "Generate AI Motio
 Important rig assumptions:
 - Input anchors and limb lengths use a nominal 1.75 Unity-unit tall human.
 - Axes: +X = avatar right, +Y = up, +Z = forward. This may need calibration to your scene.
-- The HTML relativityCalculation() sums Euler components parent-to-child. This compiler emits
-  local joint-angle offsets that are intended for that convention. Euler addition is an
-  approximation to true 3D rotation composition, and Unity's Transform/Euler behavior must be
-  checked against your WebBridge before relying on the verifier as a ground-truth evaluator.
+- The HTML relativityCalculation() composes local joint rotations through the body hierarchy
+  with quaternions, then sends world Euler angles in Unity's Z-X-Y convention. This compiler
+  emits local joint-angle offsets for that hierarchy. The internal verifier remains a simplified
+  model and should not be treated as ground truth for the Unity mesh.
 - The internal forward kinematics is a simplified human-ratio model, not a precise model of the
   user's Unity mesh. The output is a research prototype, not a guarantee of biomechanically good form.
 """
@@ -643,8 +643,7 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: float, fps: int) -> T
         seed["left_arm"], seed["right_arm"] = larm, rarm
         seed["left_leg"], seed["right_leg"] = lleg, rleg
 
-        # Each joint's local offsets are what the HTML's relativityCalculation() expects.
-        # It cumulatively adds shoulder to spine, elbow to shoulder, hip to pelvis, and knee to hip.
+        # Each joint's local offsets are composed through the hierarchy by the HTML transform.
         local_values = {
             "hip": hip_euler,
             "spine": spine_euler,

@@ -153,6 +153,9 @@
       var canvas = document.querySelector("#unity-canvas");
       var motionControls = document.querySelector("#motion-controls");
       var unityMotionInstance = null;
+      var diagnosticLogEntries = [];
+      var diagnosticLogLimit = 10;
+      var lastUnityProgressLog = -1;
       var motionAnimationId = null;
       var motionFrameStartedAt = 0;
       var currentFrameIndex = 0;
@@ -161,6 +164,77 @@
         "positiony": 0,
         "positionz": 0
       };
+
+      function diagnosticValue(value) {
+        if (value instanceof Error) {
+          return value.name + ": " + value.message + (value.stack ? "\n" + value.stack : "");
+        }
+        if (typeof value === "string") {
+          return value;
+        }
+        try {
+          return JSON.stringify(value, function(key, nestedValue) {
+            if (typeof nestedValue === "bigint") {
+              return nestedValue.toString() + "n";
+            }
+            if (nestedValue instanceof Error) {
+              return nestedValue.name + ": " + nestedValue.message;
+            }
+            return nestedValue;
+          });
+        } catch (error) {
+          return String(value);
+        }
+      }
+
+      function appendDiagnosticLog(source, values) {
+        var entry = new Date().toISOString() + " [" + source + "] " +
+          Array.prototype.map.call(values, diagnosticValue).join(" ");
+        diagnosticLogEntries.push(entry);
+        if (diagnosticLogEntries.length > diagnosticLogLimit) {
+          diagnosticLogEntries.shift();
+        }
+      }
+
+      function installDiagnosticConsoleBridge() {
+        if (window.diagnosticConsoleBridgeInstalled) {
+          return;
+        }
+
+        window.diagnosticConsoleBridgeInstalled = true;
+        window.addEventListener("error", function(event) {
+          appendDiagnosticLog("JS uncaught error", [
+            event.message,
+            event.filename + ":" + event.lineno + ":" + event.colno,
+            event.error || ""
+          ]);
+        });
+        window.addEventListener("unhandledrejection", function(event) {
+          appendDiagnosticLog("JS unhandled rejection", [event.reason]);
+        });
+
+        // Unity WebGL plugins can call either name to send a message back here.
+        window.logFromUnity = function(message) {
+          appendDiagnosticLog("Unity -> JS", arguments);
+        };
+        window.receiveUnityLog = window.logFromUnity;
+      }
+
+      function sendUnityMessage(objectName, methodName, value) {
+        if (!unityMotionInstance) {
+          appendDiagnosticLog("JS -> Unity", ["Skipped; Unity instance is not ready"]);
+          return false;
+        }
+        try {
+          unityMotionInstance.SendMessage(objectName, methodName, value);
+          return true;
+        } catch (error) {
+          appendDiagnosticLog("JS -> Unity error", [objectName, methodName, error]);
+          throw error;
+        }
+      }
+
+      installDiagnosticConsoleBridge();
 
       function isMotionControlFocused() {
         return !!(document.activeElement && motionControls && motionControls.contains(document.activeElement));
@@ -249,40 +323,87 @@
       // Modify or remove this function to customize the visually presented
       // way that non-critical warnings and error messages are presented to the
       // user.
+      function multiplyQuaternions(parent, local) {
+        var x = parent.w * local.x + parent.x * local.w + parent.y * local.z - parent.z * local.y;
+        var y = parent.w * local.y - parent.x * local.z + parent.y * local.w + parent.z * local.x;
+        var z = parent.w * local.z + parent.x * local.y - parent.y * local.x + parent.z * local.w;
+        var w = parent.w * local.w - parent.x * local.x - parent.y * local.y - parent.z * local.z;
+        var magnitude = Math.sqrt(x * x + y * y + z * z + w * w);
+        return { x: x / magnitude, y: y / magnitude, z: z / magnitude, w: w / magnitude };
+      }
+
+      function eulerToQuaternion(xDegrees, yDegrees, zDegrees) {
+        var halfRadians = Math.PI / 360;
+        var x = xDegrees * halfRadians;
+        var y = yDegrees * halfRadians;
+        var z = zDegrees * halfRadians;
+        var qx = { x: Math.sin(x), y: 0, z: 0, w: Math.cos(x) };
+        var qy = { x: 0, y: Math.sin(y), z: 0, w: Math.cos(y) };
+        var qz = { x: 0, y: 0, z: Math.sin(z), w: Math.cos(z) };
+
+        // Unity applies Euler rotations in Z-X-Y order.
+        return multiplyQuaternions(multiplyQuaternions(qy, qx), qz);
+      }
+
+      function quaternionToEuler(quaternion) {
+        var x = quaternion.x;
+        var y = quaternion.y;
+        var z = quaternion.z;
+        var w = quaternion.w;
+        var m00 = 1 - 2 * (y * y + z * z);
+        var m02 = 2 * (x * z + y * w);
+        var m10 = 2 * (x * y + z * w);
+        var m11 = 1 - 2 * (x * x + z * z);
+        var m12 = 2 * (y * z - x * w);
+        var m20 = 2 * (x * z - y * w);
+        var m22 = 1 - 2 * (x * x + y * y);
+        var xAngle = Math.asin(Math.max(-1, Math.min(1, -m12)));
+        var yAngle;
+        var zAngle;
+
+        if (Math.abs(Math.cos(xAngle)) > 1e-6) {
+          yAngle = Math.atan2(m02, m22);
+          zAngle = Math.atan2(m10, m11);
+        } else {
+          yAngle = Math.atan2(-m20, m00);
+          zAngle = 0;
+        }
+
+        var toDegrees = 180 / Math.PI;
+        return [
+          xAngle * toDegrees,
+          yAngle * toDegrees,
+          zAngle * toDegrees
+        ];
+      }
+
+      function composeJointRotation(json, joint, parentRotation) {
+        var localRotation = eulerToQuaternion(
+          Number(json[joint + "x"]) || 0,
+          Number(json[joint + "y"]) || 0,
+          Number(json[joint + "z"]) || 0
+        );
+        var worldRotation = multiplyQuaternions(parentRotation, localRotation);
+        var worldAngles = quaternionToEuler(worldRotation);
+        json[joint + "x"] = worldAngles[0];
+        json[joint + "y"] = worldAngles[1];
+        json[joint + "z"] = worldAngles[2];
+        return worldRotation;
+      }
+
       function relativityCalculation(json){
-        json.hipx=json.positionx+json.hipx
-        json.hipy=json.positiony+json.hipy
-        json.hipz=json.positionz+json.hipz
-        json.spinex=json.positionx+json.spinex
-        json.spiney=json.positiony+json.spiney
-        json.spinez=json.positionz+json.spinez
-        json.lefthipx=json.hipx+json.lefthipx
-        json.lefthipy=json.hipy+json.lefthipy
-        json.lefthipz=json.hipz+json.lefthipz
-        json.righthipx=json.hipx+json.righthipx
-        json.righthipy=json.hipy+json.righthipy
-        json.righthipz=json.hipz+json.righthipz
-        json.leftkneex=json.lefthipx+json.leftkneex
-        json.leftkneey=json.lefthipy+json.leftkneey
-        json.leftkneez=json.lefthipz+json.leftkneez
-        json.rightkneex=json.righthipx+json.rightkneex
-        json.rightkneey=json.righthipy+json.rightkneey
-        json.rightkneez=json.righthipz+json.rightkneez
-        json.rightshoulderx=json.spinex+json.rightshoulderx
-        json.rightshouldery=json.spiney+json.rightshouldery
-        json.rightshoulderz=json.spinez+json.rightshoulderz
-        json.leftshoulderx=json.spinex+json.leftshoulderx
-        json.leftshouldery=json.spiney+json.leftshouldery
-        json.leftshoulderz=json.spinez+json.leftshoulderz
-        json.leftelbowx=json.leftshoulderx+json.leftelbowx
-        json.leftelbowy=json.leftshouldery+json.leftelbowy
-        json.leftelbowz=json.leftshoulderz+json.leftelbowz
-        json.rightelbowx=json.rightshoulderx+json.rightelbowx
-        json.rightelbowy=json.rightshouldery+json.rightelbowy
-        json.rightelbowz=json.rightshoulderz+json.rightelbowz
-        json.neckx=json.neckx+json.spinex
-        json.necky=json.necky+json.spiney
-        json.neckz=json.neckz+json.spinez
+        var bodyRotation = eulerToQuaternion(json.positionx, json.positiony, json.positionz);
+        var hipRotation = composeJointRotation(json, "hip", bodyRotation);
+        var spineRotation = composeJointRotation(json, "spine", bodyRotation);
+        var leftHipRotation = composeJointRotation(json, "lefthip", hipRotation);
+        var rightHipRotation = composeJointRotation(json, "righthip", hipRotation);
+        composeJointRotation(json, "leftknee", leftHipRotation);
+        composeJointRotation(json, "rightknee", rightHipRotation);
+        var leftShoulderRotation = composeJointRotation(json, "leftshoulder", spineRotation);
+        var rightShoulderRotation = composeJointRotation(json, "rightshoulder", spineRotation);
+        composeJointRotation(json, "leftelbow", leftShoulderRotation);
+        composeJointRotation(json, "rightelbow", rightShoulderRotation);
+        composeJointRotation(json, "neck", spineRotation);
         return JSON.stringify(json)
       }
 
@@ -341,6 +462,7 @@
         var controls = getFrameInputElements();
         controls.status.textContent = message;
         controls.status.style.color = isError ? "#a40000" : "#444";
+        appendDiagnosticLog("Motion status", [message, isError ? "error" : "info"]);
       }
 
       function updateFrameControls() {
@@ -359,7 +481,7 @@
         }
 
         var frame = cloneBodyCode(motionFrames[currentFrameIndex]);
-        unityMotionInstance.SendMessage('WebBridge', 'UpdateMotion', relativityCalculation(frame));
+        sendUnityMessage("WebBridge", "UpdateMotion", relativityCalculation(frame));
         updateFrameControls();
         setMotionStatus("Showing frame " + (currentFrameIndex + 1) + " of " + motionFrames.length + ".");
       }
@@ -375,7 +497,7 @@
           motionFrames[nextFrameIndex],
           amount
         );
-        unityMotionInstance.SendMessage('WebBridge', 'UpdateMotion', relativityCalculation(frame));
+        sendUnityMessage("WebBridge", "UpdateMotion", relativityCalculation(frame));
         updateFrameControls();
       }
 
@@ -639,6 +761,7 @@
 
       setupPositionArrowKeys();
       function unityShowBanner(msg, type) {
+        appendDiagnosticLog("Unity banner", [type || "info", msg]);
         var warningBanner = document.querySelector("#unity-warning");
         function updateBannerVisibility() {
           warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
@@ -669,6 +792,12 @@
         productName: "CogniCoachVisualization(3D)",
         productVersion: "0.1.0",
         showBanner: unityShowBanner,
+        print: function(message) {
+          appendDiagnosticLog("Unity print", arguments);
+        },
+        printErr: function(message) {
+          appendDiagnosticLog("Unity error", arguments);
+        },
         // errorHandler: function(err, url, line) {
         //    alert("error " + err + " occurred at line " + line);
         //    // Return 'true' if you handled this error and don't want Unity
@@ -715,14 +844,27 @@
       }
 
       document.querySelector("#unity-loading-bar").style.display = "block";
+      appendDiagnosticLog("JS", ["Loading Unity", {
+        loaderUrl: loaderUrl,
+        dataUrl: config.dataUrl,
+        frameworkUrl: config.frameworkUrl,
+        codeUrl: config.codeUrl,
+        userAgent: navigator.userAgent
+      }]);
 
       var script = document.createElement("script");
       script.src = loaderUrl;
       script.onload = () => {
+        appendDiagnosticLog("JS", ["Unity loader script loaded"]);
         createUnityInstance(canvas, config, (progress) => {
             
           document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
+          if (progress === 1 || progress - lastUnityProgressLog >= 0.1) {
+            lastUnityProgressLog = progress;
+            appendDiagnosticLog("Unity load progress", [Math.round(progress * 100) + "%"]);
+          }
               }).then((unityInstance) => {
+                appendDiagnosticLog("Unity -> JS", ["Unity instance initialized"]);
                 document.querySelector("#unity-loading-bar").style.display = "none";
                 document.querySelector("#unity-fullscreen-button").onclick = () => {
                   unityInstance.SetFullscreen(1);
@@ -730,7 +872,7 @@
                 unityMotionInstance = unityInstance;
                 keepControlsInteractive();
                 setupMotionControls();
-                sendCurrentFrame();
+                setMotionStatus("Unity loaded. Default walking animation is running.");
                 // Unloading web content from DOM so that browser GC can run can be tricky to get right.
                 // This code snippet shows how to correctly implement a Unity content Unload mechanism to a web page.
 
@@ -762,10 +904,15 @@
                   });
                 };
               }).catch((message) => {
+                appendDiagnosticLog("Unity initialization error", [message]);
                 alert(message);
               });
             };
 
+      script.onerror = function(error) {
+        appendDiagnosticLog("JS loader error", [loaderUrl, error]);
+        setMotionStatus("Unity loader failed. See Diagnostic Log.", true);
+      };
       document.body.appendChild(script);
      
     </script>
