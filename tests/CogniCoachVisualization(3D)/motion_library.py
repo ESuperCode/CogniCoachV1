@@ -1418,6 +1418,10 @@ def sanitize_beat(beat: Dict[str, Any]) -> Dict[str, Any]:
     return b
 
 
+def trunk_lean_back(name: str) -> bool:
+    return name == "lean_back"
+
+
 def _beat_keyframe(beat: Dict[str, Any], prev: Dict[str, Any], t: float) -> Dict[str, Any]:
     """Resolve one beat into a full keyframe, carrying 'keep' values over from the previous one."""
     beat = sanitize_beat(beat)
@@ -1502,8 +1506,10 @@ def _beat_keyframe(beat: Dict[str, Any], prev: Dict[str, Any], t: float) -> Dict
             ptwist = sum(implied_ptwist) / len(implied_ptwist)
     if implied_level and state["pitch"] == 0:
         height = min(height, min(implied_level))
-    if height < -0.25 and lean < 25 and state["pitch"] == 0:
-        lean = 30  # deep knee bend needs the chest over the feet to look balanced
+    if state["pitch"] == 0 and not trunk_lean_back(tr):
+        # Deeper knee bend needs the chest further over the feet to stay balanced - scaled smoothly
+        # with depth, so pulsing between depths doesn't rock the torso.
+        lean = max(lean, 75.0 * max(0.0, -height - 0.05))
     if abs(state["pitch"]) > 45 or state["stance"] in STANCE_ROLL:
         lean = max(-15, min(15, lean))  # on the floor the trunk stays in line with the body
         height = 0.0 if state["pitch"] else height
@@ -1619,9 +1625,11 @@ def build_beats(beats: List[Dict[str, Any]], loop: bool, amp: float = 1.0) -> Di
             keys_abs = [(t - t0, k) for t, k in keys_abs]
             clock -= t0
     else:
-        end, _ = _beat_keyframe(dict(stance=first["stance"], trunk="upright", facing="front", label="finish"),
-                                state, 0.0)
-        clock += max(0.5, min_transition_time(keys_abs[-1][1], end))
+        # One-shot drills finish by holding their final position (the player then eases back to
+        # the start for replay) - never by jumping back to the starting stance.
+        end = copy.deepcopy(keys_abs[-1][1])
+        end["phase"] = "finish (hold)"
+        clock += 0.5
         keys_abs.append((clock, end))
     total = max(clock, 0.5)
     keys = []

@@ -808,12 +808,25 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
         # Negative height lowers the hips (bends the legs; scaled to this rig's shorter legs).
         # Positive height means the whole body is airborne: legs stay as they are, the root rises.
         hip_drop = min(0.0, kf["pelvis"]["height"]) * HIP_DROP_SCALE / UNIT_TO_M
+        local_feet = {}
+        # Hips sit BACK when the knees bend (like sitting into a chair): the pelvis is fixed in this
+        # rig, so the feet move forward relative to it in proportion to the hip drop.
+        sit_back = 0.45 * min(0.0, kf["pelvis"]["height"]) * -1.0 if abs(kf["body"]["pitch"]) < 30 else 0.0
         for side, sign in (("left", -1.0), ("right", 1.0)):
             foot = kf[f"{side}_foot"]
-            local_target = np.array([sign * foot["out"] / UNIT_TO_M,
-                                     ankle_standing - hip_drop + foot["lift"] / UNIT_TO_M,
-                                     foot["forward"] / UNIT_TO_M])
-            target = world["body"] @ local_target
+            local_feet[side] = np.array([sign * foot["out"] / UNIT_TO_M,
+                                         ankle_standing - hip_drop + foot["lift"] / UNIT_TO_M,
+                                         (foot["forward"] + sit_back) / UNIT_TO_M])
+        # Feet never pass through each other: keep a minimum spacing (smoothly), pushing sideways.
+        gap = local_feet["right"] - local_feet["left"]
+        dist = float(np.linalg.norm(gap))
+        min_gap = 2.2 * LIMB_RADIUS
+        if dist < min_gap:
+            push = (min_gap - dist) / 2.0
+            local_feet["right"][0] += push
+            local_feet["left"][0] -= push
+        for side, sign in (("left", -1.0), ("right", 1.0)):
+            target = world["body"] @ local_feet[side]
             planted, weight = kf["flags"][f"{side}_foot_planted"]
             if planted and locks[side] is None:
                 locks[side] = target.copy()
@@ -1923,7 +1936,7 @@ def _build_response(plan: Dict[str, Any], duration: Optional[float], fps: int, s
 
 @app.post("/generate")
 def generate(req: GenerateRequest) -> Dict[str, Any]:
-    key = _cache_key("v7", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
+    key = _cache_key("v8", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
                      req.quality, MODEL)
     plan = cache_get(key) if req.use_cache else None
     calls: List[Dict[str, Any]] = []
