@@ -1286,3 +1286,284 @@ def all_choices() -> List[Tuple[str, str]]:
         for v in variants:
             out.append((name, v))
     return out
+
+
+# =============================================================================
+# Movement grammar: build ANY drill from beats of body-part actions
+# =============================================================================
+# The model describes a drill as an ordered list of "beats". Each beat chooses, from fixed menus,
+# what the stance/level/trunk/arms/legs/facing are at the END of that beat. Code turns every choice
+# into exact targets and adds the biomechanics (counter-rotation, hinging to reach the floor,
+# counter-swinging arms, pivots on facing changes). The model never writes numbers.
+
+BEAT_TIME = {"instant": 0.18, "quick": 0.32, "normal": 0.55, "slow": 0.95, "hold": 0.8}
+
+STANCES = {
+    # name: (right foot, left foot, pelvis height, body pitch, planted?)
+    "standing": ((0, 0.12, 0, 10), (0, 0.12, 0, 10), 0.0, 0, True),
+    "athletic": ((0, 0.24, 0, 12), (0, 0.24, 0, 12), -0.1, 0, True),
+    "wide": ((0, 0.38, 0, 20), (0, 0.38, 0, 20), -0.12, 0, True),
+    "narrow": ((0, 0.07, 0, 5), (0, 0.07, 0, 5), 0.0, 0, True),
+    "staggered_left_forward": ((-0.2, 0.15, 0, 20), (0.22, 0.1, 0, 10), -0.08, 0, True),
+    "staggered_right_forward": ((0.22, 0.1, 0, 10), (-0.2, 0.15, 0, 20), -0.08, 0, True),
+    "lunge_left_forward": ((-0.45, 0.12, 0.04, 5), (0.45, 0.12, 0, 10), -0.32, 0, True),
+    "lunge_right_forward": ((0.45, 0.12, 0, 10), (-0.45, 0.12, 0.04, 5), -0.32, 0, True),
+    "lateral_lunge_left": ((0, 0.32, 0, 20), (0, 0.45, 0, 25), -0.3, 0, True),
+    "lateral_lunge_right": ((0, 0.45, 0, 25), (0, 0.32, 0, 20), -0.3, 0, True),
+    "single_leg_left": ((-0.1, 0.12, 0.25, 10), (0, 0.12, 0, 10), -0.05, 0, True),
+    "single_leg_right": ((0, 0.12, 0, 10), (-0.1, 0.12, 0.25, 10), -0.05, 0, True),
+    "kneeling": ((-0.35, 0.12, 0.05, 5), (-0.35, 0.12, 0.05, 5), -0.4, 0, False),
+    "plank": ((0, 0.12, 0, 5), (0, 0.12, 0, 5), 0.0, 76, False),
+    "push_up_bottom": ((0, 0.12, 0, 5), (0, 0.12, 0, 5), 0.0, 82, False),
+    "bear_position": ((0, 0.14, 0.42, 5), (0, 0.14, 0.42, 5), 0.0, 72, False),
+    "lying_face_up": ((0, 0.12, 0, 5), (0, 0.12, 0, 5), 0.0, -88, False),
+    "lying_face_down": ((0, 0.12, 0, 5), (0, 0.12, 0, 5), 0.0, 88, False),
+    "seated": ((0.3, 0.14, 0.38, 10), (0.3, 0.14, 0.38, 10), 0.0, -45, False),
+    "airborne": ((0, 0.14, 0.05, 10), (0, 0.14, 0.05, 10), 0.3, 0, False),
+    "half_kneeling_left_forward": ((-0.4, 0.12, 0.08, 5), (0.35, 0.12, 0, 10), -0.42, 0, True),
+    "half_kneeling_right_forward": ((0.35, 0.12, 0, 10), (-0.4, 0.12, 0.08, 5), -0.42, 0, True),
+    "reverse_tabletop": ((-0.35, 0.16, 0.4, 10), (-0.35, 0.16, 0.4, 10), 0.0, -80, False),
+    "dive_left": ((0, 0.2, 0, 5), (0, 0.1, 0, 5), 0.0, 0, False),
+    "dive_right": ((0, 0.1, 0, 5), (0, 0.2, 0, 5), 0.0, 0, False),
+}
+STANCE_ROLL = {"dive_left": -80, "dive_right": 80}
+LEVELS = {"keep": None, "tall": 0.03, "normal": None, "half_squat": -0.22, "deep_squat": -0.42}
+TRUNKS = {
+    # name: (lean, twist, side_bend, pelvis twist)
+    "upright": (5, 0, 0, 0), "lean_forward": (25, 0, 0, 0), "hinge": (55, 0, 0, 0), "deep_hinge": (80, 0, 0, 0),
+    "lean_back": (-20, 0, 0, 0), "turn_left": (8, -45, 0, -15), "turn_right": (8, 45, 0, 15),
+    "coil_right": (12, 55, 0, 25), "coil_left": (12, -55, 0, -25),
+    "side_bend_left": (0, 0, -25, 0), "side_bend_right": (0, 0, 25, 0),
+}
+FACINGS = {"front": 0, "left_45": -45, "right_45": 45, "left_90": -90, "right_90": 90, "back": 180}
+
+# Arm actions for the RIGHT arm in the chest frame (forward, up, out); left arm uses the same numbers.
+# Extras: elbow hint, implied trunk (lean, twist toward the reaching side sign), implied level.
+ARM_ACTIONS = {
+    "relaxed": dict(hand=(0.05, -0.6, 0.33)),
+    "ready": dict(hand=(0.3, -0.35, 0.22)),
+    "guard": dict(hand=(0.28, 0.06, 0.13)),
+    "on_hips": dict(hand=(0.0, -0.45, 0.35), elbow="out"),
+    "behind_head": dict(hand=(-0.05, 0.2, 0.12), elbow="out"),
+    "overhead": dict(hand=(0.05, 0.63, 0.22)),
+    "forward_reach": dict(hand=(0.64, 0.0, 0.25)),
+    "side_reach": dict(hand=(0.0, 0.0, 0.95)),
+    "reach_high_forward": dict(hand=(0.4, 0.48, 0.25)),
+    "reach_low_forward": dict(hand=(0.5, -0.5, 0.22), lean=35),
+    "reach_across": dict(hand=(0.45, -0.1, -0.3), twist=-35),
+    "touch_floor_front": dict(hand=(0.45, -0.62, 0.22), lean=70, level=-0.3),
+    "touch_same_foot": dict(hand=(0.3, -0.62, 0.3), lean=80, level=-0.15),
+    "touch_opposite_foot": dict(hand=(0.25, -0.62, -0.18), lean=65, twist=-35, level=-0.3),
+    "swing_back": dict(hand=(-0.35, -0.42, 0.3), elbow="back"),
+    "pump_forward": dict(hand=(0.32, -0.2, 0.2), elbow="back"),
+    "pump_back": dict(hand=(-0.22, -0.45, 0.31), elbow="back"),
+    "punch": dict(hand=(0.64, 0.03, 0.0), twist=-30, pelvis_twist=-12),
+    "uppercut": dict(hand=(0.35, 0.15, 0.02), twist=-25),
+    "hook": dict(hand=(0.35, 0.03, -0.05), elbow="out", twist=-35),
+    "throw_cock": dict(hand=(-0.15, 0.28, 0.42), elbow="up", twist=45, pelvis_twist=20),
+    "throw_release": dict(hand=(0.5, 0.2, 0.15), elbow="forward", twist=-30, pelvis_twist=-30),
+    "follow_through_across": dict(hand=(0.35, -0.45, -0.25), twist=-45, lean=30),
+    "chest_hold": dict(hand=(0.25, -0.15, 0.0)),
+    "catch_high": dict(hand=(0.35, 0.5, 0.12)),
+    "contest_high": dict(hand=(0.2, 0.63, 0.18)),
+    "plank_support": dict(hand=(0.0, -0.6, 0.32), elbow="back"),
+    "touch_opposite_shoulder": dict(hand=(0.18, 0.02, -0.28)),
+    "auto": dict(hand=None),
+}
+# Leg actions for the RIGHT leg (forward, out, lift, toe_out) + whether the foot is on the floor.
+LEG_ACTIONS = {
+    "planted": dict(foot=None, planted=True),
+    "knee_drive": dict(foot=(0.2, 0.12, 0.5, 5), planted=False),
+    "kick_front": dict(foot=(0.6, 0.08, 0.5, 0), planted=False),
+    "heel_to_butt": dict(foot=(-0.2, 0.12, 0.55, 5), planted=False),
+    "kick_side": dict(foot=(0.1, 0.5, 0.45, 30), planted=False),
+    "swing_back": dict(foot=(-0.35, 0.1, 0.35, 0), planted=False),
+    "step_forward": dict(foot=(0.35, 0.12, 0, 10), planted=True),
+    "step_back": dict(foot=(-0.35, 0.12, 0, 10), planted=True),
+    "step_out_side": dict(foot=(0, 0.45, 0, 15), planted=True),
+    "cross_in_front": dict(foot=(0.18, -0.1, 0, 10), planted=True),
+    "cross_behind": dict(foot=(-0.18, -0.1, 0, 10), planted=True),
+    "lift_small": dict(foot=(0, 0.12, 0.12, 10), planted=False),
+}
+
+
+def _beat_keyframe(beat: Dict[str, Any], prev: Dict[str, Any], t: float) -> Dict[str, Any]:
+    """Resolve one beat into a full keyframe, carrying 'keep' values over from the previous one."""
+    st_name = beat.get("stance", "keep")
+    state = copy.deepcopy(prev)
+    if st_name in STANCES:
+        rf, lf, h, pitch, planted = STANCES[st_name]
+        state.update(rf=rf, lf=lf, height=h, pitch=pitch, base_planted=planted, stance=st_name,
+                     roll=STANCE_ROLL.get(st_name, 0))
+    lv = LEVELS.get(beat.get("level", "keep"))
+    if lv is not None and state["pitch"] == 0:
+        state["height"] = lv
+    tr = beat.get("trunk", "keep")
+    if tr in TRUNKS:
+        lean, twist, bend, ptw = TRUNKS[tr]
+        state.update(lean=lean, twist=twist, bend=bend, ptwist=ptw)
+    elif tr == "keep" and beat.get("stance") in STANCES:
+        pass
+    fac = beat.get("facing", "keep")
+    facing_changed = fac in FACINGS and FACINGS[fac] != state["facing"]
+    if fac in FACINGS:
+        state["facing"] = FACINGS[fac]
+
+    # Legs.
+    feet = {"right": list(state["rf"]), "left": list(state["lf"])}
+    planted = {"right": state["base_planted"], "left": state["base_planted"]}
+    if st_name in ("single_leg_left",):
+        planted["right"] = False
+    if st_name in ("single_leg_right",):
+        planted["left"] = False
+    lifted_legs = []
+    support = {"single_leg_left": "left", "single_leg_right": "right"}.get(state["stance"])
+    for side in ("right", "left"):
+        act = LEG_ACTIONS.get(beat.get(f"{side}_leg", "planted"), LEG_ACTIONS["planted"])
+        if side == support and not act.get("planted", True):
+            continue  # never lift the leg the athlete is standing on
+        if act["foot"] is not None and (state["pitch"] == 0 or not act["planted"]):
+            feet[side] = list(act["foot"])
+            planted[side] = act["planted"]
+            if not act["planted"]:
+                lifted_legs.append(side)
+    if st_name == "airborne":
+        planted = {"right": False, "left": False}
+    if len(lifted_legs) == 2 and st_name != "airborne":
+        state["height"] = max(state["height"], 0.15)  # both feet up = the athlete is in the air
+    if facing_changed:
+        planted = {"right": False, "left": False}  # turning: the feet pivot / hop round
+
+    # Arms (+ the trunk/level changes they imply).
+    lean, twist, bend, ptwist, height = state["lean"], state["twist"], state["bend"], state["ptwist"], state["height"]
+    trunk_explicit = tr in TRUNKS
+    hands, elbows = {}, {}
+    implied_lean, implied_twist, implied_ptwist, implied_level = [], [], [], []
+    for side, sign in (("right", 1.0), ("left", -1.0)):
+        name = beat.get(f"{side}_arm", "auto")
+        act = ARM_ACTIONS.get(name, ARM_ACTIONS["auto"])
+        if name == "auto" or act["hand"] is None:
+            continue
+        if state["pitch"] > 45 and name in ("relaxed", "ready", "auto"):
+            act = ARM_ACTIONS["plank_support"]
+        if state["pitch"] < -45 and name in ("plank_support", "relaxed", "ready"):
+            act = dict(hand=(-0.6, 0.0, 0.3), elbow="down")  # face-up: hands on the floor behind
+        if state["stance"] in STANCE_ROLL and name in ("relaxed", "ready", "auto", "touch_floor_front",
+                                                       "reach_low_forward", "forward_reach", "touch_same_foot"):
+            act = ARM_ACTIONS["overhead"]
+        hands[side] = act["hand"]
+        elbows[side] = act.get("elbow", "down")
+        if "lean" in act:
+            implied_lean.append(act["lean"])
+        if "twist" in act:
+            implied_twist.append(sign * act["twist"])
+        if "pelvis_twist" in act:
+            implied_ptwist.append(sign * act["pelvis_twist"])
+        if "level" in act:
+            implied_level.append(act["level"])
+    if not trunk_explicit or tr in ("upright",):
+        if implied_lean:
+            lean = max(lean, max(implied_lean))
+        if implied_twist:
+            twist = sum(implied_twist) / len(implied_twist) * (1.0 if len(implied_twist) == 1 else 0.5)
+        if implied_ptwist:
+            ptwist = sum(implied_ptwist) / len(implied_ptwist)
+    if implied_level and state["pitch"] == 0:
+        height = min(height, min(implied_level))
+    if height < -0.25 and lean < 25 and state["pitch"] == 0:
+        lean = 30  # deep knee bend needs the chest over the feet to look balanced
+    if abs(state["pitch"]) > 45 or state["stance"] in STANCE_ROLL:
+        lean = max(-15, min(15, lean))  # on the floor the trunk stays in line with the body
+        height = 0.0 if state["pitch"] else height
+
+    # Unspecified arms: counter-swing against the legs, or a stance-appropriate default.
+    for side, other in (("right", "left"), ("left", "right")):
+        if side in hands:
+            continue
+        other_leg = beat.get(f"{other}_leg", "planted")
+        same_leg = beat.get(f"{side}_leg", "planted")
+        if state["pitch"] > 45:
+            hands[side], elbows[side] = ARM_ACTIONS["plank_support"]["hand"], "back"
+        elif state["pitch"] < -45 and state["stance"] == "reverse_tabletop":
+            hands[side], elbows[side] = (-0.6, 0.0, 0.3), "down"
+        elif state["stance"] in STANCE_ROLL:
+            hands[side], elbows[side] = ARM_ACTIONS["overhead"]["hand"], "out"
+        elif other_leg in ("knee_drive", "step_forward", "kick_front") or same_leg in ("heel_to_butt", "swing_back", "step_back"):
+            hands[side], elbows[side] = ARM_ACTIONS["pump_forward"]["hand"], "back"
+        elif same_leg in ("knee_drive", "step_forward", "kick_front") or other_leg in ("heel_to_butt", "swing_back"):
+            hands[side], elbows[side] = ARM_ACTIONS["pump_back"]["hand"], "back"
+        elif same_leg == "kick_side" or other_leg == "kick_side":
+            hands[side], elbows[side] = (0.1, -0.2, 0.6), "down"
+        elif state["stance"] in ("athletic", "wide", "staggered_left_forward", "staggered_right_forward") or height < -0.15:
+            hands[side], elbows[side] = ARM_ACTIONS["ready"]["hand"], "down"
+        elif state["stance"] == "seated":
+            hands[side], elbows[side] = (0.35, -0.3, 0.15), "down"
+        else:
+            hands[side], elbows[side] = state["hands"].get(side, ARM_ACTIONS["relaxed"]["hand"]), state["elbows"].get(side, "down")
+    state["hands"], state["elbows"] = hands, elbows
+
+    kf = K(t, beat.get("label", "beat")[:40],
+           plant="both" if planted["right"] and planted["left"] else "right" if planted["right"] else
+           "left" if planted["left"] else "none",
+           grip=bool(beat.get("hands_together")), re=elbows["right"], le=elbows["left"],
+           rh=hands["right"], lh=hands["left"], rf=feet["right"], lf=feet["left"],
+           pel=(height, ptwist, 6 if lean > 20 else 2), tor=(lean, twist, bend),
+           body=(state["pitch"], state["facing"], state.get("roll", 0)),
+           head=(15 if state["pitch"] > 45 else -20 if state["pitch"] < -45 else 0, 0, 0))
+    # Remember what persists into the next beat ("keep"): stance feet, level, trunk, arms.
+    state.update(height=height if lv is not None or st_name in STANCES else state["height"])
+    return kf, state
+
+
+def build_beats(beats: List[Dict[str, Any]], loop: bool, amp: float = 1.0) -> Dict[str, Any]:
+    """Turn a beat list into keyframes. Beats may also be library macros ('template:variant')."""
+    state = dict(rf=STANCES["standing"][0], lf=STANCES["standing"][1], height=0.0, pitch=0, roll=0, base_planted=True,
+                 stance="standing", lean=5, twist=0, bend=0, ptwist=0, facing=0, hands={}, elbows={})
+    first = dict(stance="standing", label="start")
+    if beats and beats[0].get("stance") in STANCES:
+        first["stance"] = beats[0]["stance"]
+    kf0, state = _beat_keyframe(first, state, 0.0)
+    keys_abs: List[Tuple[float, Dict[str, Any]]] = [(0.0, kf0)]
+    clock = 0.0
+    for beat in beats[:24]:
+        macro = beat.get("macro", "none")
+        if macro and macro != "none" and ":" in macro:
+            template, variant = macro.split(":", 1)
+            try:
+                seg = build_segment(*resolve(template, variant)[:2], amp)
+            except Exception:
+                seg = None
+            if seg:
+                clock += 0.25
+                cycles = 2 if seg["loop"] else 1
+                for c in range(cycles):
+                    for k in seg["keys"]:
+                        keys_abs.append((clock + (c + k["t"]) * seg["duration"], copy.deepcopy(k)))
+                clock += cycles * seg["duration"]
+                continue
+        dt = BEAT_TIME.get(beat.get("timing", "normal"), 0.55) / max(0.7, amp)
+        if beat.get("timing") == "hold":
+            # Hold: repeat the previous pose (no new movement), just time passing.
+            last = copy.deepcopy(keys_abs[-1][1])
+            clock += dt
+            last["phase"] = beat.get("label", "hold")[:40]
+            keys_abs.append((clock, last))
+            continue
+        clock += dt
+        kf, state = _beat_keyframe(beat, state, 0.0)
+        keys_abs.append((clock, kf))
+    if loop:
+        clock += 0.4  # transition back to the first beat
+    else:
+        clock += 0.5
+        end, _ = _beat_keyframe(dict(stance=first["stance"], trunk="upright", facing="front", label="finish"),
+                                state, 0.0)
+        keys_abs.append((clock, end))
+    total = max(clock, 0.5)
+    keys = []
+    for t_abs, k in keys_abs:
+        k["t"] = t_abs / total
+        keys.append(k)
+    if loop:
+        keys = [k for k in keys if k["t"] < 0.999]
+    return {"keys": keys, "duration": total, "loop": loop, "view": "three_quarter"}

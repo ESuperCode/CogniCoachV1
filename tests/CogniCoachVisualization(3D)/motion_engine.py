@@ -1354,7 +1354,9 @@ to SIMPLIFY them into the single core movement, so the animation stays clean and
 - key_details: at most 3 details that change the BODY MOTION (side, tempo, stance, repetitions).
   Ignore everything else.
 - library_match: the library entry that IS this movement ("template:variant"), or "none".
-  match_quality: "exact" only if that entry is the same movement (synonyms count: "soccer shot",
+  match_quality: "exact" only if the request is PURELY that standard movement. If the drill adds
+  anything (cones, touches, reactions, turns, pauses/holds, extra steps, combinations of moves),
+  use "close" even if the core movement is in the library. "exact" only if that entry is the same movement (synonyms count: "soccer shot",
   "striking a football" -> kick:soccer_instep; "fly stroke" -> swim:butterfly); "close" if similar
   but not the same; "none" otherwise. Prefer an exact library entry whenever one fits, and
   when the request adds a distinctive element (rotation, jump, two hands, a specific shot) choose the
@@ -1535,14 +1537,148 @@ def compose_plan(segments: List[Dict[str, Any]], brief: Dict[str, Any], view: Op
     return plan
 
 
+# ---- Choreography: any drill as a beat timeline over enum-only body-part actions ----------------
+def _enum(values: List[str]) -> Dict[str, Any]:
+    return {"type": "string", "enum": values}
+
+
+BEAT_SCHEMA = _obj({
+    "label": {"type": "string"},
+    "timing": _enum(list(ml.BEAT_TIME)),
+    "stance": _enum(["keep"] + list(ml.STANCES)),
+    "level": _enum(list(ml.LEVELS)),
+    "trunk": _enum(["keep"] + list(ml.TRUNKS)),
+    "facing": _enum(["keep"] + list(ml.FACINGS)),
+    "right_arm": _enum(list(ml.ARM_ACTIONS)),
+    "left_arm": _enum(list(ml.ARM_ACTIONS)),
+    "right_leg": _enum(list(ml.LEG_ACTIONS)),
+    "left_leg": _enum(list(ml.LEG_ACTIONS)),
+    "hands_together": {"type": "boolean"},
+    "macro": _enum(["none"] + LIBRARY_CHOICES),
+})
+CHOREO_SCHEMA = _obj({
+    "loop": {"type": "boolean"},
+    "camera_view": _enum(VIEWS),
+    "beats": {"type": "array", "items": BEAT_SCHEMA},
+})
+
+CHOREO_INSTRUCTIONS = """
+You choreograph sports drills for an animated athlete. ANY drill can be built - including drills
+nobody has seen before - by describing it as an ordered list of BEATS. Each beat says what the body
+looks like at the END of that beat; the engine animates smoothly between beats and handles all the
+biomechanics (it automatically hinges the trunk when a hand touches the floor, rotates the hips on
+punches/throws, counter-swings unspecified arms against the legs, pivots the feet on turns).
+
+Beat fields (all chosen from fixed menus):
+- timing: how long the move INTO this beat takes: instant / quick / normal / slow; "hold" = stay
+  in the previous pose (a pause).
+- stance: the foot base and body orientation. "keep" = unchanged. Floor positions (plank,
+  push_up_bottom, bear_position, lying_face_up/down, seated) put the body on the floor.
+  single_leg_left = standing on the LEFT leg. airborne = in the air. reverse_tabletop = crab
+  position (face up, hands and feet on the floor). dive_left / dive_right = goalkeeper-style dive
+  onto that side. half_kneeling_*_forward = one knee down.
+- Lateral travel (shuffles, bounds, slides) does NOT change facing: the chest keeps facing front.
+- level: hip height (half_squat, deep_squat, tall, normal, keep).
+- trunk: keep / upright / lean_forward / hinge / deep_hinge / lean_back / turn_left / turn_right /
+  coil_right / coil_left / side_bend_left / side_bend_right.
+- facing: which way the whole athlete faces (relative to the start). Use it for direction changes,
+  cuts and turns. "keep" = unchanged.
+- right_arm / left_arm: "auto" lets the engine choose a natural arm (counter-swing, ready hands).
+  Name a specific action whenever the drill says what the hands do.
+- right_leg / left_leg: "planted" = foot on the floor in the stance position; other actions move
+  that leg (knee_drive, kick_front, heel_to_butt, kick_side, swing_back, step_forward, step_back,
+  step_out_side, cross_in_front, cross_behind, lift_small). Both legs off the floor = a hop/jump.
+- hands_together: both hands on one ball/implement.
+- macro: "none" normally. If part of the drill IS a standard library movement (e.g. a jump shot,
+  a sprint, a tennis forehand, a jab-cross), set macro to it and the engine plays that professional
+  animation for this beat (other fields are ignored for that beat).
+
+How to write good beats:
+1. Break the drill into its real body positions, in order. 4-12 beats for one rep/cycle.
+2. Change only what the drill changes; use "keep" for the rest - that keeps the motion clean.
+3. Alternating drills: write one full left+right cycle and set loop=true.
+4. Use quick/instant for explosive moves, slow for controlled ones, hold for pauses/sticks.
+5. Prefer simple, readable positions over many tiny ones. Never contradict the drill.
+6. camera_view: side for forward/back and floor motion, front for lateral motion, three_quarter
+   for rotation.
+
+Example - "touch the cone to your right, then the cone to your left, staying low":
+ beats: [ {stance athletic, level half_squat, label "low ready"},
+          {timing quick, stance lateral_lunge_right, right_arm touch_floor_front, label "touch right cone"},
+          {timing quick, stance athletic, label "back to center"},
+          {timing quick, stance lateral_lunge_left, left_arm touch_floor_front, label "touch left cone"},
+          {timing quick, stance athletic, label "back to center"} ], loop true, camera front
+Example - "3 quick high knees, sprawl to the floor, pop up and jump":
+ beats: [ {timing quick, right_leg knee_drive}, {timing quick, left_leg knee_drive},
+          {timing quick, right_leg knee_drive}, {timing quick, stance plank, label "sprawl"},
+          {timing quick, stance athletic, level deep_squat, label "pop up"},
+          {timing quick, stance airborne, right_arm overhead, left_arm overhead, label "jump"},
+          {timing normal, stance athletic, label "land"} ], loop false, camera side
+""".strip()
+
+
+def _choreo_input(brief: Dict[str, Any], movement: str, errors: Optional[List[str]] = None,
+                  previous: Optional[Dict[str, Any]] = None) -> str:
+    parts = [f"DRILL: {brief.get('canonical_name') or movement[:100]}",
+             f"WHAT THE BODY DOES: {brief.get('simplified_description', '')}"]
+    if brief.get("phases"):
+        parts.append("PHASES:\n" + "\n".join(f"- {p}" for p in brief["phases"][:10]))
+    if brief.get("key_details"):
+        parts.append("KEY DETAILS: " + "; ".join(str(x) for x in brief["key_details"][:3]))
+    parts.append(f"REPEATING: {bool(brief.get('repeating_cycle'))}; TEMPO: {brief.get('tempo', 'normal')}")
+    if errors:
+        parts.append("YOUR PREVIOUS ANSWER:\n" + json.dumps(previous))
+        parts.append("PROBLEMS TO FIX:\n" + "\n".join("- " + e for e in errors))
+    return "\n\n".join(parts)
+
+
+def check_beats(raw: Dict[str, Any]) -> List[str]:
+    """Cheap structural checks on a choreography (the enums already guarantee validity)."""
+    beats = raw.get("beats") or []
+    errors = []
+    if len(beats) < 2:
+        errors.append("Give at least 2 beats (positions) for the drill.")
+    if len(beats) > 20:
+        errors.append("Too many beats; use at most 14 for one rep/cycle.")
+    moving = [b for b in beats if b.get("macro", "none") != "none" or any(
+        b.get(k, "keep") not in ("keep", "auto", "planted", "normal")
+        for k in ("stance", "level", "trunk", "facing", "right_arm", "left_arm", "right_leg", "left_leg"))]
+    if len(moving) < 2:
+        errors.append("The beats barely change the body; describe the drill's actual positions.")
+    return errors
+
+
+def plan_from_beats(raw: Dict[str, Any], brief: Dict[str, Any], duration: Optional[float]) -> Dict[str, Any]:
+    tempo = TEMPO.get(brief.get("tempo", "normal"), 1.0)
+    built = ml.build_beats(raw.get("beats", []), bool(raw.get("loop")), INTENSITY.get(brief.get("intensity", "medium"), 1.0))
+    plan = sanitize_plan({
+        "title": brief.get("title", ""),
+        "movement_summary": brief.get("movement_summary", ""),
+        "coaching_cues": brief.get("coaching_cues", []),
+        "loop": built["loop"],
+        "duration_seconds": duration or min(8.0, built["duration"] * tempo),
+        "camera_view": raw.get("camera_view") if raw.get("camera_view") in VIEWS else "three_quarter",
+        "keyframes": built["keys"],
+    })
+    if any(abs(k["body"]["roll"]) > 45 for k in plan["keyframes"]):
+        plan["camera_view"] = "front"  # sideways dives/rolls read best face-on
+    elif any(abs(k["body"]["pitch"]) > 65 for k in plan["keyframes"]):
+        plan["camera_view"] = "side"
+    plan["beats"] = raw.get("beats")
+    plan["brief"] = {k: brief.get(k) for k in ("canonical_name", "phases")}
+    return plan
+
+
 def plan_movement(movement: str, extra: str = "", duration: Optional[float] = None,
                   refine: bool = False) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """Multi-call pipeline.
 
-    1. normalize: simplify the request into one canonical movement + brief + exact library match.
-    2. exact match -> code builds it directly (no further model freedom: most consistent).
-       otherwise   -> compose (enum-constrained segments from the simplified brief only)
-                      -> validate -> repair call with the validator's errors -> build.
+    1. normalize: simplify the request (canonical name, one-line description, phases, exact library
+       match). Long or chatty prompts are reduced here so later stages stay consistent.
+    2. exact library match -> code builds the professional template directly.
+    3. otherwise choreograph: the model writes beats from enum-only body-part menus (works for any
+       drill, including invented ones) -> structural check -> one repair call if needed -> code
+       builds all motion.
     """
     calls: List[Dict[str, Any]] = []
     request = f"Movement request: {movement.strip()}"
@@ -1560,22 +1696,18 @@ def plan_movement(movement: str, extra: str = "", duration: Optional[float] = No
         segments, errors, _ = validate_segments([seg])
         if segments and not errors:
             return compose_plan(segments, brief, None, duration), calls
-    compose_in = _compose_input(movement, extra, brief)
-    raw, meta = _call_model(COMPOSE_INSTRUCTIONS, compose_in, "medium" if refine else "low",
-                            COMPOSE_SCHEMA, "segment_plan", 6000)
-    segments, errors, notes = validate_segments(raw.get("segments", []))
-    calls.append({"stage": "compose", **meta, "segments": raw.get("segments"), "errors": errors, "notes": notes})
+    raw, meta = _call_model(CHOREO_INSTRUCTIONS, _choreo_input(brief, movement), "medium" if refine else "low",
+                            CHOREO_SCHEMA, "choreography", 8000)
+    errors = check_beats(raw)
+    calls.append({"stage": "choreograph", **meta, "beats": len(raw.get("beats") or []), "errors": errors})
     if errors:
-        raw2, meta2 = _call_model(COMPOSE_INSTRUCTIONS, _compose_input(movement, extra, brief, errors, raw),
-                                  "medium", COMPOSE_SCHEMA, "segment_plan", 6000)
-        segments2, errors2, _ = validate_segments(raw2.get("segments", []))
-        calls.append({"stage": "repair", **meta2, "segments": raw2.get("segments"), "errors": errors2})
-        if segments2 and len(errors2) <= len(errors):
-            segments, raw = segments2, raw2
-    if not segments:
-        plan, more = plan_freeform(brief.get("canonical_name") or movement, extra, duration, refine)
-        return plan, calls + more
-    return compose_plan(segments, brief, raw.get("camera_view"), duration), calls
+        raw2, meta2 = _call_model(CHOREO_INSTRUCTIONS, _choreo_input(brief, movement, errors, raw), "medium",
+                                  CHOREO_SCHEMA, "choreography", 8000)
+        errors2 = check_beats(raw2)
+        calls.append({"stage": "repair", **meta2, "errors": errors2})
+        if len(errors2) <= len(errors):
+            raw = raw2
+    return plan_from_beats(raw, brief, duration), calls
 
 
 # -----------------------------------------------------------------------------
@@ -1694,7 +1826,7 @@ def _build_response(plan: Dict[str, Any], duration: Optional[float], fps: int, s
 
 @app.post("/generate")
 def generate(req: GenerateRequest) -> Dict[str, Any]:
-    key = _cache_key("v4", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
+    key = _cache_key("v5", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
                      req.quality, MODEL)
     plan = cache_get(key) if req.use_cache else None
     calls: List[Dict[str, Any]] = []

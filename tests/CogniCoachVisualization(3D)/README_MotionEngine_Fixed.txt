@@ -42,26 +42,26 @@ Root causes of the old, bad animations (all verified by rendering the Unity buil
     metres into them.
   * The model had to invent raw 3D coordinates, which cheap models do badly.
 
-The pipeline (v3) - rigid code, flexible model:
-  motion_library.py holds hand-built, render-verified templates (run/swim/swing/overhead/punch/
-  kick/jump/strength/floor/agility/ball skills, ~110 variants) plus ~40 named poses. The model never
-  writes animation numbers.
-  1. INTERPRET  call 1: the model turns the request into a short coach brief (phases, implement,
-                orientation, repeating?, closest standard movements, cues).
-  2. COMPOSE    call 2: the model picks segments from the catalog (template is a JSON enum, so it
-                cannot be invalid) with variant, reps, tempo, intensity. Novel drills become a
-                sequence of named poses ("low_crouch_hands_down>reach_right_hand_to_left_foot>...").
-  3. VALIDATE   code fuzzy-matches every choice; anything unknown goes back to the model with the
-                exact error (call 3, repair). Free-form keyframes are only a last resort.
-  4. BUILD      code glues segments (timing, transitions, reps capped to 8 s, loops), enforces
-                two-hand reach for gripped implements, picks a side camera for horizontal bodies,
-                then solves FK/IK exactly as before (foot locking, collisions, smoothing).
-  Before any of this, a NORMALIZE call simplifies long/chatty prompts into one canonical movement
-  and an enum-constrained library match; exact matches are built directly by code (1 call, ~9 s,
-  identical output however the request is phrased). Pose drills get natural timing (bigger moves
-  take longer, short holds), boxing segments merge into one fluid combination.
-  Typical generation: 8-15 s. To add a sport skill, add a variant to
-  motion_library.py and check it with: python motion_engine.py --selftest
+The pipeline (v5) - rigid code, flexible model, works for ANY drill:
+  1. NORMALIZE   call 1 simplifies the request (canonical name, one-line description, phases,
+                 cues) and checks for an EXACT standard movement in motion_library.py.
+  2a. EXACT      standard skills (tennis forehand, butterfly, golf swing...) play the hand-built,
+                 render-verified template: one call, ~9 s, identical however it is phrased.
+  2b. ANYTHING ELSE (invented drills, combinations, cones, holds, turns) -> CHOREOGRAPH:
+                 call 2 writes the drill as a timeline of BEATS. Every field is an enum menu:
+                 stance (athletic, lunge, single-leg, plank, reverse tabletop, dive, airborne...),
+                 level, trunk (hinge, coil, side bend...), facing, an action per arm (touch
+                 opposite foot, punch, throw cock, overhead, contest...), an action per leg (knee
+                 drive, kick, step, cross behind...), timing (quick/slow/hold), or a "macro" that
+                 drops in a library template. The model never writes numbers.
+                 Code (motion_library.build_beats) turns beats into precise targets and adds the
+                 biomechanics itself: hinging/squatting to reach the floor, hip rotation on punches
+                 and throws, counter-swinging arms, pivoting feet on facing changes, protecting the
+                 standing leg, floor-aware arm support, camera choice. A structural check triggers
+                 one repair call if the beats are empty/static.
+  3. SOLVE       FK/IK as before (foot locking, collisions, smoothing, Euler-safe output).
+  Typical: 8-10 s for standard skills, 15-25 s for invented drills.
+  To extend the grammar, add entries to STANCES / ARM_ACTIONS / LEG_ACTIONS in motion_library.py.
 
 The HTML now blends frames with quaternion slerp (no Euler pops), auto-plays, shows the title and
 coaching cues, has camera-view buttons (front / 3/4 / side / back), a Hand selector, a Quality
