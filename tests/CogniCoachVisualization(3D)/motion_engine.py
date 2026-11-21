@@ -1,119 +1,113 @@
-"""AI sports-motion planner + kinematic compiler + verifier for the CogniCoach Unity rig.
+"""CogniCoach Motion Engine: text prompt -> high-quality animation frames for the Unity ragdoll rig.
 
-Single-file local backend. Keep OPENAI_API_KEY on this server, never in browser JavaScript.
+Pipeline
+--------
+1. PLAN    A cheap text model (default gpt-5-mini) writes keyframes in coach terms: where each hand
+           is relative to the chest, where each foot is, hip height, trunk lean/twist, elbow
+           direction, planted feet, two-handed grip. Cheap models are bad at joint angles and raw
+           3D coordinates but good at "left fist 0.6 m in front at shoulder height".
+2. CHECK   Keyframes are clamped, sign-convention mistakes are auto-corrected, and objective solver
+           findings (unreachable targets, crossed feet...) trigger one cheap review call.
+3. SOLVE   Overshoot-free cubic splines between keys, then hierarchical FK/IK on the rig measured
+           from the Unity build: arm/leg IK with elbow/knee direction control, planted-foot locking,
+           two-handed grips, torso collision avoidance, rotation-space smoothing.
+4. EMIT    Unity local Euler angles (Z-X-Y) per joint, in the sparse frame format that
+           RagdollTest_AI.html sends to WebBridge.UpdateMotion.
 
-Install:
+Rig facts (verified by rendering the WebGL build):
+- Unity axes: +X avatar right, +Y up, +Z avatar forward. Rotations compose parent * local.
+- Hierarchy: body -> {hip -> {lefthip -> leftknee, righthip -> rightknee},
+                      spine -> {leftshoulder -> leftelbow, rightshoulder -> rightelbow, neck}}.
+- Knee flexion = +X local, elbow flexion = -X local, spine +X = lean forward, +Y = twist right.
+- positionx/y/z are NOT translations: they are the whole-body rotation (pitch/yaw/roll).
+  The rig has no root translation; frames carry "rooty" (metres) which the HTML shows by sliding
+  the canvas and which a future WebBridge can apply to the hips.
+
+Run:
     python -m pip install --upgrade openai fastapi uvicorn numpy pydantic
-
-Run (PowerShell):
-    $env:OPENAI_API_KEY="YOUR_KEY"
-    $env:OPENAI_MODEL="gpt-6-astra"   # optional; use a model enabled for your API project
-    python motion_engine.py
-
-Then open the updated RagdollTest.html in the browser and use "Generate AI Motion".
-
-Important rig assumptions:
-- Input anchors and limb lengths use a nominal 1.75 Unity-unit tall human.
-- Axes: +X = avatar right, +Y = up, +Z = forward. This may need calibration to your scene.
-- The HTML relativityCalculation() composes local joint rotations through the body hierarchy
-  with quaternions, then sends world Euler angles in Unity's Z-X-Y convention. This compiler
-  emits local joint-angle offsets for that hierarchy. The internal verifier remains a simplified
-  model and should not be treated as ground truth for the Unity mesh.
-- The internal forward kinematics is a simplified human-ratio model, not a precise model of the
-  user's Unity mesh. The output is a research prototype, not a guarantee of biomechanically good form.
+    python motion_engine.py              (OPENAI_API_KEY from the environment or a .env file)
+    python motion_engine.py --selftest   (offline solver check)
 """
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 import math
 import os
 import re
+import threading
+import time
 import traceback
+from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Sequence, Tuple
+from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from openai import OpenAI
 from pydantic import BaseModel, Field
 
+try:  # The compiler works without the SDK (e.g. /compile), only /generate needs it.
+    from openai import OpenAI
+except Exception:  # pragma: no cover
+    OpenAI = None  # type: ignore
+
 # -----------------------------------------------------------------------------
-# Settings and nominal rig proportions (Unity units; nominal height 1.75)
+# Settings
 # -----------------------------------------------------------------------------
-APIKEY = os.getenv("OPENAI_API_KEY")
+
+def _load_dotenv(path: Path) -> None:
+    """Minimal .env support (KEY=VALUE lines) so the API key only has to be saved once.
+
+    Existing environment variables always win. The repository's .gitignore excludes .env files.
+    """
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip().removeprefix("export ").strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_dotenv(Path(__file__).with_name(".env"))
+
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+REASONING_EFFORT = os.getenv("MOTION_REASONING_EFFORT", "low")
 HOST = os.getenv("MOTION_HOST", "127.0.0.1")
 PORT = int(os.getenv("MOTION_PORT", "8000"))
+ALLOWED_ORIGINS = [o.strip() for o in os.getenv("MOTION_ALLOWED_ORIGINS", "*").split(",") if o.strip()]
+CACHE_SIZE = int(os.getenv("MOTION_CACHE_SIZE", "256"))
+CACHE_DIR = os.getenv("MOTION_CACHE_DIR", "")  # optional on-disk cache of plans
 RIG_INFO_PATH = Path(__file__).with_name("rig_info.md")
 
+DEFAULT_FPS = 24
+HIP_DROP_SCALE = 0.85  # the rig's legs are ~15% shorter than a real 1.75 m athlete's
+MAX_FRAMES = 360
+SPARSE_EPS_DEG = 0.05
 
-def _parse_rig_definition(path: Path) -> Dict[str, Any]:
-    """Read the hand-authored rig spec and expose the parsed joint/poly data."""
-    nodes: Dict[str, Dict[str, List[float]]] = {}
-    if not path.exists():
-        return nodes
-
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("*"):
-            continue
-        body = stripped[1:].strip()
-        if not body:
-            continue
-        name_match = re.match(r"([A-Za-z0-9_]+)", body)
-        if not name_match:
-            continue
-        name = name_match.group(1)
-        tuples = re.findall(r"\(([^)]+)\)", body)
-        if not tuples:
-            continue
-        values = []
-        for item in tuples:
-            parts = [float(x.strip()) for x in item.split(",") if x.strip()]
-            if len(parts) >= 3:
-                values.append(parts[:3])
-        if values:
-            nodes[name] = {"position": values[0], "components": values}
-    return nodes
-
-
-RIG = _parse_rig_definition(RIG_INFO_PATH)
-BODY_HEIGHT = 1.75
-SHOULDER_HALF_WIDTH = 0.195
-SHOULDER_Y = 0.445
-UPPER_ARM_LENGTH = 0.315
-FOREARM_LENGTH = 0.285
-HIP_HALF_WIDTH = 0.105
-HIP_ANCHOR_Y = -0.035
-THIGH_LENGTH = 0.425
-SHIN_LENGTH = 0.425
-ANKLE_FORWARD_OFFSET = 0.055
-
-# Calibrate the solver to the rig's anatomical flexion direction. The original engine used a
-# generic Euler assumption; the actual rig is human anatomy, so elbows and knees should only bend in
-# flexion (not backwards). Keeping the hinge value negative stabilizes the pose without disrupting
-# the original solver flow.
-KNEE_FLEXION_MIN_DEG = 0.0
-KNEE_FLEXION_MAX_DEG = 125.0
-ELBOW_FLEXION_MIN_DEG = -145.0
-ELBOW_FLEXION_MAX_DEG = 0.0
-
-# Anatomical flexion is represented as the negative local hinge rotation in the solver's Euler basis.
-# The target-relative forward vector decides whether the bend should remain in the natural flexion
-# direction for that limb or swing behind the body, preserving useful tennis/swimming follow-through.
-KNEE_FLEXION_DEFAULT_SIGN = 1.0
-ELBOW_FLEXION_DEFAULT_SIGN = -1.0
-
-# The HTML sample uses 8 FPS. We generate at 12 by default and set the HTML control
-# to that rate; each frame is one playback step in the current HTML implementation.
-DEFAULT_PLAYBACK_FPS = 12
-MAX_FRAMES = 120
-IK_ITERATIONS = 45
-IK_EPSILON_METERS = 0.012
-IK_DAMPING = 0.006
-SPARSE_ANGLE_THRESHOLD_DEG = 0.12
+# -----------------------------------------------------------------------------
+# Rig geometry, in rig units (1 unit ~ 2.1 cm; the avatar is ~82 units tall).
+# Measured from the Unity WebGL build (T-pose and side renders) and rig_info.md.
+# -----------------------------------------------------------------------------
+UNIT_TO_M = 1.75 / 82.0
+SHOULDER_OFFSET = (14.0, 22.5, 0.0)   # from spine base, +x for right
+HIP_OFFSET = (6.0, -1.0, 0.0)         # from hip joint
+NECK_OFFSET = (0.0, 30.0, 0.0)
+UPPER_ARM = 15.0
+FOREARM = 16.0
+THIGH = 16.5
+SHIN = 17.0
+LIMB_RADIUS = 3.75
+TORSO_HALF = (10.0, 15.0, 5.0)        # torso box half extents, centre at (0,15,0) in spine frame
+PELVIS_HALF = (10.0, 5.0, 5.0)        # pelvis box, centre at origin of hip frame
+SOLE_DROP = 3.0                       # ankle pivot to sole
 
 ANGLE_KEYS = [
     "hipx", "hipy", "hipz",
@@ -131,934 +125,1361 @@ ANGLE_KEYS = [
 POSITION_KEYS = ["positionx", "positiony", "positionz"]
 
 # -----------------------------------------------------------------------------
-# OpenAI structured motion-plan schema
+# Keyframe parameter model (what the language model writes)
+# -----------------------------------------------------------------------------
+# name: (min, max, neutral)
+GROUP_PARAMS: Dict[str, Dict[str, Tuple[float, float, float]]] = {
+    "body": {"pitch": (-200, 200, 0), "turn": (-1080, 1080, 0), "roll": (-200, 200, 0)},
+    # pelvis.height: metres the hips are lowered (-) or raised (+) versus standing tall.
+    "pelvis": {"tilt": (-25, 35, 0), "twist": (-60, 60, 0), "side": (-25, 25, 0), "height": (-0.6, 0.8, 0)},
+    "torso": {"lean": (-35, 95, 0), "twist": (-65, 65, 0), "side_bend": (-40, 40, 0)},
+    "head": {"nod": (-45, 55, 0), "turn": (-75, 75, 0), "tilt": (-35, 35, 0)},
+    # Hands: metres in the chest frame. Origin = middle of the shoulder line; +forward out of the
+    # chest, +up toward the head, +side = outward toward that hand's own side, - = across the body.
+    "right_hand": {"forward": (-0.7, 0.8, 0.05), "up": (-0.75, 0.75, -0.6), "out": (-0.65, 1.0, 0.33)},
+    "left_hand": {"forward": (-0.7, 0.8, 0.05), "up": (-0.75, 0.75, -0.6), "out": (-0.65, 1.0, 0.33)},
+    # Feet: metres in the body frame (does not turn with pelvis/torso twist). forward/out are
+    # measured from the point under the pelvis centre; lift = sole height above the floor.
+    "right_foot": {"forward": (-0.8, 0.9, 0.0), "out": (-0.25, 0.8, 0.12), "lift": (0.0, 1.0, 0.0), "toe_out": (-30, 70, 10)},
+    "left_foot": {"forward": (-0.8, 0.9, 0.0), "out": (-0.25, 0.8, 0.12), "lift": (0.0, 1.0, 0.0), "toe_out": (-30, 70, 10)},
+}
+GROUP_ORDER = list(GROUP_PARAMS.keys())
+FLAG_KEYS = ["left_foot_planted", "right_foot_planted", "hands_together"]
+ELBOW_CHOICES = ["down", "out", "back", "up", "forward"]
+ELBOW_KEYS = ["right_elbow_points", "left_elbow_points"]
+PARAM_PATHS: List[Tuple[str, str]] = [(g, p) for g in GROUP_ORDER for p in GROUP_PARAMS[g]]
+CIRCULAR_PATHS = {("body", "turn")}
+
+
+def _num(v: Any, default: float) -> float:
+    try:
+        f = float(v)
+        return f if math.isfinite(f) else default
+    except Exception:
+        return default
+
+
+def neutral_keyframe(t: float = 0.0) -> Dict[str, Any]:
+    kf: Dict[str, Any] = {"t": t, "phase": "neutral"}
+    for g in GROUP_ORDER:
+        kf[g] = {p: spec[2] for p, spec in GROUP_PARAMS[g].items()}
+    kf["left_foot_planted"] = True
+    kf["right_foot_planted"] = True
+    kf["hands_together"] = False
+    kf["right_elbow_points"] = "down"
+    kf["left_elbow_points"] = "down"
+    return kf
+
+
+def sanitize_keyframe(raw: Dict[str, Any], t_default: float) -> Dict[str, Any]:
+    kf = neutral_keyframe(t_default)
+    if not isinstance(raw, dict):
+        return kf
+    kf["t"] = _num(raw.get("t", t_default), t_default)
+    kf["phase"] = str(raw.get("phase", "phase"))[:48]
+    for g in GROUP_ORDER:
+        src = raw.get(g) if isinstance(raw.get(g), dict) else {}
+        for p, (lo, hi, neutral) in GROUP_PARAMS[g].items():
+            kf[g][p] = max(lo, min(hi, _num(src.get(p, neutral), neutral)))
+    reach = (UPPER_ARM + FOREARM) * UNIT_TO_M + 0.05
+    sh = SHOULDER_OFFSET[0] * UNIT_TO_M
+    for hk in ("right_hand", "left_hand"):
+        h = kf[hk]
+        far = math.dist((h["out"], h["up"], h["forward"]), (sh, 0.0, 0.0))
+        near = math.dist((-h["out"], h["up"], h["forward"]), (sh, 0.0, 0.0))
+        if far > reach and near <= reach:
+            h["out"] = -h["out"]  # the planner used the opposite sign convention for this hand
+    # torso.lean is relative to the body; a planner that writes "plank" into both body.pitch and
+    # torso.lean would fold the athlete head-down. Cap the combined forward bend.
+    pitch = kf["body"]["pitch"]
+    if pitch > 40:
+        kf["torso"]["lean"] = min(kf["torso"]["lean"], max(0.0, 100.0 - pitch))
+    elif pitch < -40:
+        kf["torso"]["lean"] = max(kf["torso"]["lean"], min(0.0, -100.0 - pitch))
+    for k in ELBOW_KEYS:
+        v = str(raw.get(k, "down")).lower()
+        kf[k] = v if v in ELBOW_CHOICES else "down"
+    for k in FLAG_KEYS:
+        kf[k] = bool(raw.get(k, k != "hands_together"))
+    return kf
+
+
+def fix_mirrored_left_side(kfs: List[Dict[str, Any]]) -> None:
+    """Detect a plan that used signed X (left = negative) instead of the 'outward' rule and fix it.
+
+    If most keyframes put the LEFT foot/hand across the body exactly where a mirrored right one
+    would be, the planner meant "out to the left": flip the sign for the whole plan.
+    """
+    for part, thresh in (("foot", 0.05), ("hand", 0.1)):
+        votes = 0
+        usable = 0
+        for kf in kfs:
+            if part == "hand" and kf.get("hands_together"):
+                continue
+            usable += 1
+            lo, ro = kf[f"left_{part}"]["out"], kf[f"right_{part}"]["out"]
+            if lo < -thresh and ro > thresh:
+                votes += 1
+        if usable and votes / usable >= 0.6:
+            for kf in kfs:
+                kf[f"left_{part}"]["out"] = -kf[f"left_{part}"]["out"]
+
+
+def sanitize_plan(plan: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(plan, dict):
+        raise ValueError("Plan must be an object.")
+    raw = plan.get("keyframes")
+    if not isinstance(raw, list) or len(raw) < 2:
+        raise ValueError("Plan needs at least two keyframes.")
+    n = len(raw)
+    kfs = [sanitize_keyframe(k, i / max(1, n - 1)) for i, k in enumerate(raw)]
+    kfs.sort(key=lambda k: k["t"])
+    ts = np.array([k["t"] for k in kfs], dtype=float)
+    if ts[-1] - ts[0] < 1e-6:
+        ts = np.linspace(0, 1, n)
+    ts = (ts - ts[0]) / (ts[-1] - ts[0])
+    # Enforce a minimum spacing so splines stay well behaved.
+    for i in range(1, n):
+        ts[i] = max(ts[i], ts[i - 1] + 0.012)
+    ts = ts / ts[-1]
+    for k, t in zip(kfs, ts):
+        k["t"] = float(t)
+    fix_mirrored_left_side(kfs)
+    loop = bool(plan.get("loop", False))
+    duration = _num(plan.get("duration_seconds", 2.0), 2.0)
+    view = str(plan.get("camera_view", "three_quarter"))
+    if view not in ("front", "side", "three_quarter", "back"):
+        view = "three_quarter"
+    cues = plan.get("coaching_cues") if isinstance(plan.get("coaching_cues"), list) else []
+    return {
+        "title": str(plan.get("title", ""))[:80],
+        "movement_summary": str(plan.get("movement_summary", ""))[:800],
+        "coaching_cues": [str(c)[:160] for c in cues[:6]],
+        "loop": loop,
+        "duration_seconds": max(0.6, min(8.0, duration)),
+        "camera_view": view,
+        "keyframes": kfs,
+    }
+
+
+def mirror_text(text: str) -> str:
+    """Swap left/right wording (keeps capitalisation) for left-handed athletes."""
+    def swap(m: "re.Match[str]") -> str:
+        word = m.group(0)
+        out = {"left": "right", "right": "left"}[word.lower()]
+        if word.isupper():
+            return out.upper()
+        return out.capitalize() if word[0].isupper() else out
+    return re.sub(r"\b(left|right)\b", swap, text, flags=re.IGNORECASE)
+
+
+def mirror_plan(plan: Dict[str, Any]) -> Dict[str, Any]:
+    """Mirror a right-handed plan into a left-handed one (swap sides, negate lateral/axial values)."""
+    out = copy.deepcopy(plan)
+    out["dominant_side"] = "left" if plan.get("dominant_side", "right") == "right" else "right"
+    for kf in out["keyframes"]:
+        kf["right_hand"], kf["left_hand"] = kf["left_hand"], kf["right_hand"]
+        kf["right_elbow_points"], kf["left_elbow_points"] = kf["left_elbow_points"], kf["right_elbow_points"]
+        kf["right_foot"], kf["left_foot"] = kf["left_foot"], kf["right_foot"]
+        kf["left_foot_planted"], kf["right_foot_planted"] = kf["right_foot_planted"], kf["left_foot_planted"]
+        kf["body"]["turn"] *= -1
+        kf["body"]["roll"] *= -1
+        kf["pelvis"]["twist"] *= -1
+        kf["pelvis"]["side"] *= -1
+        kf["torso"]["twist"] *= -1
+        kf["torso"]["side_bend"] *= -1
+        kf["head"]["turn"] *= -1
+        kf["head"]["tilt"] *= -1
+    return out
+
+
+# -----------------------------------------------------------------------------
+# Rotation math (Unity conventions: Quaternion.Euler applies Z, then X, then Y)
 # -----------------------------------------------------------------------------
 
-VECTOR3_SCHEMA = {
-    "type": "array",
-    "items": {"type": "number"},
-    "minItems": 3,
-    "maxItems": 3,
-}
+def rx(deg: float) -> np.ndarray:
+    c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    return np.array([[1, 0, 0], [0, c, -s], [0, s, c]], dtype=float)
 
-WAYPOINT_PROPERTIES = {
+
+def ry(deg: float) -> np.ndarray:
+    c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]], dtype=float)
+
+
+def rz(deg: float) -> np.ndarray:
+    c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+    return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=float)
+
+
+def euler_to_matrix(x: float, y: float, z: float) -> np.ndarray:
+    return ry(y) @ rx(x) @ rz(z)
+
+
+def matrix_to_euler(m: np.ndarray) -> Tuple[float, float, float]:
+    """Inverse of euler_to_matrix (matches quaternionToEuler in the HTML)."""
+    x = math.asin(max(-1.0, min(1.0, -m[1, 2])))
+    if abs(math.cos(x)) > 1e-6:
+        y = math.atan2(m[0, 2], m[2, 2])
+        z = math.atan2(m[1, 0], m[1, 1])
+    else:
+        y = math.atan2(-m[2, 0], m[0, 0])
+        z = 0.0
+    return math.degrees(x), math.degrees(y), math.degrees(z)
+
+
+def axis_angle(axis: np.ndarray, deg: float) -> np.ndarray:
+    a = np.asarray(axis, dtype=float)
+    n = np.linalg.norm(a)
+    if n < 1e-9 or abs(deg) < 1e-9:
+        return np.eye(3)
+    a = a / n
+    th = math.radians(deg)
+    k = np.array([[0, -a[2], a[1]], [a[2], 0, -a[0]], [-a[1], a[0], 0]], dtype=float)
+    return np.eye(3) + math.sin(th) * k + (1 - math.cos(th)) * (k @ k)
+
+
+def orthonormalize(m: np.ndarray) -> np.ndarray:
+    u, _, vt = np.linalg.svd(m)
+    r = u @ vt
+    if np.linalg.det(r) < 0:
+        u[:, -1] *= -1
+        r = u @ vt
+    return r
+
+
+DOWN = np.array([0.0, -1.0, 0.0])
+
+
+def limb_local_rotation(raise_deg: float, direction_deg: float, twist_deg: float, side_sign: float) -> np.ndarray:
+    """Swing a limb hanging straight down by `raise` within the vertical plane `direction`.
+
+    direction 0 = forward, 90 = out to the limb's own side, 180 = backward, negative = across the body.
+    side_sign is +1 for right limbs (+X), -1 for left limbs.
+    """
+    d = math.radians(direction_deg)
+    horizontal = np.array([side_sign * math.sin(d), 0.0, math.cos(d)])
+    axis = np.cross(DOWN, horizontal)
+    swing = axis_angle(axis, raise_deg)
+    return swing @ ry(side_sign * twist_deg)
+
+
+# -----------------------------------------------------------------------------
+# Pose -> local joint rotations -> forward kinematics
+# -----------------------------------------------------------------------------
+
+def pose_local_rotations(kf: Dict[str, Any]) -> Dict[str, np.ndarray]:
+    b, pv, to, hd = kf["body"], kf["pelvis"], kf["torso"], kf["head"]
+    rot: Dict[str, np.ndarray] = {
+        "body": euler_to_matrix(b["pitch"], b["turn"], -b["roll"]),
+        "hip": euler_to_matrix(pv["tilt"], pv["twist"], -pv["side"]),
+        # Torso twist is the shoulder-line rotation relative to the body's facing (the rig parents
+        # spine and pelvis both to the body, so hips and shoulders rotate independently).
+        "spine": euler_to_matrix(to["lean"], to["twist"], -to["side_bend"]),
+        "neck": euler_to_matrix(hd["nod"], hd["turn"], -hd["tilt"]),
+    }
+    for side, sign in (("right", 1.0), ("left", -1.0)):
+        # Arms start hanging; they are solved by IK onto the hand targets in compile_motion.
+        rot[f"{side}shoulder"] = limb_local_rotation(5.0, 90.0, 0.0, sign)
+        rot[f"{side}elbow"] = rx(-10.0)
+        # Legs start straight; they are solved by IK onto the foot targets in compile_motion.
+        rot[f"{side}hip"] = np.eye(3)
+        rot[f"{side}knee"] = rx(5.0)
+    return rot
+
+
+def world_rotations(local: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    w: Dict[str, np.ndarray] = {"body": local["body"]}
+    w["hip"] = w["body"] @ local["hip"]
+    w["spine"] = w["body"] @ local["spine"]
+    w["neck"] = w["spine"] @ local["neck"]
+    for s in ("left", "right"):
+        w[s + "hip"] = w["hip"] @ local[s + "hip"]
+        w[s + "knee"] = w[s + "hip"] @ local[s + "knee"]
+        w[s + "shoulder"] = w["spine"] @ local[s + "shoulder"]
+        w[s + "elbow"] = w[s + "shoulder"] @ local[s + "elbow"]
+    return w
+
+
+def forward_kinematics(world: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    p: Dict[str, np.ndarray] = {"pelvis": np.zeros(3)}
+    p["neck"] = world["spine"] @ np.array(NECK_OFFSET)
+    p["head"] = p["neck"] + world["neck"] @ np.array([0.0, 8.0, 0.0])
+    p["chest"] = world["spine"] @ np.array([0.0, 15.0, 0.0])
+    for s, sign in (("right", 1.0), ("left", -1.0)):
+        sh = world["spine"] @ np.array([sign * SHOULDER_OFFSET[0], SHOULDER_OFFSET[1], 0.0])
+        el = sh + world[s + "shoulder"] @ np.array([0.0, -UPPER_ARM, 0.0])
+        ha = el + world[s + "elbow"] @ np.array([0.0, -FOREARM, 0.0])
+        hp = world["hip"] @ np.array([sign * HIP_OFFSET[0], HIP_OFFSET[1], 0.0])
+        kn = hp + world[s + "hip"] @ np.array([0.0, -THIGH, 0.0])
+        an = kn + world[s + "knee"] @ np.array([0.0, -SHIN, 0.0])
+        p.update({s + "_shoulder": sh, s + "_elbow": el, s + "_hand": ha,
+                  s + "_hip": hp, s + "_knee": kn, s + "_foot": an})
+    return p
+
+
+# -----------------------------------------------------------------------------
+# Two-bone IK in world space
+# -----------------------------------------------------------------------------
+
+def two_bone_ik(root: np.ndarray, target: np.ndarray, pole: np.ndarray, l1: float, l2: float,
+                parent_world: np.ndarray, chain: str, memory: Optional[Dict[str, np.ndarray]] = None,
+                key: str = "") -> Tuple[np.ndarray, np.ndarray, float]:
+    """Return (upper_local, lower_local, residual) so the chain end reaches target.
+
+    `pole` is the world direction the middle joint (knee/elbow) should point towards.
+    Knees bend with +X (cap points local +Z); elbows bend with -X (point local -Z).
+    """
+    v = target - root
+    dist = float(np.linalg.norm(v))
+    dist_c = max(abs(l1 - l2) + 0.5, min(l1 + l2 - 0.05, dist))
+    if dist < 1e-6:
+        v = DOWN.copy()
+        dist = 1.0
+    vdir = v / max(dist, 1e-9)
+    cos_mid = (l1 * l1 + l2 * l2 - dist_c * dist_c) / (2 * l1 * l2)
+    bend = 180.0 - math.degrees(math.acos(max(-1.0, min(1.0, cos_mid))))
+    cos_a = (l1 * l1 + dist_c * dist_c - l2 * l2) / (2 * l1 * dist_c)
+    alpha = math.acos(max(-1.0, min(1.0, cos_a)))
+    pole_len = float(np.linalg.norm(pole))
+    pole = pole / max(1e-9, pole_len) * min(1.0, pole_len)
+    pole_perp = pole - np.dot(pole, vdir) * vdir
+    strength = float(np.linalg.norm(pole_perp))
+    prev = memory.get(key) if memory is not None else None
+    if prev is not None:
+        prev_perp = prev - np.dot(prev, vdir) * vdir
+        if np.linalg.norm(prev_perp) > 1e-6:
+            prev_perp /= np.linalg.norm(prev_perp)
+            # When the hint is nearly parallel to the limb it carries no information: keep the
+            # previous bend plane instead (prevents the limb from flipping/rolling between frames).
+            w = min(1.0, strength / 0.45)
+            pole_perp = (pole_perp / max(strength, 1e-9)) * w + prev_perp * (1.0 - w) if strength > 1e-9 else prev_perp
+    if np.linalg.norm(pole_perp) < 1e-6:
+        alt = np.array([0.0, 0.0, 1.0]) if abs(vdir[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
+        pole_perp = alt - np.dot(alt, vdir) * vdir
+    pole_perp /= np.linalg.norm(pole_perp)
+    if memory is not None:
+        memory[key] = pole_perp.copy()
+    mid_dir = math.cos(alpha) * vdir + math.sin(alpha) * pole_perp  # root -> middle joint
+    y_axis = -mid_dir
+    hinge_out = pole_perp - np.dot(pole_perp, y_axis) * y_axis
+    hinge_out /= max(1e-9, np.linalg.norm(hinge_out))
+    z_axis = hinge_out if chain == "leg" else -hinge_out
+    x_axis = np.cross(y_axis, z_axis)
+    upper_world = np.column_stack([x_axis, y_axis, z_axis])
+    lower_local = rx(bend) if chain == "leg" else rx(-bend)
+    upper_local = parent_world.T @ upper_world
+    mid = root + mid_dir * l1
+    end = mid + (upper_world @ lower_local) @ np.array([0.0, -l2, 0.0])
+    return upper_local, lower_local, float(np.linalg.norm(end - target))
+
+
+# -----------------------------------------------------------------------------
+# Spline interpolation of keyframes (monotone cubic: smooth, no overshoot)
+# -----------------------------------------------------------------------------
+
+def pchip_slopes(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    n = len(x)
+    h = np.diff(x)
+    delta = np.diff(y) / h
+    m = np.zeros(n)
+    if n == 2:
+        m[:] = delta[0]
+        return m
+    for i in range(1, n - 1):
+        if delta[i - 1] * delta[i] <= 0:
+            m[i] = 0.0
+        else:
+            w1 = 2 * h[i] + h[i - 1]
+            w2 = h[i] + 2 * h[i - 1]
+            m[i] = (w1 + w2) / (w1 / delta[i - 1] + w2 / delta[i])
+    # End slopes: one-sided three-point, limited.
+    def end(h0, h1, d0, d1):
+        s = ((2 * h0 + h1) * d0 - h0 * d1) / (h0 + h1)
+        if np.sign(s) != np.sign(d0):
+            return 0.0
+        if np.sign(d0) != np.sign(d1) and abs(s) > abs(3 * d0):
+            return 3 * d0
+        return s
+    m[0] = end(h[0], h[1], delta[0], delta[1])
+    m[-1] = end(h[-1], h[-2], delta[-1], delta[-2])
+    return m
+
+
+def hermite(x: np.ndarray, y: np.ndarray, m: np.ndarray, t: np.ndarray) -> np.ndarray:
+    idx = np.clip(np.searchsorted(x, t, side="right") - 1, 0, len(x) - 2)
+    x0, x1 = x[idx], x[idx + 1]
+    h = x1 - x0
+    u = np.clip((t - x0) / h, 0.0, 1.0)
+    h00 = 2 * u**3 - 3 * u**2 + 1
+    h10 = u**3 - 2 * u**2 + u
+    h01 = -2 * u**3 + 3 * u**2
+    h11 = u**3 - u**2
+    return h00 * y[idx] + h10 * h * m[idx] + h01 * y[idx + 1] + h11 * h * m[idx + 1]
+
+
+def interpolate_channel(ts: np.ndarray, vals: np.ndarray, samples: np.ndarray, loop: bool) -> np.ndarray:
+    if loop:
+        # Pad one key on each side from the neighbouring cycles for periodic tangents.
+        x = np.concatenate([[ts[-2] - 1.0], ts, [1.0 + ts[1]]])
+        y = np.concatenate([[vals[-2]], vals, [vals[1]]])
+    else:
+        x, y = ts, vals
+    m = pchip_slopes(x, y)
+    return hermite(x, y, m, samples)
+
+
+# -----------------------------------------------------------------------------
+# Compiler
+# -----------------------------------------------------------------------------
+
+def _elbow_pole(world: Dict[str, np.ndarray], side: str) -> np.ndarray:
+    return -world[side + "shoulder"][:, 2]
+
+
+def _segment_box_penetration(a: np.ndarray, b: np.ndarray, frame_rot: np.ndarray, centre: np.ndarray,
+                             half: Sequence[float], radius: float) -> Tuple[float, np.ndarray]:
+    """Max penetration depth of segment a-b (with radius) into an oriented box, plus push dir (world)."""
+    best, push = 0.0, np.zeros(3)
+    hx, hy, hz = half
+    for u in np.linspace(0.0, 1.0, 7):
+        p = a + (b - a) * u
+        q = frame_rot.T @ (p - centre)
+        gaps = np.array([hx + radius - abs(q[0]), hy + radius - abs(q[1]), hz + radius - abs(q[2])])
+        if np.all(gaps > 0):
+            depth = float(np.min(gaps))
+            if depth > best:
+                axis = int(np.argmin(gaps))
+                local = np.zeros(3)
+                local[axis] = math.copysign(1.0, q[axis] if abs(q[axis]) > 1e-6 else 1.0)
+                best, push = depth, frame_rot @ local
+    return best, push
+
+
+def _resolve_arm_collisions(kf: Dict[str, Any], local: Dict[str, np.ndarray], world: Dict[str, np.ndarray],
+                            pos: Dict[str, np.ndarray], side: str) -> int:
+    """Push an arm out of the torso by re-solving IK on a hand target moved out of the body."""
+    torso_centre = world["spine"] @ np.array([0.0, TORSO_HALF[1], 0.0])
+    fixes = 0
+    for _ in range(4):
+        d1, p1 = _segment_box_penetration(pos[side + "_shoulder"] + (pos[side + "_elbow"] - pos[side + "_shoulder"]) * 0.35,
+                                          pos[side + "_elbow"], world["spine"], torso_centre, TORSO_HALF, LIMB_RADIUS * 0.8)
+        d2, p2 = _segment_box_penetration(pos[side + "_elbow"], pos[side + "_hand"], world["spine"], torso_centre,
+                                          TORSO_HALF, LIMB_RADIUS * 0.8)
+        depth, push = (d1, p1) if d1 >= d2 else (d2, p2)
+        if depth < 0.05:
+            break
+        # Prefer pushing forwards (in front of the chest) unless the limb is clearly behind.
+        fwd = world["spine"][:, 2]
+        if np.dot(push, fwd) < -0.5:
+            direction = push
+        elif abs(np.dot(push, world["spine"][:, 0])) > 0.7:
+            direction = push
+        else:
+            direction = fwd
+        target = pos[side + "_hand"] + direction * depth
+        root = pos[side + "_shoulder"]
+        upper, lower, _ = two_bone_ik(root, target, _elbow_pole(world, side), UPPER_ARM, FOREARM, world["spine"], "arm")
+        local[side + "shoulder"], local[side + "elbow"] = upper, lower
+        world.update(world_rotations(local))
+        pos.update(forward_kinematics(world))
+        fixes += 1
+    return fixes
+
+
+def keep_hand_outside_torso(p: np.ndarray, own_side: float = 0.0) -> np.ndarray:
+    """Continuously push a chest-frame hand target (metres, x = athlete right) out of the torso.
+
+    The hand leaves through the nearest of three exits - in front of the body, behind it, or past
+    its own side (how real hands swing past the hips). Exits are blended with a soft-min, so a hand
+    travelling through the torso region slides around it instead of teleporting.
+    """
+    side, up, fwd = float(p[0]), float(p[1]), float(p[2])
+    half_w = TORSO_HALF[0] * UNIT_TO_M + 0.07
+    top = (2 * TORSO_HALF[1] - SHOULDER_OFFSET[1]) * UNIT_TO_M + 0.05
+    bottom = -SHOULDER_OFFSET[1] * UNIT_TO_M - 0.12          # includes the pelvis
+    face = TORSO_HALF[2] * UNIT_TO_M + 0.08
+
+    def ramp(x: float, edge: float, soft: float = 0.06) -> float:
+        return max(0.0, min(1.0, (edge - x) / soft))
+
+    w = ramp(abs(side), half_w) * ramp(up, top) * ramp(-up, -bottom) * ramp(abs(fwd), face, 0.04)
+    if w <= 0.0:
+        return p
+    sgn = own_side if own_side else (1.0 if side >= 0 else -1.0)
+    candidates = [
+        (np.array([side, up, face]), face - fwd),                     # front
+        (np.array([side, up, -face]), face + fwd + 0.15),             # back (strongly disfavoured)
+        (np.array([sgn * half_w, up, fwd]), half_w - sgn * side),     # past its own side
+    ]
+    tau = 0.035
+    weights = np.array([math.exp(-max(0.0, d) / tau) for _, d in candidates])
+    target = sum(wt * c for wt, (c, _) in zip(weights, candidates)) / weights.sum()
+    return p + (target - p) * w
+
+
+def elbow_pole_vector(choice: str, sign: float) -> np.ndarray:
+    """Direction (chest frame) the elbow should point for each hint."""
+    table = {
+        "down": (0.35, -1.0, -0.25),
+        "out": (1.0, -0.25, -0.1),
+        "back": (0.3, -0.35, -1.0),
+        "up": (0.45, 1.0, -0.1),
+        "forward": (0.1, -0.35, 1.0),
+    }
+    x, y, z = table.get(choice, table["down"])
+    v = np.array([sign * x, y, z], dtype=float)
+    return v / np.linalg.norm(v)
+
+
+def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = None, fps: int = DEFAULT_FPS,
+                   return_to_start: bool = True) -> Tuple[List[Dict[str, float]], Dict[str, Any]]:
+    kfs = plan["keyframes"]
+    loop = bool(plan.get("loop", False))
+    duration = float(duration_seconds or plan.get("duration_seconds", 2.0))
+    ts = np.array([k["t"] for k in kfs], dtype=float)
+
+    if loop:
+        # Close the cycle: the final key must equal the first.
+        last = copy.deepcopy(kfs[0])
+        last["t"] = 1.0
+        if ts[-1] >= 0.999:
+            kfs = kfs[:-1] + [last]
+        else:
+            kfs = kfs + [last]
+        ts = np.array([k["t"] for k in kfs], dtype=float)
+        if len(kfs) < 3:
+            mid = copy.deepcopy(kfs[0]); mid["t"] = 0.5
+            kfs = [kfs[0], mid, kfs[-1]]
+            ts = np.array([0.0, 0.5, 1.0])
+
+    n_frames = max(2, min(MAX_FRAMES, int(round(duration * fps))))
+    if loop:
+        samples = np.arange(n_frames) / n_frames  # exclude t=1 (same as t=0)
+    else:
+        samples = np.linspace(0.0, 1.0, n_frames)
+
+    # Continuous params via monotone splines.
+    channels: Dict[Tuple[str, str], np.ndarray] = {}
+    for g, p in PARAM_PATHS:
+        vals = np.array([k[g][p] for k in kfs], dtype=float)
+        channels[(g, p)] = interpolate_channel(ts, vals, samples, loop)
+
+    # Discrete flags: take the value of the segment we are in, but treat a flag as true only if
+    # both bounding keys agree (feet lift off/land exactly at keys).
+    def flag_at(name: str, t: float) -> Tuple[bool, float]:
+        i = int(np.clip(np.searchsorted(ts, t, side="right") - 1, 0, len(ts) - 2))
+        a, b = kfs[i][name], kfs[i + 1][name]
+        u = (t - ts[i]) / max(1e-9, ts[i + 1] - ts[i])
+        if a and b:
+            return True, 1.0
+        if a and not b:
+            return u < 0.5, max(0.0, 1.0 - u * 2.0)
+        if b and not a:
+            return u > 0.5, max(0.0, u * 2.0 - 1.0)
+        return False, 0.0
+
+    # Elbow direction hints become pole vectors (chest frame) that blend smoothly between keys.
+    pole_channels: Dict[str, np.ndarray] = {}
+    for s, sign in (("right", 1.0), ("left", -1.0)):
+        vecs = np.array([elbow_pole_vector(k[f"{s}_elbow_points"], sign) for k in kfs])
+        pole_channels[s] = np.stack([interpolate_channel(ts, vecs[:, a], samples, loop) for a in range(3)], axis=1)
+
+    poses: List[Dict[str, Any]] = []
+    for si, t in enumerate(samples):
+        kf = {"t": float(t)}
+        for g in GROUP_ORDER:
+            kf[g] = {p: float(channels[(g, p)][si]) for p in GROUP_PARAMS[g]}
+        for s in ("left", "right"):
+            # Not normalised: a short blended vector (between opposite hints) means "weak hint".
+            kf[f"{s}_elbow_pole"] = pole_channels[s][si]
+            kf[f"{s}_foot"]["lift"] = max(0.0, kf[f"{s}_foot"]["lift"])
+        kf["flags"] = {name: flag_at(name, float(t)) for name in FLAG_KEYS}
+        poses.append(kf)
+
+    # Foot locking: while a foot is planted it stays where it was at touchdown (world space; the
+    # pelvis is the fixed origin because the rig cannot translate).
+    locks: Dict[str, Optional[np.ndarray]] = {"left": None, "right": None}
+    if loop:
+        # Seed locks from the end of the cycle so the loop seam does not pop.
+        pass
+    frames: List[Dict[str, float]] = []
+    stats = {"foot_lock_frames": 0, "grip_frames": 0, "collision_fixes": 0, "ik_residual_max": 0.0}
+    track: List[Dict[str, np.ndarray]] = []
+    rot_track: List[Dict[str, np.ndarray]] = []
+    body_track: List[Dict[str, float]] = []
+    ik_memory: Dict[str, np.ndarray] = {}
+    root_y: List[float] = []
+    dominant = "left" if plan.get("dominant_side") == "left" else "right"
+    off = "right" if dominant == "left" else "left"
+    for kf in poses:
+        local = pose_local_rotations(kf)
+        world = world_rotations(local)
+        pos = forward_kinematics(world)
+        for side in ("left", "right"):
+            hand = kf[f"{side}_hand"]
+            sgn = 1.0 if side == "right" else -1.0
+            chest_point = keep_hand_outside_torso(np.array([sgn * hand["out"], hand["up"], hand["forward"]]), sgn) / UNIT_TO_M
+            target = world["spine"] @ (chest_point + np.array([0.0, SHOULDER_OFFSET[1], 0.0]))
+            upper, lower, _ = two_bone_ik(pos[side + "_shoulder"], target, world["spine"] @ kf[f"{side}_elbow_pole"],
+                                          UPPER_ARM, FOREARM, world["spine"], "arm", ik_memory, side + "_arm")
+            local[side + "shoulder"], local[side + "elbow"] = upper, lower
+        world = world_rotations(local)
+        pos = forward_kinematics(world)
+
+        # Feet: targets come from the planner (body frame). The floor sits below the pelvis by the
+        # standing leg length minus the hip drop, so lowering the hips bends the knees naturally.
+        # While a foot is planted its horizontal position is locked at touchdown (no skating, and
+        # the hips can twist over planted feet).
+        ankle_standing = HIP_OFFSET[1] - THIGH - SHIN  # ankle height below the pelvis when standing
+        # Negative height lowers the hips (bends the legs; scaled to this rig's shorter legs).
+        # Positive height means the whole body is airborne: legs stay as they are, the root rises.
+        hip_drop = min(0.0, kf["pelvis"]["height"]) * HIP_DROP_SCALE / UNIT_TO_M
+        for side, sign in (("left", -1.0), ("right", 1.0)):
+            foot = kf[f"{side}_foot"]
+            local_target = np.array([sign * foot["out"] / UNIT_TO_M,
+                                     ankle_standing - hip_drop + foot["lift"] / UNIT_TO_M,
+                                     foot["forward"] / UNIT_TO_M])
+            target = world["body"] @ local_target
+            planted, weight = kf["flags"][f"{side}_foot_planted"]
+            if planted and locks[side] is None:
+                locks[side] = target.copy()
+            if not planted:
+                locks[side] = None
+            if locks[side] is not None and weight > 0.0:
+                anchor = locks[side].copy()
+                anchor[1] = target[1]
+                target = target + (anchor - target) * weight
+                stats["foot_lock_frames"] += 1
+            toe = math.radians(sign * foot["toe_out"])
+            knee_dir = world["body"] @ np.array([math.sin(toe) + sign * 0.15, -0.15, math.cos(toe)])
+            upper, lower, res = two_bone_ik(pos[side + "_hip"], target, knee_dir,
+                                            THIGH, SHIN, world["hip"], "leg", ik_memory, side + "_leg")
+            local[side + "hip"], local[side + "knee"] = upper, lower
+            stats["ik_residual_max"] = max(stats["ik_residual_max"], res * UNIT_TO_M)
+        world = world_rotations(local)
+        pos = forward_kinematics(world)
+
+        together, w_grip = kf["flags"]["hands_together"]
+        if w_grip > 0.0:
+            # The dominant hand leads; the other hand grips just next to it on the same handle.
+            lead = pos[f"{dominant}_hand"]
+            to_shoulder = pos[f"{off}_shoulder"] - lead
+            n = np.linalg.norm(to_shoulder)
+            grip = lead + (to_shoulder / n) * min(4.0, n * 0.5) if n > 1e-6 else lead
+            free = pos[f"{off}_hand"]
+            target = free + (grip - free) * w_grip
+            upper, lower, _ = two_bone_ik(pos[f"{off}_shoulder"], target, _elbow_pole(world, off),
+                                          UPPER_ARM, FOREARM, world["spine"], "arm", ik_memory, off + "_grip")
+            local[off + "shoulder"], local[off + "elbow"] = upper, lower
+            world = world_rotations(local)
+            pos = forward_kinematics(world)
+            stats["grip_frames"] += 1
+
+        for side in ("left", "right"):
+            if side == off and w_grip > 0.5:
+                continue
+            stats["collision_fixes"] += _resolve_arm_collisions(kf, local, world, pos, side)
+
+        track.append({k: v.copy() for k, v in pos.items()})
+        root_y.append(kf["pelvis"]["height"])
+        rot_track.append({k: orthonormalize(v) for k, v in local.items()})
+        body_track.append(dict(kf["body"]))
+
+    frames = frames_from_rotations(smooth_rotations(rot_track, loop), body_track)
+
+    # Vertical root translation in metres (hip drop / jump height). Unity ignores it today; it is
+    # here so a future WebBridge can move the pelvis for squats and jumps.
+    for fr, ry_m in zip(frames, root_y):
+        fr["rooty"] = round(float(ry_m), 4)
+
+    if not loop and return_to_start and len(frames) > 4:
+        frames = append_return(frames, fps)
+
+    report = verify(plan, frames, track, fps, stats, loop)
+    return frames, report
+
+
+JOINT_NAMES = ["hip", "spine", "neck", "lefthip", "righthip", "leftknee", "rightknee",
+               "leftshoulder", "rightshoulder", "leftelbow", "rightelbow"]
+
+
+def smooth_rotations(rot_track: List[Dict[str, np.ndarray]], loop: bool) -> List[Dict[str, np.ndarray]]:
+    """Light temporal smoothing done on rotation matrices (no Euler wrap/gimbal artefacts)."""
+    n = len(rot_track)
+    if n < 5:
+        return rot_track
+    out = []
+    for i in range(n):
+        if loop:
+            ia, ib = (i - 1) % n, (i + 1) % n
+        else:
+            ia, ib = max(0, i - 1), min(n - 1, i + 1)
+        frame = {}
+        for j in rot_track[i]:
+            m = 0.2 * rot_track[ia][j] + 0.6 * rot_track[i][j] + 0.2 * rot_track[ib][j]
+            frame[j] = orthonormalize(m)
+        out.append(frame)
+    return out
+
+
+def _closest_euler(m: np.ndarray, prev: Optional[Tuple[float, float, float]]) -> Tuple[float, float, float]:
+    """Pick the Euler triple (of the two equivalent ZXY solutions) closest to the previous frame."""
+    x, y, z = matrix_to_euler(m)
+    if prev is None:
+        return x, y, z
+    alt = (180.0 - x, y + 180.0, z + 180.0)
+    def wrap(v: float, ref: float) -> float:
+        return ref + ((v - ref + 180.0) % 360.0 - 180.0)
+    c1 = tuple(wrap(v, r) for v, r in zip((x, y, z), prev))
+    c2 = tuple(wrap(v, r) for v, r in zip(alt, prev))
+    d1 = sum(abs(v - r) for v, r in zip(c1, prev))
+    d2 = sum(abs(v - r) for v, r in zip(c2, prev))
+    return c1 if d1 <= d2 else c2
+
+
+def frames_from_rotations(rot_track: List[Dict[str, np.ndarray]], body_track: List[Dict[str, float]]) -> List[Dict[str, float]]:
+    frames: List[Dict[str, float]] = []
+    prev: Dict[str, Tuple[float, float, float]] = {}
+    for rots, body in zip(rot_track, body_track):
+        f: Dict[str, float] = {}
+        for j in JOINT_NAMES:
+            e = _closest_euler(rots[j], prev.get(j))
+            prev[j] = e
+            f[j + "x"], f[j + "y"], f[j + "z"] = (round(v, 2) for v in e)
+        # Body rotation is sent raw so multi-turn spins stay continuous.
+        f["positionx"], f["positiony"], f["positionz"] = (round(body["pitch"], 2), round(body["turn"], 2),
+                                                          round(-body["roll"], 2))
+        frames.append(f)
+    return frames
+
+
+def frame_rotation(frame: Dict[str, float], joint: str) -> np.ndarray:
+    return euler_to_matrix(frame.get(joint + "x", 0.0), frame.get(joint + "y", 0.0), frame.get(joint + "z", 0.0))
+
+
+def rotation_angle_between(a: np.ndarray, b: np.ndarray) -> float:
+    c = (np.trace(a.T @ b) - 1.0) / 2.0
+    return math.degrees(math.acos(max(-1.0, min(1.0, c))))
+
+
+def matrix_to_quat(m: np.ndarray) -> np.ndarray:
+    w = math.sqrt(max(0.0, 1.0 + m[0, 0] + m[1, 1] + m[2, 2])) / 2.0
+    x = math.copysign(math.sqrt(max(0.0, 1.0 + m[0, 0] - m[1, 1] - m[2, 2])) / 2.0, m[2, 1] - m[1, 2])
+    y = math.copysign(math.sqrt(max(0.0, 1.0 - m[0, 0] + m[1, 1] - m[2, 2])) / 2.0, m[0, 2] - m[2, 0])
+    z = math.copysign(math.sqrt(max(0.0, 1.0 - m[0, 0] - m[1, 1] + m[2, 2])) / 2.0, m[1, 0] - m[0, 1])
+    q = np.array([w, x, y, z])
+    return q / np.linalg.norm(q)
+
+
+def quat_to_matrix(q: np.ndarray) -> np.ndarray:
+    w, x, y, z = q
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ])
+
+
+def slerp(qa: np.ndarray, qb: np.ndarray, u: float) -> np.ndarray:
+    d = float(np.dot(qa, qb))
+    if d < 0:
+        qb, d = -qb, -d
+    if d > 0.9995:
+        q = qa + (qb - qa) * u
+        return q / np.linalg.norm(q)
+    th = math.acos(d)
+    return (math.sin((1 - u) * th) * qa + math.sin(u * th) * qb) / math.sin(th)
+
+
+def append_return(frames: List[Dict[str, float]], fps: int) -> List[Dict[str, float]]:
+    """For one-shot actions: hold the finish, then ease back to the start pose so playback loops cleanly."""
+    hold = max(2, int(round(0.3 * fps)))
+    back = max(5, int(round(0.6 * fps)))
+    last, first = frames[-1], frames[0]
+    out = frames + [dict(last) for _ in range(hold)]
+    qa = {j: matrix_to_quat(frame_rotation(last, j)) for j in JOINT_NAMES}
+    qb = {j: matrix_to_quat(frame_rotation(first, j)) for j in JOINT_NAMES}
+    prev = {j: (last[j + "x"], last[j + "y"], last[j + "z"]) for j in JOINT_NAMES}
+    for i in range(1, back):
+        u = i / back
+        e = u * u * (3 - 2 * u)
+        f: Dict[str, float] = {}
+        for j in JOINT_NAMES:
+            ex = _closest_euler(quat_to_matrix(slerp(qa[j], qb[j], e)), prev[j])
+            prev[j] = ex
+            f[j + "x"], f[j + "y"], f[j + "z"] = (round(v, 2) for v in ex)
+        for k in POSITION_KEYS + ["rooty"]:
+            a, b = float(last.get(k, 0.0)), float(first.get(k, 0.0))
+            f[k] = round(a + (b - a) * e, 4)
+        f["_return"] = 1
+        out.append(f)
+    return out
+
+
+def sparse(frames: List[Dict[str, float]]) -> List[Dict[str, float]]:
+    out = []
+    for f in frames:
+        s = {}
+        for k, v in f.items():
+            if k.startswith("_"):
+                continue
+            if abs(v) >= SPARSE_EPS_DEG or k == "rooty" and abs(v) >= 0.001:
+                s[k] = v
+        out.append(s)
+    return out
+
+
+# -----------------------------------------------------------------------------
+# Verification (objective, cheap checks)
+# -----------------------------------------------------------------------------
+
+def verify(plan: Dict[str, Any], frames: List[Dict[str, float]], track: List[Dict[str, np.ndarray]], fps: int,
+           stats: Dict[str, Any], loop: bool) -> Dict[str, Any]:
+    issues: List[str] = []
+    n = len(track)
+    # Motion amount
+    end_effectors = ["left_hand", "right_hand", "left_foot", "right_foot", "head"]
+    travel = {k: float(sum(np.linalg.norm(track[i][k] - track[i - 1][k]) for i in range(1, n))) * UNIT_TO_M
+              for k in end_effectors}
+    if sum(travel.values()) < 0.25:
+        issues.append("Very little visible motion.")
+    # Peak joint speed (deg/frame) after compile
+    max_delta = 0.0
+    for i in range(1, len(frames)):
+        for j in JOINT_NAMES:
+            d = rotation_angle_between(frame_rotation(frames[i - 1], j), frame_rotation(frames[i], j))
+            max_delta = max(max_delta, d)
+    # Visible pops: an elbow/hand/knee/foot jumping much further in one frame than its neighbours.
+    pop = 0.0
+    for i in range(2, n - 1):
+        for k in ("left_hand", "right_hand", "left_elbow", "right_elbow", "left_foot", "right_foot", "left_knee", "right_knee"):
+            d_before = np.linalg.norm(track[i - 1][k] - track[i - 2][k])
+            d_prev = np.linalg.norm(track[i][k] - track[i - 1][k])
+            d_next = np.linalg.norm(track[i + 1][k] - track[i][k])
+            # A teleport: one step much bigger than the steps on BOTH sides.
+            spike = d_prev - 3.0 * max(d_before, d_next, 1.0)
+            pop = max(pop, spike * UNIT_TO_M)
+    if pop > 0.05:
+        issues.append(f"Possible visual pop: a joint jumps {pop:.2f} m in one frame.")
+    # Leg/leg interpenetration (crossing legs through each other)
+    leg_clash = 0
+    for p in track:
+        for a, b in (("left_knee", "right_knee"), ("left_foot", "right_foot")):
+            if np.linalg.norm(p[a] - p[b]) < LIMB_RADIUS * 1.6:
+                leg_clash += 1
+    if leg_clash:
+        issues.append(f"Legs touch/overlap in {leg_clash} samples.")
+    return {
+        "passed": not issues,
+        "issues": issues,
+        "frame_count": len(frames),
+        "fps": fps,
+        "loop": loop,
+        "end_effector_travel_m": {k: round(v, 3) for k, v in travel.items()},
+        "max_joint_delta_deg_per_frame": round(max_delta, 2),
+        "max_pop_m": round(pop, 3),
+        **{k: (round(v, 3) if isinstance(v, float) else v) for k, v in stats.items()},
+    }
+
+
+# -----------------------------------------------------------------------------
+# Language model: schema + prompt
+# -----------------------------------------------------------------------------
+
+def _obj(props: Dict[str, Any]) -> Dict[str, Any]:
+    return {"type": "object", "properties": props, "required": list(props.keys()), "additionalProperties": False}
+
+
+NUM = {"type": "number"}
+KEYFRAME_SCHEMA = _obj({
+    "t": NUM,
     "phase": {"type": "string"},
-    "t": {"type": "number"},
-    "pelvis_offset_m": VECTOR3_SCHEMA,
-    "hip_euler_deg": VECTOR3_SCHEMA,
-    "spine_euler_deg": VECTOR3_SCHEMA,
-    "neck_euler_deg": VECTOR3_SCHEMA,
-    "left_hand_m": VECTOR3_SCHEMA,
-    "right_hand_m": VECTOR3_SCHEMA,
-    "left_foot_m": VECTOR3_SCHEMA,
-    "right_foot_m": VECTOR3_SCHEMA,
-    "left_elbow_bend_deg": {"type": "number"},
-    "right_elbow_bend_deg": {"type": "number"},
-    "left_knee_bend_deg": {"type": "number"},
-    "right_knee_bend_deg": {"type": "number"},
+    **{g: _obj({p: NUM for p in GROUP_PARAMS[g]}) for g in GROUP_ORDER},
     "left_foot_planted": {"type": "boolean"},
     "right_foot_planted": {"type": "boolean"},
-}
-
-WAYPOINT_REQUIRED = list(WAYPOINT_PROPERTIES.keys())
-WAYPOINT_SCHEMA = {
-    "type": "object",
-    "properties": WAYPOINT_PROPERTIES,
-    "required": WAYPOINT_REQUIRED,
-    "additionalProperties": False,
-}
-
-PLAN_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "movement_summary": {"type": "string"},
-        "waypoints": {
-            "type": "array",
-            "items": WAYPOINT_SCHEMA,
-            "minItems": 7,
-            "maxItems": 7,
-        },
-    },
-    "required": ["movement_summary", "waypoints"],
-    "additionalProperties": False,
-}
+    "hands_together": {"type": "boolean"},
+    "right_elbow_points": {"type": "string", "enum": ELBOW_CHOICES},
+    "left_elbow_points": {"type": "string", "enum": ELBOW_CHOICES},
+})
+PLAN_SCHEMA = _obj({
+    "title": {"type": "string"},
+    "movement_summary": {"type": "string"},
+    "biomechanics_breakdown": {"type": "string"},
+    "coaching_cues": {"type": "array", "items": {"type": "string"}},
+    "loop": {"type": "boolean"},
+    "duration_seconds": NUM,
+    "camera_view": {"type": "string", "enum": ["front", "side", "three_quarter", "back"]},
+    "keyframes": {"type": "array", "items": KEYFRAME_SCHEMA},
+})
 
 PLANNER_INSTRUCTIONS = r"""
-You are the motion planner in a sports-animation compiler. Do NOT output joint angles or JSON
-animation frames. Output a high-level path contract with exactly 7 ordered waypoints. A separate
-numerical solver will turn anchor targets into joint rotations.
+You are an elite sports biomechanist and 3D animator. You turn a requested movement (any sport, drill,
+exercise, dance or everyday action, including drills you have never heard of) into precise KEYFRAMES
+for a humanoid avatar (1.75 m tall). You say WHERE the hands and feet are and how the trunk is
+oriented; a physics solver computes every joint angle (elbows, knees, shoulders, hips) for you.
 
-Coordinate system and scale:
-- All anchor coordinates use meters/Unity units relative to the pelvis center at the current frame.
-- Avatar nominal height is 1.75 units. +X is the avatar's right, +Y is up, +Z is forward.
-- The model is symmetric at rest. In neutral standing, hands are approximately [+/−0.38, -0.10, 0]
-  and ankle targets approximately [+/−0.11, -0.82, 0.05]. Those are only starting references.
-- pelvis_offset_m is the pelvis/root translation in world Unity units, not an anchor point.
-- hip_euler_deg rotates the pelvis/lower-body frame; spine_euler_deg orients the torso;
-  neck_euler_deg is a modest local head/neck adjustment. Angles are degrees.
-- Hand and foot targets are relative to pelvis center. Keep them reachable for limbs of normal human
-  proportions: shoulder-to-hand length is about 0.60, hip-to-ankle length about 0.85.
+THE AVATAR
+- It performs in place: it cannot travel across the floor. Show runs, shuffles, steps and jumps in
+  place (like on a treadmill / with a camera following the athlete).
+- Always describe a RIGHT-HANDED athlete (the server mirrors for left-handers). "Right" = athlete's right.
 
-Make motions useful and visibly distinct, with meaningful preparation, action, and recovery. Do not
-repeat nearly identical waypoints. Include useful whole-body coordination, not just moving one hand.
-Use the actual requested sport movement rather than forcing a generic movement template. A movement
-may be compact, but it must contain the action's important phases. Motion should have an intelligible
-weight shift, torso contribution, arm/leg coordination, and follow-through where appropriate.
-Keep all limbs anatomically plausible and targets reachable. Avoid extreme body-root jumps.
+PARAMETERS. Every keyframe lists every field. Angles in degrees, distances in metres.
+body   whole avatar rotation: pitch + tips forward (90 = horizontal face-down: swimming, push-up,
+       plank; -90 face-up), turn + spins to its right (360 = full spin; ONLY for real spins or a
+       change of facing, keep 0 for swings/throws/kicks), roll + rolls to its right (cartwheel).
+pelvis height: metres the hips are LOWERED (negative) from standing tall: standing 0, athletic
+         stance -0.08, quarter squat -0.18, lunge -0.30, parallel squat -0.40, deep squat -0.50.
+         Keep it between 0 and -0.12 for most sport actions (swings, throws, kicks, punches).
+         POSITIVE height = the whole athlete is AIRBORNE that high (jump height; the legs keep
+         their shape, so a straight-legged jump is height +0.3 with feet lift 0).
+       twist: + hips turn to face the athlete's RIGHT (right hip goes back); - hips face LEFT.
+       tilt: + anterior tilt (small), side: + right hip drops (small).
+torso  lean: + bend forward at the waist (90 = chest horizontal), - arch back. It is RELATIVE to
+       body.pitch: in a plank/push-up (body pitch 80) torso lean is ~0 (straight body), not 80.
+       twist: + chest turns to face the athlete's RIGHT (right shoulder goes back = a right-hander's
+              backswing/coil/wind-up for forehand, golf, baseball, throw, cross-punch load);
+              - chest turns LEFT (right shoulder comes through = contact/release/follow-through).
+              Measured from the athlete's facing, NOT added to pelvis twist. Max about +-70.
+              X-factor = torso.twist - pelvis.twist (20-45 at the top of a backswing).
+       side_bend: + lean toward the right side.
+head   nod + look down / - look up, turn + look right, tilt + ear toward right shoulder.
 
-You are responsible for translating any requested movement into these trajectories; do not assume the
-compiler has sport-specific templates or will infer missing phases. Describe the complete cycle, including
-bilateral phase offsets when limbs alternate. Use the same physical convention for every movement:
-the torso's anatomical axial twist belongs in the Y component of spine_euler_deg, while X is forward
-flexion/extension and Z is lateral side-bending. Keep the elbow and knee bend hints consistent with
-the target path and never use a backward-facing hinge solution. For cyclic actions, make the first and
-last waypoint compatible so playback loops without one limb stopping halfway through its cycle.
+right_hand / left_hand: where each hand is, in the CHEST frame (moves and turns with the torso).
+  Origin = INSIDE the chest, midway between the shoulder joints (the chest's front surface is at
+  forward +0.11, the back at -0.11). Hands touching the chest/holding a ball at the chest: forward 0.2.
+  forward: + in front of the chest, - behind the back
+  up     : + above shoulder height, - below (belt level about -0.5 when standing straight)
+  out    : + OUTWARD toward that hand's own side, - ACROSS the body to the other side, 0 = centre
+           line. Same rule for both hands, so a symmetric pose has IDENTICAL numbers for both
+           hands (a left hand hanging at the left hip is out +0.33, never negative).
+  Each shoulder joint is at (out +0.30, up 0, forward 0) for its own hand. Arm length 0.66 m: a hand
+  is at most 0.66 m from its own shoulder (= straight arm).
+  Examples: hanging relaxed = (out 0.33, up -0.6, fwd 0.05). Straight forward at shoulder height =
+  (out 0.25, up 0, fwd 0.64). Straight overhead = (out 0.3, up 0.65, fwd 0.05). T-pose = (out 0.95,
+  up 0, fwd 0). Boxing guard = (out 0.12, up 0.06, fwd 0.28). Across to the other hip = (out -0.3,
+  up -0.5, fwd 0.25). Hands clasped in front of belly = (out 0, up -0.4, fwd 0.3).
+right_elbow_points / left_elbow_points: which way the bent elbow points: "down" (default: punches,
+  curls, push-ups), "out" (to the side: hands on hips, breaststroke, chicken wing), "back" (rowing
+  pull, sprint back-swing), "up" (hands behind head, throwing/serving cock, overhead), "forward".
+hands_together: true while both hands hold one implement (bat, club, racket two-handed, stick, oar,
+  ball in a two-handed pass/shot). The left hand is then attached to the right hand automatically;
+  only the right hand position matters (copy it to the left).
 
-Before filling the seven waypoints, privately decompose the requested action into body orientation and
-travel, the primary limb path, supporting-limb paths, torso contribution, and force-producing recovery.
-Encode every part in the numeric targets. Never leave a limb static unless the movement explicitly
-stabilizes it. A target path is not a joint angle: place the hand or foot where the anatomy must be at
-that phase and let the solver find the joint rotations. For overhead or surface-reaching actions, hand
-targets must visibly pass above the shoulder anchor (higher Y), not flatten into a shoulder-height
-circle. For axial torso rotation, vary spine Y while keeping spine X and Z near zero unless the action
-explicitly calls for flexion or side-bending. For propulsion actions, feet must have alternating
-non-planted targets with meaningful displacement; do not mark them planted to simplify the plan.
-For alternating limbs, use opposite phase timing so one limb does not stop while the other completes
-the whole cycle. Check target reachability before returning the JSON.
+right_foot / left_foot: where each foot (ankle) is, in the BODY frame (does NOT turn with
+  pelvis/torso twist). forward/out are measured on the floor from the point under the pelvis.
+  forward: + in front, - behind.  out: + outward to that foot's own side, - across (same rule for
+  both feet). lift: how far the foot is raised from where a straight standing leg would put it,
+  i.e. sole height above the floor (0 = on the floor). Lift bends the knee: use it for knee raises,
+  kicks, tucks, a foot leaving the floor, NOT for the whole body jumping (use pelvis height > 0).
+  toe_out: degrees the foot/knee turns outward (10 natural, 30-45 for squats/sumo, 0 for sprint).
+  Standing: both (forward 0, out 0.12, lift 0). Hip width ~0.13 m from centre; leg length 0.72 m
+  (a foot can be at most ~0.72 m from its hip joint, which sits 0.78 m above the floor minus the
+  hip drop). With pelvis.height -0.4 a foot can only be ~0.65 m in front/behind while on the floor.
+left_foot_planted / right_foot_planted: true while that foot is on the floor bearing weight
+  (its lift must then be 0). The solver locks planted feet in place, so you can twist hips and
+  torso freely. A lifting, swinging, kicking or airborne foot must be false.
 
-Output exactly 7 waypoints in chronological order. `t` should increase from 0 to 1. A reasonable
-initial progression is approximately 0.00, 0.15, 0.30, 0.47, 0.64, 0.82, 1.00, adjusted to the action.
-Each waypoint must specify every field in the schema. Use concise phase names. Feet marked planted
-should remain on the same world-space ground point; therefore, if pelvis_offset_m shifts, compensate
-by changing that foot's pelvis-relative target. For an airborne or stepping foot, set planted=false.
-Elbow/knee bend fields are preferred hinge-flexion magnitudes from 0 to 120-ish degrees; they are
-hints, not direct joint outputs. Do not make every numeric value zero. Do not describe these values as
-validated sports biomechanics; plan a plausible illustrative demonstration.
+CALIBRATED REFERENCE POSES (anchor on these, then adapt)
+- Athletic ready stance: pelvis height -0.12, torso lean 20; feet out 0.25 fwd 0; hands
+  (out 0.25 up -0.35 fwd 0.35).
+- Squat (parallel): pelvis height -0.42, torso lean 40, feet out 0.22 toe_out 25; arms straight
+  forward for balance (out 0.25 up 0 fwd 0.6).
+- Forward lunge (right leg front): pelvis height -0.32, right foot fwd 0.45 out 0.12, left foot
+  fwd -0.5 out 0.12 lift 0.03; torso upright.
+- Boxing orthodox stance: left foot fwd 0.25 out 0.12, right foot fwd -0.2 out 0.18, pelvis height
+  -0.06, pelvis twist +20, torso twist +25; both hands in guard. Jab: left hand (out 0.05 up 0.03
+  fwd 0.64). Cross: torso twist -35, pelvis twist -15, right hand (out 0.0 up 0.03 fwd 0.64), right
+  heel pivots (foot stays planted).
+- Sprint (in place): drive leg foot fwd 0.2 lift 0.45 (knee high); push-off leg foot fwd -0.45
+  lift 0.05..0.25; arms (elbows ~90): front hand (out 0.2 up -0.15 fwd 0.35, elbow down), back hand
+  (out 0.3 up -0.45 fwd -0.3, elbow back). Torso lean 10, body pitch 5. Both feet mostly unplanted.
+- Jump: load with pelvis height -0.25 and arms back (fwd -0.3); airborne pelvis height +0.3 with
+  feet lift 0..0.08 and planted false (tuck jump: feet lift 0.4 fwd 0.1); land pelvis height -0.2.
+- Jumping jack: feet out 0.12 -> 0.45 (lift 0.03 while airborne, pelvis height +0.1), hands from
+  the sides (out 0.33 up -0.6) to overhead (out 0.25 up 0.62); one cycle, loop=true.
+- Throw/serve cocked arm: right hand (out 0.45 up 0.25 fwd -0.15) elbow "up", torso twist +45,
+  pelvis twist +25. Release: right hand (out 0.15 up 0.35 fwd 0.55). Follow-through across the body:
+  right hand (out -0.35 up -0.3 fwd 0.35), torso twist -55, pelvis twist -40.
+- Tennis forehand: backswing right hand (out 0.55 up 0.05 fwd -0.15), torso twist +55, pelvis +30;
+  contact right hand (out 0.45 up -0.25 fwd 0.45), torso twist -5; finish right hand over left
+  shoulder (out -0.35 up 0.1 fwd 0.3), torso twist -60. Left hand points at the ball in the backswing
+  (out 0.0 up 0.0 fwd 0.5).
+- Golf (hands_together=true, right hand = grip): address (out 0 up -0.55 fwd 0.3), pelvis height
+  -0.06, torso lean 35, feet out 0.22; top of backswing (out 0.35 up 0.3 fwd 0.2) torso twist +80
+  pelvis twist +40; impact (out 0.05 up -0.55 fwd 0.3) torso twist -10 pelvis twist -35; finish
+  (out -0.35 up 0.25 fwd 0.2) torso twist -85 pelvis twist -45, torso lean 5, right foot lift 0.03.
+- Instep kick (right leg): plant left foot (fwd 0.1 out 0.2); backswing right foot (fwd -0.35 out
+  0.1 lift 0.4); contact right foot (fwd 0.3 out 0.05 lift 0.12); follow-through (fwd 0.6 lift 0.55);
+  arms out for balance; right_foot_planted false during the swing.
+- Push-up/plank: body pitch 78, feet neutral (fwd 0, out 0.12, lift 0); straight arms: hands (out
+  0.32 up -0.6 fwd 0); bottom: hands (out 0.4 up -0.3 fwd 0.05), elbows "back". Feet planted false
+  (the solver's floor is vertical for a pitched body).
+- Freestyle swimming: body pitch 85; hand entry overhead (out 0.25 up 0.62 fwd 0.2), pull under the
+  chest (out 0.05 up -0.1 fwd 0.45), push to the hip (out 0.3 up -0.6 fwd -0.05), recovery above
+  the back (out 0.4 up 0.05 fwd -0.3, elbow "up"); flutter kick: feet lift alternate 0..0.15.
+
+ANIMATION CRAFT (this is what makes it look professional)
+1. Break the action into its real phases (ready -> load/backswing -> acceleration -> contact/peak
+   -> follow-through -> recovery). Use 6-10 keyframes; add keys where motion changes direction fast.
+2. Timing: t runs 0..1 and must reflect real rhythm: preparation slower, the power phase FAST (often
+   10-15% of the time), follow-through decelerating. Do NOT space keys evenly.
+3. Kinetic chain: legs and hips start the power, then torso, then arm (pelvis twist leads torso twist
+   by one key). Counter-balance with the non-dominant arm. Sports stances keep knees soft
+   (pelvis height -0.05 to -0.15).
+4. Anticipation and follow-through: small opposite move before a big action; overshoot after it;
+   weight shifts (one foot lighter/lifting) where real athletes do it.
+5. Repeating actions (running, jumping jacks, skipping, swimming, dribbling, jump rope, shuffles...):
+   loop=true and describe exactly ONE cycle; the cycle closes automatically, so do NOT repeat the
+   first keyframe at the end. Alternate left/right limbs half a cycle apart.
+   One-shot actions (swing, throw, jump, lift): loop=false, start and end in a natural ready pose.
+6. Every limb does something purposeful in every phase; avoid identical copies between keys.
+   Floor positions (plank, push-up, burpee bottom, crawling, mountain climbers) need body pitch
+   70-85 so the body is near horizontal; lying on the back needs body pitch -80..-90.
+   Lateral shuffles/slides: in place, show the steps with the feet alternating wide (out 0.4) and
+   narrow (out 0.15), the hips low, a lean toward the travel direction and active hands.
+7. Anatomy: hands within 0.66 m of their shoulder, feet within 0.72 m of their hip; a hand passing
+   across the body goes in front of it (forward >= 0.2), never through the torso.
+8. duration_seconds: realistic real-time length of the action or one cycle (tennis forehand 1.6,
+   golf swing 2.2, running cycle 0.7, jumping jack 1.0, squat 2.5, push-up 2.0). Range 0.6-6.
+9. camera_view: best viewpoint (side for running/squats/push-ups/sagittal moves, front for jumping
+   jacks/lateral moves, three_quarter for rotational swings/throws/kicks).
+10. biomechanics_breakdown: BRIEF notes (max ~120 words) on each phase, written before the numbers.
+11. coaching_cues: 3-5 short, practical cues a coach would say for this movement.
 """.strip()
 
 
+def build_user_prompt(movement: str, extra: str, duration: Optional[float]) -> str:
+    parts = [f"Movement to animate: {movement.strip()}"]
+    if duration:
+        parts.append(f"Requested duration: about {duration:.1f} s (use it unless clearly wrong for the action).")
+    if extra.strip():
+        parts.append(f"Extra notes from the user: {extra.strip()}")
+    parts.append("Return the full JSON plan.")
+    return "\n".join(parts)
+
+
+REVIEW_INSTRUCTIONS = r"""
+You are reviewing and correcting an animation plan for a sports-coaching avatar. The parameter
+conventions are given below. Return the COMPLETE corrected plan in the same JSON schema.
+
+Check, keyframe by keyframe:
+- Every item in "SOLVER FINDINGS" (objective geometry problems found by the physics solver). Fix each.
+- Signs: right-hander's backswing/coil = torso/pelvis twist POSITIVE; contact/follow-through = NEGATIVE.
+  hand out + = outward to that hand's own side, - = across the body (same rule for both hands). hand forward - = behind the back.
+- Each hand within 0.66 m of its shoulder (right shoulder side +0.30, left -0.30, both up 0 fwd 0).
+- Hands never inside the torso; crossing hands pass in front (forward >= 0.2).
+- Real phases present, realistic timing (fast power phase, not evenly spaced), anticipation and
+  follow-through, kinetic chain (hips lead shoulders), non-dominant arm doing something useful.
+- Feet: planted only when truly on the ground; loop cycles do not repeat the first key at the end.
+Keep everything that is already correct. Do not shorten the plan.
+""".strip()
+
+
+def diagnose_plan(plan: Dict[str, Any]) -> List[str]:
+    """Objective per-keyframe problems the planner can fix (reachability, hands in torso, grips...)."""
+    findings: List[str] = []
+    reach = (UPPER_ARM + FOREARM) * UNIT_TO_M
+    for i, kf in enumerate(plan["keyframes"]):
+        tag = f"keyframe {i} (t={kf['t']:.2f}, {kf['phase']})"
+        hands = {}
+        for side, sign in (("right", 1.0), ("left", -1.0)):
+            h = kf[f"{side}_hand"]
+            p = np.array([sign * h["out"], h["up"], h["forward"]])
+            hands[side] = p
+            shoulder = np.array([sign * SHOULDER_OFFSET[0] * UNIT_TO_M, 0.0, 0.0])
+            d = float(np.linalg.norm(p - shoulder))
+            if d > reach + 0.06 and not (side == "left" and kf["hands_together"]):
+                findings.append(f"{tag}: {side} hand is {d:.2f} m from its shoulder (max {reach:.2f}); "
+                                f"the arm cannot reach it. Bring it closer.")
+            moved = float(np.linalg.norm(keep_hand_outside_torso(p, sign) - p))
+            if side == "left" and kf["hands_together"]:
+                continue
+            if moved > 0.06:
+                findings.append(f"(minor) {tag}: {side} hand target is inside the torso; put it in front "
+                                f"(forward >= 0.2) or clearly to the side.")
+        leg_len = (THIGH + SHIN) * UNIT_TO_M
+        for side, sign in (("right", 1.0), ("left", -1.0)):
+            f = kf[f"{side}_foot"]
+            hip = np.array([sign * HIP_OFFSET[0] * UNIT_TO_M, HIP_OFFSET[1] * UNIT_TO_M, 0.0])
+            ankle = np.array([sign * f["out"], (HIP_OFFSET[1] - THIGH - SHIN) * UNIT_TO_M
+                              - min(0.0, kf["pelvis"]["height"]) * HIP_DROP_SCALE + f["lift"], f["forward"]])
+            d = float(np.linalg.norm(ankle - hip))
+            if d > leg_len + 0.05:
+                findings.append(f"{tag}: {side} foot is {d:.2f} m from its hip (leg length {leg_len:.2f}); "
+                                f"bring it closer or lower the hips less.")
+        lf, rf = kf["left_foot"], kf["right_foot"]
+        if lf["out"] + rf["out"] < 0.08 and abs(lf["forward"] - rf["forward"]) < 0.12 and abs(lf["lift"] - rf["lift"]) < 0.15:
+            findings.append(f"{tag}: the feet overlap/cross; separate them (out >= 0.08 each or stagger forward).")
+    if plan.get("loop") and len(plan["keyframes"]) >= 3:
+        first, last = plan["keyframes"][0], plan["keyframes"][-1]
+        same = all(abs(first[g][p] - last[g][p]) < 3 for g, p in PARAM_PATHS)
+        if same:
+            findings.append("(minor) loop=true but the last keyframe repeats the first; remove the duplicate.")
+    ts = [k["t"] for k in plan["keyframes"]]
+    if len(ts) >= 5 and np.std(np.diff(ts)) < 0.01 and not plan.get("loop"):
+        findings.append("Keyframes are evenly spaced in time; make the power phase faster and the "
+                        "preparation/follow-through slower.")
+    return findings[:20]
+
+
+def _openai_client():
+    if OpenAI is None:
+        raise HTTPException(status_code=500, detail="openai package is not installed on the server.")
+    if not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured for the motion service.")
+    return OpenAI(max_retries=2, timeout=120)
+
+
+def _call_model(instructions: str, user_input: str, effort: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    client = _openai_client()
+    t0 = time.time()
+    resp = client.responses.create(
+        model=MODEL,
+        instructions=instructions,
+        input=user_input,
+        reasoning={"effort": effort},
+        store=False,
+        text={"format": {"type": "json_schema", "name": "motion_plan", "strict": True, "schema": PLAN_SCHEMA}},
+        max_output_tokens=16000,
+    )
+    if getattr(resp, "status", None) == "incomplete":
+        raise ValueError(f"Model output incomplete: {getattr(resp, 'incomplete_details', None)}")
+    text = (getattr(resp, "output_text", "") or "").strip()
+    usage = getattr(resp, "usage", None)
+    meta = {
+        "seconds": round(time.time() - t0, 1),
+        "input_tokens": getattr(usage, "input_tokens", None),
+        "output_tokens": getattr(usage, "output_tokens", None),
+    }
+    return json.loads(text), meta
+
+
+def plan_movement(movement: str, extra: str = "", duration: Optional[float] = None,
+                  refine: bool = False) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """fast: one planning call (+ one repair call only if the solver finds objective problems).
+    high: planning call + a review call that fixes solver findings and technique."""
+    calls: List[Dict[str, Any]] = []
+    raw, meta = _call_model(PLANNER_INSTRUCTIONS, build_user_prompt(movement, extra, duration), REASONING_EFFORT)
+    calls.append({"stage": "plan", **meta})
+    plan = sanitize_plan(raw)
+    plan["biomechanics_breakdown"] = str(raw.get("biomechanics_breakdown", ""))[:3000]
+    findings = diagnose_plan(plan)
+    calls[-1]["findings"] = findings
+    major = [f for f in findings if not f.startswith("(minor)")]
+    if refine or len(major) >= 2:
+        review_input = (
+            "PARAMETER CONVENTIONS:\n" + PLANNER_INSTRUCTIONS +
+            "\n\nREQUESTED MOVEMENT: " + movement +
+            ("\nEXTRA NOTES: " + extra if extra.strip() else "") +
+            "\n\nSOLVER FINDINGS:\n" + ("\n".join("- " + f for f in findings) if findings else "- none") +
+            "\n\nPLAN TO REVIEW:\n" + json.dumps(raw)
+        )
+        try:
+            raw2, meta2 = _call_model(REVIEW_INSTRUCTIONS, review_input, REASONING_EFFORT)
+            plan2 = sanitize_plan(raw2)
+            plan2["biomechanics_breakdown"] = str(raw2.get("biomechanics_breakdown", ""))[:3000]
+            findings2 = diagnose_plan(plan2)
+            calls.append({"stage": "review", **meta2, "findings": findings2})
+            major2 = [f for f in findings2 if not f.startswith("(minor)")]
+            if len(major2) <= len(major) + 1:
+                plan = plan2
+        except Exception as exc:  # the review is best-effort; keep the first plan
+            calls.append({"stage": "review", "error": str(exc)})
+    return plan, calls
+
+
 # -----------------------------------------------------------------------------
-# Request models and FastAPI
+# Cache (same prompt -> same animation, no extra API cost)
+# -----------------------------------------------------------------------------
+_cache: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
+_cache_lock = threading.Lock()
+
+
+def _cache_key(*parts: Any) -> str:
+    return hashlib.sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()[:32]
+
+
+def cache_get(key: str) -> Optional[Dict[str, Any]]:
+    with _cache_lock:
+        if key in _cache:
+            _cache.move_to_end(key)
+            return copy.deepcopy(_cache[key])
+    if CACHE_DIR:
+        f = Path(CACHE_DIR) / f"{key}.json"
+        if f.exists():
+            try:
+                return json.loads(f.read_text())
+            except Exception:
+                return None
+    return None
+
+
+def cache_put(key: str, plan: Dict[str, Any]) -> None:
+    with _cache_lock:
+        _cache[key] = copy.deepcopy(plan)
+        while len(_cache) > CACHE_SIZE:
+            _cache.popitem(last=False)
+    if CACHE_DIR:
+        try:
+            Path(CACHE_DIR).mkdir(parents=True, exist_ok=True)
+            (Path(CACHE_DIR) / f"{key}.json").write_text(json.dumps(plan))
+        except Exception:
+            pass
+
+
+# -----------------------------------------------------------------------------
+# API
 # -----------------------------------------------------------------------------
 
 class GenerateRequest(BaseModel):
-    movement: str = Field(min_length=3, max_length=240)
-    duration_seconds: float = Field(default=2.0, ge=0.6, le=8.0)
-    playback_fps: int = Field(default=DEFAULT_PLAYBACK_FPS, ge=6, le=30)
+    movement: str = Field(min_length=3, max_length=400)
+    duration_seconds: Optional[float] = Field(default=None, ge=0.6, le=8.0,
+                                              description="Omit/null to let the planner choose a realistic duration.")
+    playback_fps: int = Field(default=DEFAULT_FPS, ge=6, le=60)
     dominant_side: Literal["left", "right"] = "right"
-    extra_instructions: str = Field(default="", max_length=600)
-    repair_attempts: int = Field(default=0, ge=0, le=1)
+    extra_instructions: str = Field(default="", max_length=800)
+    quality: Literal["fast", "high"] = "high"
+    use_cache: bool = True
+    repair_attempts: int = Field(default=0, ge=0, le=1)  # kept for backwards compatibility (ignored)
 
 
-app = FastAPI(title="CogniCoach Motion Engine", version="0.1.0")
+class CompileRequest(BaseModel):
+    plan: Dict[str, Any]
+    duration_seconds: Optional[float] = Field(default=None, ge=0.6, le=8.0)
+    playback_fps: int = Field(default=DEFAULT_FPS, ge=6, le=60)
+    dominant_side: Literal["left", "right"] = "right"
+
+
+app = FastAPI(title="CogniCoach Motion Engine", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Local prototype only. Restrict this before public deployment.
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-def get_client() -> OpenAI:
-    
-    if not APIKEY:
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured for the motion service.")
-    return OpenAI(api_key=APIKEY, max_retries=0)
-
-
 @app.get("/health")
 def health() -> Dict[str, Any]:
-    return {"ok": True, "model": MODEL, "nominal_body_height": BODY_HEIGHT}
+    return {"ok": True, "model": MODEL, "api_key_configured": bool(os.getenv("OPENAI_API_KEY"))}
 
 
 @app.get("/rig")
 def get_rig() -> Dict[str, Any]:
-    """Expose the parsed digital rig so the runtime tracks the source-of-truth body specification."""
     return {
-        "rig_path": str(RIG_INFO_PATH),
-        "exists": RIG_INFO_PATH.exists(),
-        "height_units": BODY_HEIGHT,
+        "rig_info_path": str(RIG_INFO_PATH),
+        "units": "rig units (~2.1 cm)",
         "segments": {
-            "shoulder_half_width": SHOULDER_HALF_WIDTH,
-            "shoulder_y": SHOULDER_Y,
-            "upper_arm_length": UPPER_ARM_LENGTH,
-            "forearm_length": FOREARM_LENGTH,
-            "hip_half_width": HIP_HALF_WIDTH,
-            "hip_anchor_y": HIP_ANCHOR_Y,
-            "thigh_length": THIGH_LENGTH,
-            "shin_length": SHIN_LENGTH,
-            "ankle_forward_offset": ANKLE_FORWARD_OFFSET,
+            "shoulder_offset": SHOULDER_OFFSET, "hip_offset": HIP_OFFSET, "neck_offset": NECK_OFFSET,
+            "upper_arm": UPPER_ARM, "forearm": FOREARM, "thigh": THIGH, "shin": SHIN,
         },
-        "nodes": RIG,
+        "parameters": {g: {p: {"min": s[0], "max": s[1], "neutral": s[2]} for p, s in GROUP_PARAMS[g].items()}
+                       for g in GROUP_ORDER},
     }
 
 
-# -----------------------------------------------------------------------------
-# Geometry helpers: vectors, Unity-style Euler rotation, and trajectories
-# -----------------------------------------------------------------------------
-
-def vec3(value: Any, fallback: Sequence[float] = (0.0, 0.0, 0.0)) -> np.ndarray:
-    try:
-        arr = np.asarray(value, dtype=float).reshape(-1)
-        if arr.size >= 3 and np.all(np.isfinite(arr[:3])):
-            return arr[:3].astype(float)
-    except Exception:
-        pass
-    return np.asarray(fallback, dtype=float)
-
-
-def rot_x(rad: float) -> np.ndarray:
-    c, s = math.cos(rad), math.sin(rad)
-    return np.array([[1, 0, 0], [0, c, -s], [0, s, c]], dtype=float)
-
-
-def rot_y(rad: float) -> np.ndarray:
-    c, s = math.cos(rad), math.sin(rad)
-    return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]], dtype=float)
-
-
-def rot_z(rad: float) -> np.ndarray:
-    c, s = math.cos(rad), math.sin(rad)
-    return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], dtype=float)
-
-
-def unity_euler_matrix(degrees: Sequence[float]) -> np.ndarray:
-    """Approximate Unity Quaternion.Euler's Z-X-Y application order.
-
-    Unity documents Quaternion.Euler as applying Z, then X, then Y rotations. For column-vector
-    math the combined matrix is Ry @ Rx @ Rz. We still use the HTML's per-axis additive convention
-    when deriving cumulative Euler triples. Actual rig orientation should be calibrated in Unity.
-    """
-    x, y, z = np.radians(vec3(degrees))
-    return rot_y(y) @ rot_x(x) @ rot_z(z)
-
-
-def rotate(degrees: Sequence[float], point: Sequence[float]) -> np.ndarray:
-    return unity_euler_matrix(degrees) @ np.asarray(point, dtype=float)
-
-
-def clamp_num(x: float, low: float, high: float) -> float:
-    return max(low, min(high, float(x)))
-
-
-def wrap_deg(x: float) -> float:
-    return (float(x) + 180.0) % 360.0 - 180.0
-
-
-def unwrap_angle_points(points: np.ndarray) -> np.ndarray:
-    """Unwrap sequential Euler components along the shortest-angle direction."""
-    out = np.asarray(points, dtype=float).copy()
-    if len(out) <= 1:
-        return out
-    for axis in range(out.shape[1]):
-        for i in range(1, len(out)):
-            out[i, axis] = out[i - 1, axis] + wrap_deg(out[i, axis] - out[i - 1, axis])
-    return out
-
-
-def hermite_slopes(ts: np.ndarray, ys: np.ndarray) -> np.ndarray:
-    slopes = np.zeros_like(ys, dtype=float)
-    if len(ts) <= 1:
-        return slopes
-    slopes[0] = (ys[1] - ys[0]) / max(1e-6, ts[1] - ts[0])
-    slopes[-1] = (ys[-1] - ys[-2]) / max(1e-6, ts[-1] - ts[-2])
-    for i in range(1, len(ts) - 1):
-        slopes[i] = (ys[i + 1] - ys[i - 1]) / max(1e-6, ts[i + 1] - ts[i - 1])
-    return slopes
-
-
-def hermite_sample(ts: np.ndarray, ys: np.ndarray, t: float) -> np.ndarray:
-    """Cubic Hermite interpolation through values with time-aware tangent estimates."""
-    if t <= ts[0]:
-        return np.asarray(ys[0], dtype=float).copy()
-    if t >= ts[-1]:
-        return np.asarray(ys[-1], dtype=float).copy()
-    i = int(np.searchsorted(ts, t, side="right") - 1)
-    i = max(0, min(i, len(ts) - 2))
-    t0, t1 = float(ts[i]), float(ts[i + 1])
-    dt = max(1e-6, t1 - t0)
-    u = (t - t0) / dt
-    slopes = hermite_slopes(ts, ys)
-    h00 = 2 * u**3 - 3 * u**2 + 1
-    h10 = u**3 - 2 * u**2 + u
-    h01 = -2 * u**3 + 3 * u**2
-    h11 = u**3 - u**2
-    return h00 * ys[i] + h10 * dt * slopes[i] + h01 * ys[i + 1] + h11 * dt * slopes[i + 1]
-
-
-VECTOR_FIELDS = [
-    "pelvis_offset_m", "hip_euler_deg", "spine_euler_deg", "neck_euler_deg",
-    "left_hand_m", "right_hand_m", "left_foot_m", "right_foot_m",
-]
-SCALAR_FIELDS = [
-    "left_elbow_bend_deg", "right_elbow_bend_deg", "left_knee_bend_deg", "right_knee_bend_deg",
-]
-
-
-def sample_plan(plan: Dict[str, Any], t: float) -> Dict[str, Any]:
-    wps = plan["waypoints"]
-    ts = np.array([float(w["t"]) for w in wps], dtype=float)
-    ts = np.maximum.accumulate(ts)
-    if len(ts) > 1:
-        for i in range(1, len(ts)):
-            if ts[i] <= ts[i - 1]:
-                ts[i] = ts[i - 1] + 1e-3
-        ts = (ts - ts[0]) / (ts[-1] - ts[0])
-    sample: Dict[str, Any] = {}
-    for field in VECTOR_FIELDS:
-        arr = np.array([vec3(w[field]) for w in wps], dtype=float)
-        if "euler_deg" in field:
-            arr = unwrap_angle_points(arr)
-        sample[field] = hermite_sample(ts, arr, t).tolist()
-    for field in SCALAR_FIELDS:
-        arr = np.array([[float(w[field])] for w in wps], dtype=float)
-        sample[field] = float(hermite_sample(ts, arr, t)[0])
-    nearest = int(np.argmin(np.abs(ts - t)))
-    sample["phase"] = wps[nearest]["phase"]
-    sample["left_foot_planted"] = bool(wps[nearest]["left_foot_planted"])
-    sample["right_foot_planted"] = bool(wps[nearest]["right_foot_planted"])
-    return sample
-
-
-# -----------------------------------------------------------------------------
-# Numerical inverse kinematics: two-link limbs, finite-difference Jacobian, DLS
-# -----------------------------------------------------------------------------
-
-def arm_origin(spine_euler: Sequence[float], side: str) -> np.ndarray:
-    sign = 1.0 if side == "right" else -1.0
-    return rotate(spine_euler, [sign * SHOULDER_HALF_WIDTH, SHOULDER_Y, 0.0])
-
-
-def arm_endpoint(q: Sequence[float], spine_euler: Sequence[float], side: str) -> np.ndarray:
-    q = np.asarray(q, dtype=float)
-    origin = arm_origin(spine_euler, side)
-    upper_euler = vec3(spine_euler) + q[:3]
-    lower_euler = vec3(spine_euler) + q[:3] + q[3:6]
-    elbow = origin + rotate(upper_euler, [0.0, -UPPER_ARM_LENGTH, 0.0])
-    wrist = elbow + rotate(lower_euler, [0.0, -FOREARM_LENGTH, 0.0])
-    return wrist
-
-
-def leg_origin(hip_euler: Sequence[float], side: str) -> np.ndarray:
-    sign = 1.0 if side == "right" else -1.0
-    return rotate(hip_euler, [sign * HIP_HALF_WIDTH, HIP_ANCHOR_Y, 0.0])
-
-
-def leg_endpoint(q: Sequence[float], hip_euler: Sequence[float], side: str) -> np.ndarray:
-    q = np.asarray(q, dtype=float)
-    origin = leg_origin(hip_euler, side)
-    thigh_euler = vec3(hip_euler) + q[:3]
-    shin_euler = vec3(hip_euler) + q[:3] + q[3:6]
-    knee = origin + rotate(thigh_euler, [0.0, -THIGH_LENGTH, 0.0])
-    ankle = knee + rotate(shin_euler, [0.0, -SHIN_LENGTH, 0.0])
-    # A small forward offset approximates the ankle/foot contact point in this simplified rig.
-    return ankle + rotate(shin_euler, [0.0, 0.0, ANKLE_FORWARD_OFFSET])
-
-
-def numerical_jacobian(func, q: np.ndarray, epsilon_deg: float = 0.5) -> np.ndarray:
-    base = np.asarray(func(q), dtype=float)
-    jac = np.zeros((3, q.size), dtype=float)
-    for i in range(q.size):
-        plus = q.copy()
-        plus[i] += epsilon_deg
-        jac[:, i] = (np.asarray(func(plus), dtype=float) - base) / epsilon_deg
-    return jac
-
-
-def _limit_local_angles(q: np.ndarray, chain: str) -> np.ndarray:
-    q = np.asarray(q, dtype=float).copy()
-    q[:3] = np.clip(q[:3], -135.0, 135.0)
-    if chain == "arm":
-        q[3] = clamp_num(q[3], ELBOW_FLEXION_MIN_DEG, ELBOW_FLEXION_MAX_DEG)
-    else:
-        q[3] = clamp_num(q[3], KNEE_FLEXION_MIN_DEG, KNEE_FLEXION_MAX_DEG)
-    # y/z rotations at elbows and knees are allowed but discouraged; the rig axes are not yet calibrated.
-    q[4:6] = np.clip(q[4:6], -55.0, 55.0)
-    return q
-
-
-def _anatomical_bend_sign(chain: str) -> float:
-    return KNEE_FLEXION_DEFAULT_SIGN if chain == "leg" else ELBOW_FLEXION_DEFAULT_SIGN
-
-
-def solve_two_link(
-    target: Sequence[float],
-    base_euler: Sequence[float],
-    side: str,
-    seed: Sequence[float] | None,
-    chain: Literal["arm", "leg"],
-    preferred_hinge_deg: float = 0.0,
-) -> Tuple[np.ndarray, Dict[str, Any]]:
-    """Solve a two-segment endpoint position by damped least squares.
-
-    q[0:3] are first-joint local Euler offsets; q[3:6] second-joint local offsets.
-    The hinge axis defaults to local X as a starting rig assumption. This needs calibration.
-    """
-    target = vec3(target)
-    base_euler = vec3(base_euler)
-    endpoint_fn = arm_endpoint if chain == "arm" else leg_endpoint
-    origin_fn = arm_origin if chain == "arm" else leg_origin
-    l1, l2 = (UPPER_ARM_LENGTH, FOREARM_LENGTH) if chain == "arm" else (THIGH_LENGTH, SHIN_LENGTH)
-    origin = origin_fn(base_euler, side)
-    reach_vector = target - origin
-    reach_distance = float(np.linalg.norm(reach_vector))
-    max_reach = l1 + l2 - 0.005
-    min_reach = abs(l1 - l2) + 0.005
-    projected = target.copy()
-    if reach_distance > max_reach and reach_distance > 1e-8:
-        projected = origin + reach_vector / reach_distance * max_reach
-    elif reach_distance < min_reach and reach_distance > 1e-8:
-        projected = origin + reach_vector / reach_distance * min_reach
-    elif reach_distance <= 1e-8:
-        projected = origin + np.array([0.0, -(min_reach + 0.05), 0.0])
-
-    # A two-link chain's target distance strongly constrains its relative bend:
-    # d^2 = L1^2 + L2^2 + 2*L1*L2*cos(theta). Initializing from this relation avoids
-    # the straight-arm/knee singularity that makes numerical IK get stuck near full extension.
-    projected_distance = float(np.linalg.norm(projected - origin))
-    cosine = (projected_distance**2 - l1**2 - l2**2) / (2.0 * l1 * l2)
-    geometric_bend = math.degrees(math.acos(clamp_num(cosine, -1.0, 1.0)))
-    hinted_bend = abs(float(preferred_hinge_deg))
-    # Geometry takes priority when the requested target requires it. The model's bend hint helps
-    # choose a useful starting posture but cannot violate the limb-length equation.
-    geometric_bend = clamp_num(geometric_bend, 0.0, 145.0 if chain == "arm" else 125.0)
-    if seed is None:
-        q = np.zeros(6, dtype=float)
-        # The Unity rig's knee hinge flexes in the positive local-X direction.
-        q[3] = _anatomical_bend_sign(chain) * abs(geometric_bend)
-    else:
-        q = np.asarray(seed, dtype=float).reshape(6).copy()
-        # Balance frame-to-frame continuity against the bend dictated by the current target distance.
-        q[3] = 0.28 * q[3] - 0.72 * geometric_bend
-        # A large hinted bend is allowed to influence only when it remains geometrically plausible.
-        if geometric_bend > 5.0:
-            q[3] = 0.85 * q[3] - 0.15 * min(hinted_bend, geometric_bend)
-        q[3] = _anatomical_bend_sign(chain) * abs(q[3])
-    q = _limit_local_angles(q, chain)
-
-    # Variable weighting lets shoulder/hip orient in 3D while discouraging non-hinge rotations
-    # at the elbow/knee. The preferred solution is the current seed (temporal continuity).
-    axis_scales = np.array([1.0, 1.0, 1.0, 1.0, 0.28, 0.28], dtype=float)
-    before = float(np.linalg.norm(endpoint_fn(q, base_euler, side) - target))
-    for _ in range(IK_ITERATIONS):
-        endpoint = endpoint_fn(q, base_euler, side)
-        error = projected - endpoint
-        if float(np.linalg.norm(error)) < IK_EPSILON_METERS:
-            break
-        jac = numerical_jacobian(lambda angles: endpoint_fn(angles, base_euler, side), q)
-        jac = jac * axis_scales[np.newaxis, :]
-        system = jac @ jac.T + (IK_DAMPING**2) * np.eye(3)
-        try:
-            delta_scaled = jac.T @ np.linalg.solve(system, error)
-        except np.linalg.LinAlgError:
-            delta_scaled = jac.T @ np.linalg.pinv(system) @ error
-        delta = axis_scales * delta_scaled
-        delta = np.clip(delta, -18.0, 18.0)
-        q = _limit_local_angles(q + delta, chain)
-
-    achieved = endpoint_fn(q, base_euler, side)
-    error_original = float(np.linalg.norm(achieved - target))
-    error_projected = float(np.linalg.norm(achieved - projected))
-    return q, {
-        "target_error_m": error_original,
-        "projected_error_m": error_projected,
-        "requested_reach_m": reach_distance,
-        "max_reach_m": max_reach,
-        "was_projected": bool(np.linalg.norm(projected - target) > 1e-5),
-        "initial_error_m": before,
-    }
-
-
-# -----------------------------------------------------------------------------
-# Plan sanitization and initial planning / targeted repair
-# -----------------------------------------------------------------------------
-
-def _clamp_vec(v: Any, limits: Sequence[Tuple[float, float]]) -> List[float]:
-    arr = vec3(v)
-    return [clamp_num(arr[i], limits[i][0], limits[i][1]) for i in range(3)]
-
-
-def sanitize_plan(plan: Dict[str, Any]) -> Dict[str, Any]:
-    if not isinstance(plan, dict) or not isinstance(plan.get("waypoints"), list):
-        raise ValueError("Planner output has no waypoint list.")
-    raw = plan["waypoints"]
-    if len(raw) < 5:
-        raise ValueError(f"Planner supplied only {len(raw)} waypoints; expected 7.")
-    # Structured output generally gives exactly seven; gracefully reduce/expand malformed outputs.
-    if len(raw) > 7:
-        idx = np.linspace(0, len(raw) - 1, 7).round().astype(int).tolist()
-        raw = [raw[i] for i in idx]
-    while len(raw) < 7:
-        # Insert a midpoint of the currently longest time interval.
-        times = [float(w.get("t", i / max(1, len(raw) - 1))) for i, w in enumerate(raw)]
-        i = int(np.argmax(np.diff(times))) if len(times) >= 2 else 0
-        a = raw[i]
-        b = raw[min(i + 1, len(raw) - 1)]
-        mid = {}
-        for key in WAYPOINT_REQUIRED:
-            if key == "phase":
-                mid[key] = "transition"
-            elif key == "t":
-                mid[key] = (float(a.get("t", 0)) + float(b.get("t", 1))) / 2
-            elif key in ("left_foot_planted", "right_foot_planted"):
-                mid[key] = bool(a.get(key, False) and b.get(key, False))
-            elif isinstance(a.get(key), list) and isinstance(b.get(key), list):
-                mid[key] = ((np.asarray(a[key], dtype=float) + np.asarray(b[key], dtype=float)) / 2).tolist()
-            elif isinstance(a.get(key), (int, float)) and isinstance(b.get(key), (int, float)):
-                mid[key] = (float(a[key]) + float(b[key])) / 2
-            else:
-                mid[key] = a.get(key, b.get(key, 0))
-        raw.insert(i + 1, mid)
-
-    result_wps: List[Dict[str, Any]] = []
-    for i, w in enumerate(raw[:7]):
-        if not isinstance(w, dict):
-            raise ValueError(f"Waypoint {i} is not an object.")
-        item: Dict[str, Any] = {}
-        item["phase"] = str(w.get("phase", f"phase_{i + 1}"))[:48]
-        item["t"] = clamp_num(w.get("t", i / 6), 0.0, 1.0)
-        item["pelvis_offset_m"] = _clamp_vec(w.get("pelvis_offset_m"), [(-0.45, 0.45), (-0.25, 0.25), (-0.55, 0.55)])
-        item["hip_euler_deg"] = _clamp_vec(w.get("hip_euler_deg"), [(-35, 35), (-85, 85), (-35, 35)])
-        item["spine_euler_deg"] = _clamp_vec(w.get("spine_euler_deg"), [(-50, 50), (-120, 120), (-50, 50)])
-        item["neck_euler_deg"] = _clamp_vec(w.get("neck_euler_deg"), [(-35, 35), (-45, 45), (-35, 35)])
-        item["left_hand_m"] = _clamp_vec(w.get("left_hand_m"), [(-0.72, 0.72), (-0.42, 0.98), (-0.58, 0.70)])
-        item["right_hand_m"] = _clamp_vec(w.get("right_hand_m"), [(-0.72, 0.72), (-0.42, 0.98), (-0.58, 0.70)])
-        item["left_foot_m"] = _clamp_vec(w.get("left_foot_m"), [(-0.63, 0.63), (-1.00, -0.25), (-0.55, 0.55)])
-        item["right_foot_m"] = _clamp_vec(w.get("right_foot_m"), [(-0.63, 0.63), (-1.00, -0.25), (-0.55, 0.55)])
-        for key in SCALAR_FIELDS:
-            high = 135.0 if "elbow" in key else 115.0
-            item[key] = clamp_num(w.get(key, 15.0), 0.0, high)
-        item["left_foot_planted"] = bool(w.get("left_foot_planted", False))
-        item["right_foot_planted"] = bool(w.get("right_foot_planted", False))
-        result_wps.append(item)
-
-    # Enforce strictly ordered times while retaining the planner's timing as much as possible.
-    times = np.array([w["t"] for w in result_wps], dtype=float)
-    valid = times[0] <= 0.08 and times[-1] >= 0.92 and np.all(np.diff(times) > 0.015)
-    if not valid:
-        times = np.linspace(0.0, 1.0, 7)
-    else:
-        times[0], times[-1] = 0.0, 1.0
-        times = np.maximum.accumulate(times)
-        if np.any(np.diff(times) < 0.015):
-            times = np.linspace(0.0, 1.0, 7)
-    for i, w in enumerate(result_wps):
-        w["t"] = float(times[i])
-
+def _build_response(plan: Dict[str, Any], duration: Optional[float], fps: int, side: str,
+                    calls: List[Dict[str, Any]], cached: bool) -> Dict[str, Any]:
+    solved = mirror_plan(plan) if side == "left" else plan
+    frames, report = compile_motion(solved, duration, fps)
+    text = mirror_text if side == "left" else (lambda t: t)
     return {
-        "movement_summary": str(plan.get("movement_summary", "Illustrative sports movement"))[:600],
-        "waypoints": result_wps,
-    }
-
-
-def call_planner(req: GenerateRequest, previous_plan: Dict[str, Any] | None = None,
-                 report: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    client = get_client()
-    is_repair = previous_plan is not None
-    request_text = {
-        "movement": req.movement,
-        "duration_seconds": req.duration_seconds,
-        "dominant_side": req.dominant_side,
-        "extra_instructions": req.extra_instructions,
-        "body_model": {
-            "height_units": BODY_HEIGHT,
-            "upper_arm": UPPER_ARM_LENGTH,
-            "forearm": FOREARM_LENGTH,
-            "thigh": THIGH_LENGTH,
-            "shin": SHIN_LENGTH,
-            "shoulder_y": SHOULDER_Y,
-            "axes": "+X avatar right, +Y up, +Z forward",
-        },
-    }
-    if not is_repair:
-        user_prompt = (
-            "Create a motion path contract for this requested illustrative sports movement.\n"
-            "Do not output joint rotations or frames; output anchor targets and phase data only.\n"
-            + json.dumps(request_text, ensure_ascii=False)
-        )
-    else:
-        user_prompt = (
-            "Repair this motion plan using the objective verifier report below. Keep successful parts "
-            "of the plan unchanged. Fix only the reported failures; prioritize reachable anchors, "
-            "meaningful movement, foot stability, and continuity. Return the complete same-schema plan.\n"
-            "REQUEST:\n" + json.dumps(request_text, ensure_ascii=False) +
-            "\nCURRENT PLAN:\n" + json.dumps(previous_plan, ensure_ascii=False) +
-            "\nVERIFIER REPORT:\n" + json.dumps(report, ensure_ascii=False)
-        )
-    try:
-        response = client.responses.create(
-            model=MODEL,
-            instructions=PLANNER_INSTRUCTIONS,
-            input=user_prompt,
-            reasoning={"effort": "low"},
-            store=False,
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": "motion_plan",
-                    "strict": True,
-                    "schema": PLAN_SCHEMA,
-                }
-            },
-            max_output_tokens=4000,
-        )
-    except Exception as exc:
-        # Keep details server-side in traceback; return a useful error message to browser.
-        traceback.print_exc()
-        raise HTTPException(status_code=502, detail=f"OpenAI motion-planning request failed: {exc}") from exc
-    try:
-        if getattr(response, "status", None) == "incomplete":
-            details = getattr(response, "incomplete_details", None)
-            reason = getattr(details, "reason", "unknown") if details is not None else "unknown"
-            raise ValueError(f"The model returned incomplete structured output ({reason}).")
-        output_text = str(getattr(response, "output_text", "") or "").strip()
-        if not output_text:
-            raise ValueError("The model returned no text output.")
-        if output_text.startswith("```"):
-            output_text = output_text.split("\n", 1)[-1]
-            if output_text.rstrip().endswith("```"):
-                output_text = output_text.rstrip()[:-3].rstrip()
-        parsed = json.loads(output_text)
-        return sanitize_plan(parsed)
-    except Exception as exc:
-        traceback.print_exc()
-        raise HTTPException(status_code=502, detail=f"Could not parse the model's motion plan: {exc}") from exc
-
-
-# -----------------------------------------------------------------------------
-# Compile anchor trajectories into sparse joint frames
-# -----------------------------------------------------------------------------
-
-def compile_motion(
-    plan: Dict[str, Any],
-    duration_seconds: float,
-    fps: int,
-) -> Tuple[List[Dict[str, float]], Dict[str, Any]]:
-    frame_count = max(2, min(MAX_FRAMES, int(round(duration_seconds * fps))))
-    times = np.linspace(0.0, 1.0, frame_count)
-
-    seed: Dict[str, np.ndarray | None] = {
-        "left_arm": None,
-        "right_arm": None,
-        "left_leg": None,
-        "right_leg": None,
-    }
-    frames: List[Dict[str, float]] = []
-    detailed: List[Dict[str, Any]] = []
-
-    for t in times:
-        p = sample_plan(plan, float(t))
-        root = vec3(p["pelvis_offset_m"])
-        hip_euler = vec3(p["hip_euler_deg"])
-        spine_euler = vec3(p["spine_euler_deg"])
-
-        larm, larm_info = solve_two_link(
-            p["left_hand_m"], spine_euler, "left", seed["left_arm"], "arm", p["left_elbow_bend_deg"]
-        )
-        rarm, rarm_info = solve_two_link(
-            p["right_hand_m"], spine_euler, "right", seed["right_arm"], "arm", p["right_elbow_bend_deg"]
-        )
-        lleg, lleg_info = solve_two_link(p["left_foot_m"], hip_euler, "left", seed["left_leg"], "leg", p["left_knee_bend_deg"])
-        rleg, rleg_info = solve_two_link(p["right_foot_m"], hip_euler, "right", seed["right_leg"], "leg", p["right_knee_bend_deg"])
-        seed["left_arm"], seed["right_arm"] = larm, rarm
-        seed["left_leg"], seed["right_leg"] = lleg, rleg
-
-        # Each joint's local offsets are composed through the hierarchy by the HTML transform.
-        local_values = {
-            "hip": hip_euler,
-            "spine": spine_euler,
-            "neck": vec3(p["neck_euler_deg"]),
-            "lefthip": lleg[:3],
-            "righthip": rleg[:3],
-            "leftknee": lleg[3:6],
-            "rightknee": rleg[3:6],
-            "leftshoulder": larm[:3],
-            "rightshoulder": rarm[:3],
-            "leftelbow": larm[3:6],
-            "rightelbow": rarm[3:6],
-        }
-        frame: Dict[str, float] = {}
-        for joint, eulers in local_values.items():
-            for axis, axis_name in enumerate("xyz"):
-                key = f"{joint}{axis_name}"
-                value = wrap_deg(float(eulers[axis]))
-                if abs(value) >= SPARSE_ANGLE_THRESHOLD_DEG:
-                    frame[key] = round(value, 3)
-        for key, value in zip(POSITION_KEYS, root):
-            if abs(float(value)) >= 0.001:
-                frame[key] = round(float(value), 4)
-
-        frames.append(frame)
-        detailed.append({
-            "t": float(t),
-            "phase": p["phase"],
-            "targets": {
-                "left_hand": vec3(p["left_hand_m"]).tolist(),
-                "right_hand": vec3(p["right_hand_m"]).tolist(),
-                "left_foot": vec3(p["left_foot_m"]).tolist(),
-                "right_foot": vec3(p["right_foot_m"]).tolist(),
-            },
-            "root": root.tolist(),
-            "spine": spine_euler.tolist(),
-            "hip": hip_euler.tolist(),
-            "solutions": {
-                "left_arm": larm.tolist(), "right_arm": rarm.tolist(),
-                "left_leg": lleg.tolist(), "right_leg": rleg.tolist(),
-            },
-            "ik": {
-                "left_arm": larm_info, "right_arm": rarm_info,
-                "left_leg": lleg_info, "right_leg": rleg_info,
-            },
-            "planted": {
-                "left": bool(p["left_foot_planted"]),
-                "right": bool(p["right_foot_planted"]),
-            },
-        })
-
-    report = verify_motion(plan, frames, detailed, fps)
-    return frames, report
-
-
-# -----------------------------------------------------------------------------
-# Forward kinematics and independent verifier
-# -----------------------------------------------------------------------------
-
-def decode_frame_to_local(frame: Dict[str, Any], prefix: str) -> np.ndarray:
-    return np.array([float(frame.get(prefix + a, 0.0)) for a in "xyz"], dtype=float)
-
-
-def forward_kinematics_frame(frame: Dict[str, Any]) -> Dict[str, np.ndarray]:
-    """Estimate anchors in pelvis-relative coordinates using the nominal human proportions."""
-    hip = decode_frame_to_local(frame, "hip")
-    spine = decode_frame_to_local(frame, "spine")
-    p: Dict[str, np.ndarray] = {}
-    for side in ("left", "right"):
-        shoulder = decode_frame_to_local(frame, side + "shoulder")
-        elbow = decode_frame_to_local(frame, side + "elbow")
-        global_upper = spine + shoulder
-        global_lower = spine + shoulder + elbow
-        sh_origin = rotate(spine, [(-1 if side == "left" else 1) * SHOULDER_HALF_WIDTH, SHOULDER_Y, 0])
-        elbow_pos = sh_origin + rotate(global_upper, [0, -UPPER_ARM_LENGTH, 0])
-        hand_pos = elbow_pos + rotate(global_lower, [0, -FOREARM_LENGTH, 0])
-        p[side + "_hand"] = hand_pos
-
-        hip_local = decode_frame_to_local(frame, side + "hip")
-        knee_local = decode_frame_to_local(frame, side + "knee")
-        global_thigh = hip + hip_local
-        global_shin = hip + hip_local + knee_local
-        hip_origin = rotate(hip, [(-1 if side == "left" else 1) * HIP_HALF_WIDTH, HIP_ANCHOR_Y, 0])
-        knee_pos = hip_origin + rotate(global_thigh, [0, -THIGH_LENGTH, 0])
-        ankle_pos = knee_pos + rotate(global_shin, [0, -SHIN_LENGTH, 0]) + rotate(global_shin, [0, 0, ANKLE_FORWARD_OFFSET])
-        p[side + "_foot"] = ankle_pos
-    return p
-
-
-def verify_motion(plan: Dict[str, Any], frames: List[Dict[str, float]], detailed: List[Dict[str, Any]], fps: int) -> Dict[str, Any]:
-    failures: List[Dict[str, Any]] = []
-    warnings: List[str] = []
-    target_errors: Dict[str, List[float]] = {"left_hand": [], "right_hand": [], "left_foot": [], "right_foot": []}
-    path_lengths: Dict[str, float] = {k: 0.0 for k in target_errors}
-    measured_path_lengths: Dict[str, float] = {k: 0.0 for k in target_errors}
-    planted_slip: Dict[str, List[float]] = {"left": [], "right": []}
-    planted_drift: Dict[str, List[float]] = {"left": [], "right": []}
-    planted_segment_start: Dict[str, np.ndarray] = {}
-    previous_planted: Dict[str, bool] = {"left": False, "right": False}
-    all_joint_values: List[np.ndarray] = []
-    max_frame_delta = 0.0
-    max_frame_accel = 0.0
-
-    target_map = {
-        "left_hand": "left_hand", "right_hand": "right_hand",
-        "left_foot": "left_foot", "right_foot": "right_foot",
-    }
-    previous_actual: Dict[str, np.ndarray] | None = None
-    previous_target: Dict[str, np.ndarray] | None = None
-    previous_world_foot: Dict[str, np.ndarray] = {}
-    previous_angles: np.ndarray | None = None
-    previous_angle_delta: np.ndarray | None = None
-    actual_tracks: Dict[str, List[np.ndarray]] = {k: [] for k in target_errors}
-    target_tracks: Dict[str, List[np.ndarray]] = {k: [] for k in target_errors}
-
-    for i, (frame, detail) in enumerate(zip(frames, detailed)):
-        actual = forward_kinematics_frame(frame)
-        root = np.asarray(detail["root"], dtype=float)
-        targets = {k: np.asarray(detail["targets"][k], dtype=float) for k in target_map}
-        # Foot/hands anchor coordinates in the body model are pelvis-relative; root cancels in target errors.
-        for key, actual_key in target_map.items():
-            target_errors[key].append(float(np.linalg.norm(actual[actual_key] - targets[key])))
-            target_tracks[key].append(targets[key].copy())
-            actual_tracks[key].append(actual[actual_key].copy())
-            if previous_actual is not None:
-                path_lengths[key] += float(np.linalg.norm(targets[key] - previous_target[key]))
-                measured_path_lengths[key] += float(np.linalg.norm(actual[actual_key] - previous_actual[actual_key]))
-        for side in ("left", "right"):
-            world_foot = root + actual[side + "_foot"]
-            is_planted = bool(detail["planted"][side])
-            if side in previous_world_foot and is_planted and previous_planted[side]:
-                planted_slip[side].append(float(np.linalg.norm(world_foot - previous_world_foot[side])))
-            if is_planted:
-                if not previous_planted[side] or side not in planted_segment_start:
-                    planted_segment_start[side] = world_foot.copy()
-                planted_drift[side].append(float(np.linalg.norm(world_foot - planted_segment_start[side])))
-            else:
-                planted_segment_start.pop(side, None)
-            previous_world_foot[side] = world_foot
-            previous_planted[side] = is_planted
-
-        # Default frame schema is sparse: omitted keys are zero, as intended by the user's HTML.
-        vector = np.array([float(frame.get(k, 0.0)) for k in ANGLE_KEYS + POSITION_KEYS], dtype=float)
-        all_joint_values.append(vector)
-        if previous_angles is not None:
-            delta = vector - previous_angles
-            max_frame_delta = max(max_frame_delta, float(np.max(np.abs(delta))))
-            if previous_angle_delta is not None:
-                max_frame_accel = max(max_frame_accel, float(np.max(np.abs(delta - previous_angle_delta))))
-            previous_angle_delta = delta
-        previous_angles = vector
-        previous_actual = actual
-        previous_target = targets
-
-    frame_count = len(frames)
-    mean_errors = {k: float(np.mean(v)) if v else 0.0 for k, v in target_errors.items()}
-    max_errors = {k: float(np.max(v)) if v else 0.0 for k, v in target_errors.items()}
-    for k, err in max_errors.items():
-        if err > 0.05:
-            failures.append({"type": "anchor_tracking", "anchor": k, "max_error_m": round(err, 4),
-                             "action": "Move this target closer to the reachable region for the nominal limb length."})
-
-    total_target_path = float(sum(path_lengths.values()))
-    total_measured_path = float(sum(measured_path_lengths.values()))
-    max_target_excursion = max((float(np.max(np.linalg.norm(np.asarray(track) - np.asarray(track)[0], axis=1))) for track in target_tracks.values()), default=0.0)
-    if total_target_path < 0.25 and max_target_excursion < 0.08:
-        failures.append({"type": "insufficient_motion", "target_path_length_m": round(total_target_path, 4),
-                         "action": "Increase purposeful anchor displacement across the key phases; avoid nearly identical waypoints."})
-
-    for side, slips in planted_slip.items():
-        if slips and max(slips) > 0.075:
-            failures.append({"type": "planted_foot_step", "side": side, "max_step_m": round(max(slips), 4),
-                             "action": f"Keep the {side} foot's world-space position stable during planted phases; compensate its pelvis-relative target for root translation."})
-        drift_values = planted_drift[side]
-        if drift_values and max(drift_values) > 0.08:
-            failures.append({"type": "planted_foot_drift", "side": side, "max_drift_m": round(max(drift_values), 4),
-                             "action": f"Reduce cumulative world-space drift of the planted {side} foot below 0.08 m across each continuous planted segment."})
-
-    if max_frame_delta > 75.0:
-        warnings.append(f"Large adjacent-frame angle change ({max_frame_delta:.1f} degrees); inspect continuity and rig axis calibration.")
-    if max_frame_accel > 60.0:
-        warnings.append(f"Large adjacent-frame angular second difference ({max_frame_accel:.1f} degrees/frame^2); inspect timing/smoothing.")
-
-    # Nonzero pose check. Count frames whose posture differs materially from its predecessor.
-    distinct_changes = 0
-    for i in range(1, len(all_joint_values)):
-        if float(np.max(np.abs(all_joint_values[i] - all_joint_values[i - 1]))) > 0.8:
-            distinct_changes += 1
-    changed_pose_ratio = distinct_changes / max(1, frame_count - 1)
-    if changed_pose_ratio < 0.35:
-        failures.append({"type": "mostly_static_pose", "changed_pose_ratio": round(changed_pose_ratio, 3),
-                         "action": "Ensure the movement produces evolving anchor targets and joint poses, not a few repeated frames."})
-
-    # Verify local joint values don't exceed broad generic limits.
-    out_of_range = []
-    for i, frame in enumerate(frames):
-        for key in ANGLE_KEYS:
-            val = float(frame.get(key, 0.0))
-            if abs(val) > 165.0:
-                out_of_range.append({"frame": i, "joint": key, "degrees": round(val, 2)})
-    if out_of_range:
-        warnings.append(f"{len(out_of_range)} local joint values exceeded 165 degrees; inspect the rig's conventions.")
-
-    # A rough static/endpoint metric is useful, but not a sports-technique score.
-    report = {
-        "passed_geometric_checks": len(failures) == 0,
-        "failure_count": len(failures),
-        "failures": failures[:12],
-        "warnings": warnings,
-        "frame_count": frame_count,
+        "frames": sparse(frames),
         "playback_fps": fps,
-        "nominal_body_height": BODY_HEIGHT,
-        "mean_anchor_error_m": {k: round(v, 4) for k, v in mean_errors.items()},
-        "max_anchor_error_m": {k: round(v, 4) for k, v in max_errors.items()},
-        "target_path_length_m": round(total_target_path, 4),
-        "measured_path_length_m": round(total_measured_path, 4),
-        "max_target_excursion_m": round(max_target_excursion, 4),
-        "changed_pose_ratio": round(changed_pose_ratio, 3),
-        "max_adjacent_joint_delta_deg": round(max_frame_delta, 3),
-        "max_joint_second_difference_deg_per_frame2": round(max_frame_accel, 3),
-        "max_planted_foot_step_m": {side: round(max(values), 4) if values else 0.0 for side, values in planted_slip.items()},
-        "max_planted_foot_drift_m": {side: round(max(values), 4) if values else 0.0 for side, values in planted_drift.items()},
-        "interpretation": "These are model-based geometry/continuity checks, not proof of correct sports biomechanics. Calibrate against actual Unity transforms and reference motion.",
+        "duration_seconds": float(duration or plan["duration_seconds"]),
+        "loop": plan["loop"],
+        "camera_view": plan["camera_view"],
+        "dominant_side": side,
+        "title": text(plan.get("title", "")),
+        "movement_summary": text(plan.get("movement_summary", "")),
+        "coaching_cues": [text(c) for c in plan.get("coaching_cues", [])],
+        "plan": plan,
+        "report": report,
+        "model": MODEL,
+        "llm_calls": calls,
+        "cached": cached,
     }
-    return report
 
-
-# -----------------------------------------------------------------------------
-# End-to-end endpoint: plan -> compile -> verify -> targeted replan
-# -----------------------------------------------------------------------------
 
 @app.post("/generate")
 def generate(req: GenerateRequest) -> Dict[str, Any]:
-    plan = call_planner(req)
-    frames, report = compile_motion(
-        plan,
-        req.duration_seconds,
-        req.playback_fps,
-    )
-    repair_log: List[Dict[str, Any]] = []
-    for attempt in range(req.repair_attempts):
-        if report.get("passed_geometric_checks", False):
-            break
-        previous_failure_signature = [(f.get("type"), f.get("anchor"), f.get("side")) for f in report.get("failures", [])]
-        repair_log.append({"attempt": attempt + 1, "failure_signature": previous_failure_signature})
+    key = _cache_key(req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds, req.quality, MODEL)
+    plan = cache_get(key) if req.use_cache else None
+    calls: List[Dict[str, Any]] = []
+    cached = plan is not None
+    if plan is None:
         try:
-            repaired = call_planner(req, previous_plan=plan, report=report)
-            new_frames, new_report = compile_motion(
-                repaired,
-                req.duration_seconds,
-                req.playback_fps,
-            )
-            # Keep the repair only if it strictly reduces failures, or achieves a pass.
-            if new_report["failure_count"] <= report["failure_count"] or new_report["passed_geometric_checks"]:
-                plan, frames, report = repaired, new_frames, new_report
-            else:
-                repair_log[-1]["repair_rejected"] = True
-                break
+            plan, calls = plan_movement(req.movement, req.extra_instructions, req.duration_seconds,
+                                        refine=req.quality == "high")
+        except HTTPException:
+            raise
         except Exception as exc:
-            repair_log[-1]["repair_error"] = str(exc)
-            break
-
-    return {
-        "frames": frames,
-        "playback_fps": req.playback_fps,
-        "duration_seconds_requested": req.duration_seconds,
-        "movement_summary": plan.get("movement_summary", ""),
-        "plan": plan,
-        "report": report,
-        "repair_log": repair_log,
-        "model": MODEL,
-    }
-
-
-# Simple local debug endpoint accepts a hand-written plan, so solver math can be tested without an API call.
-class CompileRequest(BaseModel):
-    plan: Dict[str, Any]
-    duration_seconds: float = Field(default=2.0, ge=0.6, le=8.0)
-    playback_fps: int = Field(default=DEFAULT_PLAYBACK_FPS, ge=6, le=30)
+            traceback.print_exc()
+            raise HTTPException(status_code=502, detail=f"Motion planning failed: {exc}") from exc
+        cache_put(key, plan)
+    try:
+        return _build_response(plan, req.duration_seconds, req.playback_fps, req.dominant_side, calls, cached)
+    except Exception as exc:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Motion compile failed: {exc}") from exc
 
 
 @app.post("/compile")
 def compile_endpoint(req: CompileRequest) -> Dict[str, Any]:
     try:
         plan = sanitize_plan(req.plan)
-        frames, report = compile_motion(plan, req.duration_seconds, req.playback_fps)
-        return {"frames": frames, "playback_fps": req.playback_fps, "plan": plan, "report": report}
+        return _build_response(plan, req.duration_seconds, req.playback_fps, req.dominant_side, [], False)
     except Exception as exc:
+        traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"Could not compile supplied plan: {exc}") from exc
 
 
+SELFTEST_PLAN: Dict[str, Any] = {
+    "title": "Jumping jack (built-in self-test)",
+    "loop": True,
+    "duration_seconds": 1.0,
+    "camera_view": "front",
+    "keyframes": [
+        {"t": 0.0, "phase": "closed", "pelvis": {"height": -0.04},
+         "right_hand": {"forward": 0.05, "up": -0.6, "out": 0.33}, "left_hand": {"forward": 0.05, "up": -0.6, "out": 0.33},
+         "right_foot": {"out": 0.12}, "left_foot": {"out": 0.12}},
+        {"t": 0.25, "phase": "takeoff", "pelvis": {"height": 0.08},
+         "right_hand": {"forward": 0.05, "up": -0.1, "out": 0.8}, "left_hand": {"forward": 0.05, "up": -0.1, "out": 0.8},
+         "right_foot": {"out": 0.3, "lift": 0.03}, "left_foot": {"out": 0.3, "lift": 0.03},
+         "left_foot_planted": False, "right_foot_planted": False},
+        {"t": 0.5, "phase": "open", "pelvis": {"height": -0.06},
+         "right_hand": {"forward": 0.05, "up": 0.62, "out": 0.25}, "left_hand": {"forward": 0.05, "up": 0.62, "out": 0.25},
+         "right_foot": {"out": 0.45}, "left_foot": {"out": 0.45}},
+        {"t": 0.75, "phase": "return", "pelvis": {"height": 0.08},
+         "right_hand": {"forward": 0.05, "up": -0.1, "out": 0.8}, "left_hand": {"forward": 0.05, "up": -0.1, "out": 0.8},
+         "right_foot": {"out": 0.3, "lift": 0.03}, "left_foot": {"out": 0.3, "lift": 0.03},
+         "left_foot_planted": False, "right_foot_planted": False},
+    ],
+}
+
+
+def selftest() -> int:
+    """Offline check of the solver (no API key needed): python motion_engine.py --selftest"""
+    plan = sanitize_plan(SELFTEST_PLAN)
+    ok = True
+    for side in ("right", "left"):
+        solved = mirror_plan(plan) if side == "left" else plan
+        frames, report = compile_motion(solved, None, DEFAULT_FPS)
+        print(f"[{side}-handed] frames={len(frames)} issues={report['issues']} "
+              f"travel={report['end_effector_travel_m']}")
+        ok = ok and len(frames) == 24 and not report["issues"]
+    print("SELFTEST", "PASSED" if ok else "FAILED")
+    return 0 if ok else 1
+
+
 if __name__ == "__main__":
+    import sys
+    if "--selftest" in sys.argv:
+        raise SystemExit(selftest())
     import uvicorn
-    print(f"Starting CogniCoach Motion Engine on http://{HOST}:{PORT}")
-    print(f"Model: {MODEL}")
-    print("Keep OPENAI_API_KEY in this server process; never paste it into browser JavaScript.")
+    print(f"CogniCoach Motion Engine on http://{HOST}:{PORT}  (model: {MODEL})")
+    if not os.getenv("OPENAI_API_KEY"):
+        print("WARNING: OPENAI_API_KEY is not set; /generate will fail until it is.")
     uvicorn.run(app, host=HOST, port=PORT, log_level="info")

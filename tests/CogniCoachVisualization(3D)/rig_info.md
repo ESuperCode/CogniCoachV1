@@ -37,17 +37,19 @@ All objects are arranged in this hierarchy in the unity game. All joints are not
 
 ## Motion engine contract
 
-`motion_engine.py` reads this hierarchy at startup and exposes the parsed digital rig at `GET /rig`.
-The language model does not need to produce joint angles or 3D coordinates. It emits compact movement
-segments with:
+`motion_engine.py` uses these proportions (measured against the Unity WebGL build) for its
+forward/inverse kinematics; `GET /rig` returns them.
 
-- `anchor`: `left_hand`, `right_hand`, `left_foot`, `right_foot`, `torso`, or `pelvis`
-- `path`: `linear`, `arc`, or `ellipse`
-- `direction`, `amplitude`, `cycles`, `phase`, and `oscillating`
-- `force`: `leverage`, `whip`, or `thrust`
-- optional supporting anchors and a `reverse_force` for oscillating actions
+The language model never writes joint angles or Unity Euler values. Each keyframe describes:
 
-The numerical compiler expands those segments into synchronized anchor trajectories, solves the
-limbs against the parsed proportions, and clamps joint rotations to athlete-safe limits. It keeps
-the existing sparse frame format consumed by `RagdollTest_AI.html`.
+- `right_hand` / `left_hand`: `forward`, `up`, `out` in metres, chest frame (`out` = outward toward
+  that hand's own side), plus `right_elbow_points` / `left_elbow_points`
+- `right_foot` / `left_foot`: `forward`, `out`, `lift` in metres (body frame) and `toe_out` degrees
+- `pelvis` (`height` drop/jump in metres, `twist`, `tilt`, `side`), `torso` (`lean`, `twist`,
+  `side_bend`), `head`, and whole-`body` `pitch` / `turn` / `roll`
+- `left_foot_planted`, `right_foot_planted`, `hands_together`
 
+The compiler interpolates the keyframes, solves arm and leg IK on the measured rig, locks planted
+feet, keeps hands out of the torso, and emits local Unity Euler angles (Z-X-Y) per joint in the
+sparse frame format consumed by `RagdollTest_AI.html`. `positionx/y/z` carry whole-body rotation
+(not translation) and `rooty` carries the vertical root offset in metres.

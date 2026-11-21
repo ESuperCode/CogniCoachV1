@@ -90,7 +90,22 @@
       box-sizing: border-box;
       padding: 7px;
     }
-    #motion-duration { width: 76px; }
+    #motion-duration { width: 64px; }
+    /* The rig cannot translate, so vertical root motion (squats, jumps) is shown by sliding the
+       canvas inside this frame. The gradient matches the scene background at the edges. */
+    #unity-canvas-frame {
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(ellipse at 72% 0%, #ff9058 0%, rgba(255, 144, 88, 0) 45%),
+        linear-gradient(#ff7a2e, #ff761d);
+    }
+    #unity-canvas-frame canvas { display: block; will-change: transform; }
+    .unity-mobile #unity-canvas-frame { width: 100%; height: 100%; }
+    #motion-info { font-size: 12px; color: #333; margin: 4px 0; max-height: 120px; overflow: auto; }
+    #motion-info b { display: block; margin-bottom: 2px; }
+    #motion-info ul { margin: 2px 0 0 16px; padding: 0; }
+    #view-row button { padding: 3px 8px; }
     #generate-motion-button {
       padding: 8px 10px;
       cursor: pointer;
@@ -110,7 +125,7 @@
   </head>
   <body>
     <div id="unity-container" class="unity-desktop">
-      <canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas>
+      <div id="unity-canvas-frame"><canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas></div>
       <div id="unity-loading-bar">
         <div id="unity-logo"></div>
         <div id="unity-progress-bar-empty">
@@ -129,9 +144,20 @@
         <label class="motion-prompt-label">Movement prompt
           <input id="motion-prompt" type="text" value="Demonstrate a technically clear tennis forehand" placeholder="Describe a sports movement" />
         </label>
-        <label>Duration (s) <input id="motion-duration" type="number" min="0.6" max="8" step="0.1" value="2.0" /></label>
+        <label>Duration (s) <input id="motion-duration" type="number" min="0.6" max="8" step="0.1" value="" placeholder="auto" /></label>
+        <label>Hand <select id="motion-side"><option value="right">Right</option><option value="left">Left</option></select></label>
+        <label>Quality <select id="motion-quality"><option value="fast">Fast</option><option value="high">High</option></select></label>
         <button id="generate-motion-button" type="button">Generate AI Motion</button>
       </div>
+      <div class="motion-row" id="view-row">
+        View
+        <button type="button" data-view="front">Front</button>
+        <button type="button" data-view="three_quarter">3/4</button>
+        <button type="button" data-view="side">Side</button>
+        <button type="button" data-view="back">Back</button>
+        <label><input id="vertical-motion" type="checkbox" checked> Vertical motion</label>
+      </div>
+      <div id="motion-info"></div>
       <div class="motion-row">
         <button id="load-frames-button" type="button">Load JSON Frames</button>
         <button id="play-motion-button" type="button">Play</button>
@@ -150,6 +176,15 @@
     </div>
     <script>
       
+      // Motion service location. Override with ?api=https://your-server or window.COGNICOACH_MOTION_API.
+      var MOTION_API_URL = (function() {
+        try {
+          var fromQuery = new URLSearchParams(window.location.search).get("api");
+          if (fromQuery) { return fromQuery; }
+        } catch (error) {}
+        return window.COGNICOACH_MOTION_API || "http://127.0.0.1:8000";
+      })();
+
       var canvas = document.querySelector("#unity-canvas");
       var motionControls = document.querySelector("#motion-controls");
       var unityMotionInstance = null;
@@ -415,6 +450,15 @@
         return frameBody;
       }
 
+      // Vertical root motion (metres, + = up). ~236 px per metre at the default 600 px canvas height.
+      function applyRootOffset(metres) {
+        var toggle = document.querySelector("#vertical-motion");
+        if (!canvas || (toggle && !toggle.checked)) { metres = 0; }
+        var pxPerMetre = 236 * ((canvas && canvas.clientHeight) || 600) / 600;
+        var offset = Math.max(-0.9, Math.min(0.9, metres)) * pxPerMetre;
+        canvas.style.transform = offset ? "translateY(" + (-offset).toFixed(1) + "px)" : "";
+      }
+
       function interpolateAngleDegrees(fromValue, toValue, amount) {
         var difference = ((toValue - fromValue + 540) % 360) - 180;
         return fromValue + difference * amount;
@@ -424,17 +468,43 @@
         return key !== "positionx" && key !== "positiony" && key !== "positionz";
       }
 
+      var JOINT_PREFIXES = ["hip", "spine", "neck", "lefthip", "righthip", "leftknee", "rightknee",
+        "leftshoulder", "rightshoulder", "leftelbow", "rightelbow"];
+
+      function slerpQuaternions(a, b, t) {
+        var dot = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+        if (dot < 0) { b = { x: -b.x, y: -b.y, z: -b.z, w: -b.w }; dot = -dot; }
+        if (dot > 0.9995) {
+          var r = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t, w: a.w + (b.w - a.w) * t };
+          var m = Math.sqrt(r.x * r.x + r.y * r.y + r.z * r.z + r.w * r.w);
+          return { x: r.x / m, y: r.y / m, z: r.z / m, w: r.w / m };
+        }
+        var theta = Math.acos(dot), s = Math.sin(theta);
+        var wa = Math.sin((1 - t) * theta) / s, wb = Math.sin(t * theta) / s;
+        return { x: a.x * wa + b.x * wb, y: a.y * wa + b.y * wb, z: a.z * wa + b.z * wb, w: a.w * wa + b.w * wb };
+      }
+
+      // Joint rotations are blended as quaternions (no Euler gimbal pops); the whole-body
+      // position* channels are blended linearly so multi-turn spins stay continuous.
       function interpolateBodyCode(fromFrame, toFrame, amount) {
         var fromBody = cloneBodyCode(fromFrame);
         var toBody = cloneBodyCode(toFrame);
         var blendedBody = {};
 
         Object.keys(DEFAULT_BODY_CODE).forEach(function(key) {
+          if (shouldWrapAngle(key)) { return; }
           var fromValue = Number(fromBody[key]) || 0;
           var toValue = Number(toBody[key]) || 0;
-          blendedBody[key] = shouldWrapAngle(key)
-            ? interpolateAngleDegrees(fromValue, toValue, amount)
-            : fromValue + (toValue - fromValue) * amount;
+          blendedBody[key] = fromValue + (toValue - fromValue) * amount;
+        });
+
+        JOINT_PREFIXES.forEach(function(joint) {
+          var qa = eulerToQuaternion(Number(fromBody[joint + "x"]) || 0, Number(fromBody[joint + "y"]) || 0, Number(fromBody[joint + "z"]) || 0);
+          var qb = eulerToQuaternion(Number(toBody[joint + "x"]) || 0, Number(toBody[joint + "y"]) || 0, Number(toBody[joint + "z"]) || 0);
+          var e = quaternionToEuler(slerpQuaternions(qa, qb, amount));
+          blendedBody[joint + "x"] = e[0];
+          blendedBody[joint + "y"] = e[1];
+          blendedBody[joint + "z"] = e[2];
         });
 
         return blendedBody;
@@ -454,7 +524,10 @@
           status: document.querySelector("#motion-status"),
           generateButton: document.querySelector("#generate-motion-button"),
           promptInput: document.querySelector("#motion-prompt"),
-          durationInput: document.querySelector("#motion-duration")
+          durationInput: document.querySelector("#motion-duration"),
+          sideInput: document.querySelector("#motion-side"),
+          qualityInput: document.querySelector("#motion-quality"),
+          info: document.querySelector("#motion-info")
         };
       }
 
@@ -481,9 +554,9 @@
         }
 
         var frame = cloneBodyCode(motionFrames[currentFrameIndex]);
+        applyRootOffset(Number(motionFrames[currentFrameIndex].rooty) || 0);
         sendUnityMessage("WebBridge", "UpdateMotion", relativityCalculation(frame));
         updateFrameControls();
-        setMotionStatus("Showing frame " + (currentFrameIndex + 1) + " of " + motionFrames.length + ".");
       }
 
       function sendInterpolatedFrame(amount) {
@@ -497,6 +570,9 @@
           motionFrames[nextFrameIndex],
           amount
         );
+        var rootA = Number(motionFrames[currentFrameIndex].rooty) || 0;
+        var rootB = Number(motionFrames[nextFrameIndex].rooty) || 0;
+        applyRootOffset(rootA + (rootB - rootA) * amount);
         sendUnityMessage("WebBridge", "UpdateMotion", relativityCalculation(frame));
         updateFrameControls();
       }
@@ -559,10 +635,6 @@
 
         function animateMotion(now) {
           sendInterpolatedFrame(getPlaybackBlendAmount(now, fps));
-          setMotionStatus(
-            "Playing frame " + (currentFrameIndex + 1) +
-            " toward frame " + (((currentFrameIndex + 1) % motionFrames.length) + 1) + "."
-          );
           motionAnimationId = requestAnimationFrame(animateMotion);
         }
 
@@ -638,12 +710,17 @@
           }
         };
 
-        // The OpenAI API key stays on the Python backend, not in this browser file.
+        document.querySelectorAll("#view-row button").forEach(function(button) {
+          button.onclick = function() { setCameraView(button.getAttribute("data-view")); };
+        });
+
+        // The OpenAI API key stays on the Python backend, never in this browser file.
         if (controls.generateButton) {
           controls.generateButton.onclick = async function() {
             var movement = (controls.promptInput && controls.promptInput.value || "").trim();
-            var duration = Number(controls.durationInput && controls.durationInput.value) || 2.0;
-            var fps = Math.max(6, Math.min(30, Number(controls.fpsInput.value) || 12));
+            var durationText = (controls.durationInput && controls.durationInput.value || "").trim();
+            var duration = durationText ? Number(durationText) : null;
+            var fps = 24;
             if (movement.length < 3) {
               setMotionStatus("Enter a sports movement first.", true);
               return;
@@ -651,18 +728,17 @@
 
             controls.generateButton.disabled = true;
             controls.generateButton.textContent = "Generating...";
-            setMotionStatus("Planning motion, solving joints, and checking the result...");
+            setMotionStatus("Planning the movement (this takes ~20-40 s)...");
             try {
-              var response = await fetch("http://127.0.0.1:8000/generate", {
+              var response = await fetch(MOTION_API_URL.replace(/\/$/, "") + "/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   movement: movement,
-                  duration_seconds: duration,
+                  duration_seconds: duration && duration >= 0.6 ? duration : null,
                   playback_fps: fps,
-                  dominant_side: "right",
-                  extra_instructions: "Make the movement useful as a clear visual demonstration for a sports coaching app.",
-                  repair_attempts: 0
+                  dominant_side: controls.sideInput ? controls.sideInput.value : "right",
+                  quality: controls.qualityInput ? controls.qualityInput.value : "fast"
                 })
               });
               var responseText = await response.text();
@@ -670,9 +746,7 @@
               try {
                 payload = responseText ? JSON.parse(responseText) : {};
               } catch (parseError) {
-                throw new Error(
-                  "Motion service returned invalid JSON (HTTP " + response.status + ")."
-                );
+                throw new Error("Motion service returned invalid JSON (HTTP " + response.status + ").");
               }
               if (!response.ok) {
                 throw new Error(payload.detail || ("Motion service returned HTTP " + response.status));
@@ -680,29 +754,9 @@
               if (!Array.isArray(payload.frames) || payload.frames.length < 2) {
                 throw new Error("The motion service returned no usable frames.");
               }
-
-              stopMotionLoop();
-              motionFrames = payload.frames;
-              currentFrameIndex = 0;
-              controls.fpsInput.value = payload.playback_fps || fps;
-              syncFramesTextarea();
-              updateFrameControls();
-              sendCurrentFrame();
-
-              var report = payload.report || {};
-              var status = "Generated " + motionFrames.length + " frames.";
-              status += report.passed_geometric_checks ? " Nominal-rig geometry checks passed." : " Nominal-rig checks found " + (report.failure_count || 0) + " issue(s).";
-              if (report.max_anchor_error_m) {
-                var errs = report.max_anchor_error_m;
-                var largest = Math.max(errs.left_hand || 0, errs.right_hand || 0, errs.left_foot || 0, errs.right_foot || 0);
-                status += " Max model anchor error: " + largest.toFixed(3) + " m.";
-              }
-              if (report.warnings && report.warnings.length) { status += " " + report.warnings[0]; }
-              setMotionStatus(status, false);
-              console.log("Motion plan:", payload.plan);
-              console.log("Motion verification:", report);
+              playGeneratedMotion(payload);
             } catch (error) {
-              setMotionStatus("Generation failed: " + error.message + " Make sure motion_engine.py is running.", true);
+              setMotionStatus("Generation failed: " + error.message + " Make sure motion_engine.py is running at " + MOTION_API_URL + ".", true);
               console.error(error);
             } finally {
               controls.generateButton.disabled = false;
@@ -712,6 +766,48 @@
         }
 
       }
+
+      var CAMERA_VIEWS = { front: 0, three_quarter: -45, side: -90, back: 180 };
+
+      function setCameraView(view) {
+        if (!(view in CAMERA_VIEWS)) { return; }
+        bodyPosition.positiony = CAMERA_VIEWS[view];
+        resendCurrentPose();
+      }
+
+      function escapeHtml(text) {
+        return String(text).replace(/[&<>"']/g, function(c) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+        });
+      }
+
+      // Load a /generate (or /compile) response and start playing it.
+      function playGeneratedMotion(payload) {
+        var controls = getFrameInputElements();
+        stopMotionLoop();
+        motionFrames = payload.frames;
+        currentFrameIndex = 0;
+        controls.fpsInput.value = payload.playback_fps || 24;
+        syncFramesTextarea();
+        if (payload.camera_view) { bodyPosition.positiony = CAMERA_VIEWS[payload.camera_view] || 0; }
+        if (controls.info) {
+          var html = "";
+          if (payload.title) { html += "<b>" + escapeHtml(payload.title) + "</b>"; }
+          if (payload.coaching_cues && payload.coaching_cues.length) {
+            html += "<ul>" + payload.coaching_cues.map(function(c) { return "<li>" + escapeHtml(c) + "</li>"; }).join("") + "</ul>";
+          }
+          controls.info.innerHTML = html;
+        }
+        updateFrameControls();
+        startMotionLoop();
+        var report = payload.report || {};
+        var status = "Generated " + motionFrames.length + " frames" + (payload.cached ? " (cached)" : "") + ".";
+        if (report.issues && report.issues.length) { status += " Note: " + report.issues[0]; }
+        setMotionStatus(status, false);
+        console.log("Motion plan:", payload.plan);
+        console.log("Motion report:", report);
+      }
+      window.playGeneratedMotion = playGeneratedMotion;
 
       setupMotionControls();
 
@@ -849,6 +945,8 @@
         // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:
         canvas.style.width = "960px";
         canvas.style.height = "600px";
+        document.querySelector("#unity-canvas-frame").style.width = "960px";
+        document.querySelector("#unity-canvas-frame").style.height = "600px";
       }
 
       document.querySelector("#unity-loading-bar").style.display = "block";
@@ -880,7 +978,7 @@
                 unityMotionInstance = unityInstance;
                 keepControlsInteractive();
                 setupMotionControls();
-                setMotionStatus("Unity loaded. Default walking animation is running.");
+                setMotionStatus("Unity loaded. Type a movement and press Generate AI Motion.");
                 // Unloading web content from DOM so that browser GC can run can be tricky to get right.
                 // This code snippet shows how to correctly implement a Unity content Unload mechanism to a web page.
 

@@ -1,49 +1,100 @@
-CogniCoach Motion Engine — Single-file AI-call split edition
-===========================================================
+CogniCoach Motion Engine v2
+===========================
 
-Files
------
-motion_engine.py    The entire Python backend in one file.
-RagdollTest_AI.html  Existing Unity WebGL visualizer with AI generation controls and fixed keyboard semantics.
+Files you touch
+---------------
+motion_engine.py     Python backend: text prompt -> animation frames for the Unity ragdoll.
+RagdollTest_AI.html  Unity WebGL page with the "Generate AI Motion" controls.
+rig_info.md          Rig hierarchy / proportions (source of truth for the solver constants).
 
-What changed
-------------
-1. The backend stays in one Python file; no imported project-specific Python modules are needed.
-2. Motion generation is split into three small structured OpenAI calls:
-   - Stage 1: movement director creates seven semantic phases.
-   - Stage 2: upper-body specialist generates torso, neck, hand targets and elbow flexion.
-   - Stage 3: lower-body specialist generates foot targets, knee flexion and foot-contact flags.
-   Stages 2 and 3 run concurrently after Stage 1. The verifier may trigger one targeted segment-repair call.
-3. Default OpenAI model is gpt-6-luna. It can be changed with OPENAI_MODEL. Model IDs and prices can change; check current OpenAI API model/pricing docs.
-4. The swimming fallback only intervenes when the generated hand or foot path is too static; it avoids unconditionally replacing all the LLM's motion outputs.
-5. Position X travel stays a root-position channel and is separate from hip rotation.
-6. In the HTML, plain arrow keys rotate the hip by 5 degrees per key press. Shift + arrows translate the whole avatar using 1.0 Unity unit per press. Focusing a text/input field disables these shortcuts to preserve text editing.
-7. The Unity WebGL `config` block (canvas sizing/build URLs) was compared with the original HTML and remains unchanged.
+One-time setup
+--------------
+1. Install:   python -m pip install --upgrade openai fastapi uvicorn numpy pydantic
+2. API key (pick ONE, do it once):
+   a) Windows, permanent for every new terminal:   setx OPENAI_API_KEY "sk-..."
+      (then open a NEW terminal; setx does not change the current one)
+      macOS/Linux: add  export OPENAI_API_KEY="sk-..."  to ~/.zshrc or ~/.bashrc
+   b) Or create a file named .env next to motion_engine.py containing one line:
+         OPENAI_API_KEY=sk-...
+      .env files are already git-ignored, so it can never be committed.
+   An environment variable always wins over .env.
+3. Optional settings (env vars or .env):
+      OPENAI_MODEL=gpt-5-mini            (default; the engine was tuned for it)
+      MOTION_REASONING_EFFORT=low        (low is the sweet spot; output length dominates latency)
+      MOTION_ALLOWED_ORIGINS=https://cognicoachai.com,https://www.cognicoachai.com   (default *)
+      MOTION_CACHE_DIR=./motion_cache    (persist generated plans across restarts)
+      MOTION_HOST / MOTION_PORT          (default 127.0.0.1:8000)
 
-Setup (Windows PowerShell)
---------------------------
-1. Put motion_engine.py beside your project folder (or run it from any working directory).
-2. Install dependencies:
-   python -m pip install --upgrade openai fastapi uvicorn numpy pydantic
-3. Set your API key in the same PowerShell terminal:
-   $env:OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
-4. Optionally select another model:
-   $env:OPENAI_MODEL="gpt-6-luna"
-5. Start the service:
-   python motion_engine.py
-6. Place RagdollTest_AI.html next to your Unity WebGL Build/ and TemplateData/ folders. Open the HTML and use Generate AI Motion.
+Run
+---
+   python motion_engine.py              starts the API on http://127.0.0.1:8000
+   python motion_engine.py --selftest   offline solver check, no API key needed
+Serve the folder over HTTP (the .unityweb files are Brotli: the server must send
+"Content-Encoding: br"), open RagdollTest_AI.html, type a movement, press Generate AI Motion.
+Use ?api=https://your-backend to point the page at a different backend.
 
-Security
---------
-Do not put OPENAI_API_KEY in HTML or client-side JavaScript. The key stays in the Python backend.
-Local testing:
-  - Copy .env.example to .env in the repository root.
-  - Set OPENAI_API_KEY=your-key only in the ignored .env file.
-  - Alternatively set OPENAI_API_KEY in the PowerShell process before starting the server.
-  - Never commit or paste the key into motion_engine.py.
+How it works (why it is better than before)
+-------------------------------------------
+Root causes of the old, bad animations (all verified by rendering the Unity build):
+  * The old solver added Euler angles (spine + shoulder ...) but the HTML/Unity compose them as
+    quaternions through the hierarchy, so every solved limb ended up somewhere else.
+  * positionx/y/z are the WHOLE-BODY ROTATION in Unity, not a translation; the old engine wrote
+    metres into them.
+  * The model had to invent raw 3D coordinates, which cheap models do badly.
 
-Notes / limitations
--------------------
-- The model is a nominal 1.75-unit human with assumed +X right, +Y up, +Z forward axes. If Unity uses different axes or rotated pivots, adjust MOTION_KNEE_HINGE_SIGN and the kinematic assumptions before judging the result.
-- Geometric verification uses the mathematical model, not transforms read back live from Unity. A passing report is not proof of correct sports technique.
-- I ran Python syntax checks, JavaScript syntax checks, and stubbed (non-network) pipeline tests. I did not run an authenticated OpenAI API call or a live Unity WebGL session in this environment.
+The new pipeline:
+  1. PLAN    gpt-5-mini writes anatomical keyframes in the terms a coach uses: where each hand is
+             relative to the chest, where each foot is, hip height, trunk lean/twist, which way the
+             elbows point, which feet are planted, whether both hands hold one implement. The prompt
+             carries calibrated reference poses (stances, jab, golf, sprint, kick, push-up...) and
+             animation craft rules (phases, timing, kinetic chain, anticipation/follow-through).
+  2. CHECK   Plans are clamped and auto-repaired (sign-convention mistakes, unreachable hands,
+             hands inside the torso, crossed feet...). If the solver finds >= 2 real problems, one
+             extra review call fixes them. Quality "high" always runs that review pass.
+  3. SOLVE   Monotone cubic splines between keys (no overshoot), then a full hierarchical FK/IK
+             model of the measured rig: arm and leg IK with elbow/knee direction control and
+             temporal continuity, planted-foot locking (no skating), two-handed grips, torso
+             collision avoidance, rotation-space smoothing, Euler-flip-free output.
+  4. EMIT    Unity local Euler angles (Z-X-Y) in the existing frame format. One-shot moves get a
+             hold + smooth return to the start pose so playback loops cleanly. Left-handed athletes
+             are an exact mirror of the right-handed plan.
+
+The HTML now blends frames with quaternion slerp (no Euler pops), auto-plays, shows the title and
+coaching cues, has camera-view buttons (front / 3/4 / side / back), a Hand selector, a Quality
+selector, and "Vertical motion": the rig cannot translate, so hip drops and jumps (frame key
+"rooty", metres) are shown by sliding the canvas inside its frame.
+
+API
+---
+POST /generate
+  {"movement": "tennis forehand",          required
+   "duration_seconds": null,               null = planner picks a realistic duration
+   "playback_fps": 24,
+   "dominant_side": "right" | "left",
+   "extra_instructions": "",               e.g. "beginner level, slow tempo"
+   "quality": "fast" | "high",             high = +1 review call (~2x time)
+   "use_cache": true}
+-> {"frames": [...], "playback_fps", "duration_seconds", "loop", "camera_view", "title",
+    "movement_summary", "coaching_cues", "plan", "report", "llm_calls", "cached"}
+POST /compile   {"plan": <plan from /generate>, ...}  re-solve a saved plan with no API call
+GET  /health, GET /rig
+
+Frames: sparse objects with the 33 joint keys (hipx ... rightelbowz), positionx/y/z (whole-body
+pitch/yaw/roll) and rooty (vertical root offset in metres; Unity ignores it today).
+In a page that already embeds the Unity build, call window.playGeneratedMotion(payload).
+
+Cost / speed (gpt-5-mini)
+-------------------------
+About 3.5k input + 3k output tokens per generation, so well under one cent each, and 25-45 s
+(the time is the JSON output length). Identical prompts are served from the cache instantly.
+For cognicoachai.com, pre-generate the drill library once and serve cached plans.
+
+Integrating into cognicoachai.com
+---------------------------------
+* Run motion_engine.py server-side (behind your web server); never put the API key in browser JS.
+* Set MOTION_ALLOWED_ORIGINS to your domain(s) and MOTION_CACHE_DIR to a persistent folder.
+* Point the page at it with ?api=https://motion.yourdomain or set window.COGNICOACH_MOTION_API
+  before the page script runs.
+* Optional Unity upgrade: let WebBridge/MotionController read "rooty" and add it to the hip
+  object's localPosition.y (metres * your rig scale). Squats and jumps then move for real and the
+  HTML "Vertical motion" canvas trick can be switched off.
