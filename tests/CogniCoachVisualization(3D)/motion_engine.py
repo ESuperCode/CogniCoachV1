@@ -32,6 +32,7 @@ Run:
 from __future__ import annotations
 
 import copy
+import difflib
 import hashlib
 import json
 import math
@@ -719,7 +720,18 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
         for side in ("left", "right"):
             hand = kf[f"{side}_hand"]
             sgn = 1.0 if side == "right" else -1.0
-            chest_point = keep_hand_outside_torso(np.array([sgn * hand["out"], hand["up"], hand["forward"]]), sgn) / UNIT_TO_M
+            point_m = np.array([sgn * hand["out"], hand["up"], hand["forward"]])
+            grip_w = kf["flags"]["hands_together"][1]
+            if side == dominant and grip_w > 0.0:
+                # Two hands on one implement: the grip point must be reachable by BOTH arms, so pull
+                # it toward the off-hand shoulder until it is (the model never has to get this right).
+                off_sh = np.array([(-sgn) * SHOULDER_OFFSET[0] * UNIT_TO_M, 0.0, 0.0])
+                d = float(np.linalg.norm(point_m - off_sh))
+                limit = 0.58
+                if d > limit:
+                    fixed = off_sh + (point_m - off_sh) * (limit / d)
+                    point_m = point_m + (fixed - point_m) * grip_w
+            chest_point = keep_hand_outside_torso(point_m, sgn) / UNIT_TO_M
             target = world["spine"] @ (chest_point + np.array([0.0, SHOULDER_OFFSET[1], 0.0]))
             upper, lower, _ = two_bone_ik(pos[side + "_shoulder"], target, world["spine"] @ kf[f"{side}_elbow_pole"],
                                           UPPER_ARM, FOREARM, world["spine"], "arm", ik_memory, side + "_arm")
@@ -1231,7 +1243,8 @@ def _openai_client():
     return OpenAI(max_retries=2, timeout=120)
 
 
-def _call_model(instructions: str, user_input: str, effort: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def _call_model(instructions: str, user_input: str, effort: str, schema: Optional[Dict[str, Any]] = None,
+                name: str = "motion_plan", max_tokens: int = 16000) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     client = _openai_client()
     t0 = time.time()
     resp = client.responses.create(
@@ -1240,8 +1253,8 @@ def _call_model(instructions: str, user_input: str, effort: str) -> Tuple[Dict[s
         input=user_input,
         reasoning={"effort": effort},
         store=False,
-        text={"format": {"type": "json_schema", "name": "motion_plan", "strict": True, "schema": PLAN_SCHEMA}},
-        max_output_tokens=16000,
+        text={"format": {"type": "json_schema", "name": name, "strict": True, "schema": schema or PLAN_SCHEMA}},
+        max_output_tokens=max_tokens,
     )
     if getattr(resp, "status", None) == "incomplete":
         raise ValueError(f"Model output incomplete: {getattr(resp, 'incomplete_details', None)}")
@@ -1255,9 +1268,9 @@ def _call_model(instructions: str, user_input: str, effort: str) -> Tuple[Dict[s
     return json.loads(text), meta
 
 
-def plan_movement(movement: str, extra: str = "", duration: Optional[float] = None,
+def plan_freeform(movement: str, extra: str = "", duration: Optional[float] = None,
                   refine: bool = False) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-    """fast: one planning call (+ one repair call only if the solver finds objective problems).
+    """Last-resort planner (free-form keyframes). fast: one planning call (+ one repair call only if the solver finds objective problems).
     high: planning call + a review call that fixes solver findings and technique."""
     calls: List[Dict[str, Any]] = []
     raw, meta = _call_model(PLANNER_INSTRUCTIONS, build_user_prompt(movement, extra, duration), REASONING_EFFORT)
@@ -1286,6 +1299,219 @@ def plan_movement(movement: str, extra: str = "", duration: Optional[float] = No
                 plan = plan2
         except Exception as exc:  # the review is best-effort; keep the first plan
             calls.append({"stage": "review", "error": str(exc)})
+    return plan, calls
+
+
+# -----------------------------------------------------------------------------
+# Library pipeline: the model only interprets and selects; code builds every number
+# -----------------------------------------------------------------------------
+import motion_library as ml  # noqa: E402
+
+TEMPO = {"slow": 1.35, "normal": 1.0, "fast": 0.8}
+INTENSITY = {"low": 0.8, "medium": 1.0, "high": 1.15}
+VIEWS = ["front", "side", "three_quarter", "back"]
+
+INTERPRET_SCHEMA = _obj({
+    "title": {"type": "string"},
+    "movement_summary": {"type": "string"},
+    "sport_or_context": {"type": "string"},
+    "implement": {"type": "string", "enum": ["none", "racket", "club", "bat", "stick", "ball", "weights", "other"]},
+    "body_orientation": {"type": "string", "enum": ["upright", "face_down", "face_up", "changes"]},
+    "repeating_cycle": {"type": "boolean"},
+    "phases": {"type": "array", "items": {"type": "string"}},
+    "closest_standard_movements": {"type": "array", "items": {"type": "string"}},
+    "tempo": {"type": "string", "enum": list(TEMPO)},
+    "intensity": {"type": "string", "enum": list(INTENSITY)},
+    "coaching_cues": {"type": "array", "items": {"type": "string"}},
+})
+
+INTERPRET_INSTRUCTIONS = """
+You are a sports biomechanics coach. Read the movement request and describe precisely what the
+athlete's body does, as a short brief for an animator. Requests can be standard sports skills,
+gym exercises, or brand-new drills invented by a coach: for new drills, work out the body actions
+from the description. Assume a right-handed athlete.
+- phases: 2-8 short steps in order; each names the main body parts and what they do
+  (e.g. "drop into a low crouch, hands touch the floor", "right hand reaches across to the left foot").
+- closest_standard_movements: 1-4 well-known movements/exercises that look most like this one.
+- repeating_cycle: true for continuous cyclic actions (running, swimming, skipping, shuffling...).
+- coaching_cues: 3-5 short practical cues a coach would say.
+Be concrete and brief.
+""".strip()
+
+COMPOSE_SCHEMA = _obj({
+    "segments": {"type": "array", "items": _obj({
+        "template": {"type": "string", "enum": list(ml.TEMPLATES)},
+        "variant": {"type": "string"},
+        "reps": {"type": "integer"},
+        "tempo": {"type": "string", "enum": list(TEMPO)},
+        "intensity": {"type": "string", "enum": list(INTENSITY)},
+    })},
+    "camera_view": {"type": "string", "enum": VIEWS},
+})
+
+COMPOSE_INSTRUCTIONS = """
+You build an animation from a FIXED LIBRARY of professionally animated movement templates.
+You cannot invent motion data: you only choose library entries, in order, as "segments".
+
+Rules:
+1. If one template variant matches the movement, use exactly that one segment.
+2. Combine several segments in order for combos and multi-part drills (e.g. a sprint into a jump,
+   a squat followed by an overhead press).
+3. For movements that no template covers (stretches, holds, novel coach drills, reaching patterns),
+   use template "poses" with variant = pose names joined by ">", e.g.
+   "athletic_stance>reach_right_hand_to_left_foot>low_crouch_hands_down>reach_left_hand_to_right_foot".
+   For a REPEATING drill give exactly ONE cycle (it loops automatically); for a one-off sequence start
+   and end in a neutral pose. Pick only poses the drill really contains. Examples:
+   - zigzag spider drill: "low_crouch_hands_down>reach_right_hand_to_left_foot>low_crouch_hands_down>reach_left_hand_to_right_foot"
+   - toe touch to overhead reach: "standing>toe_touch>overhead_reach>standing"
+   - cone touch to the front-right: "athletic_stance>reach_low_right>athletic_stance"
+   - sun salutation: "standing>overhead_reach>toe_touch>lunge_right_forward>plank>push_up_bottom>lean_back_arch>plank>toe_touch>overhead_reach>standing"
+   You may mix "poses" segments with other templates.
+4. variant must be copied EXACTLY from the catalog list for that template (punch: shots joined
+   with "-"; poses: pose names joined with ">").
+5. reps: 1-4 (cycles for repeating templates; repetitions for one-shot actions). Use 1 unless the
+   drill asks for repetitions or a combination needs it.
+6. camera_view: side for running/squats/push-ups/swimming/sagittal motion, front for lateral or
+   symmetric motion (jumping jacks, shuffles, golf), three_quarter for rotational swings and throws.
+
+LIBRARY CATALOG:
+""".strip() + "\n" + ml.catalog_text()
+
+
+def _compose_input(movement: str, extra: str, brief: Dict[str, Any], errors: Optional[List[str]] = None,
+                   previous: Optional[Dict[str, Any]] = None) -> str:
+    parts = [f"REQUEST: {movement}"]
+    if extra.strip():
+        parts.append(f"EXTRA NOTES: {extra.strip()}")
+    parts.append("COACH BRIEF:\n" + json.dumps({k: brief.get(k) for k in (
+        "sport_or_context", "implement", "body_orientation", "repeating_cycle", "phases",
+        "closest_standard_movements", "tempo", "intensity")}, ensure_ascii=False))
+    if errors:
+        parts.append("YOUR PREVIOUS ANSWER:\n" + json.dumps(previous))
+        parts.append("PROBLEMS FOUND BY THE VALIDATOR (fix them):\n" + "\n".join("- " + e for e in errors))
+    return "\n\n".join(parts)
+
+
+def validate_segments(segments: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[str], List[str]]:
+    """Map model choices onto the library. Returns (resolved, errors, notes)."""
+    resolved, errors, notes = [], [], []
+    if not segments:
+        errors.append("No segments were given.")
+    for i, seg in enumerate(segments[:8]):
+        try:
+            t, v, n = ml.resolve(str(seg.get("template", "")), str(seg.get("variant", "")))
+            if t == "poses":
+                names = [x.strip() for x in v.split(">") if x.strip()]
+                bad = [x for x in names if not difflib.get_close_matches(
+                    x.lower().replace(" ", "_").replace("-", "_"), list(ml.POSES), 1, 0.45)]
+                if bad or not names:
+                    raise KeyError(f"unknown pose name(s) {bad or v!r}; choose from the pose list")
+            notes += [f"segment {i}: {x}" for x in n]
+            resolved.append({
+                "template": t, "variant": v,
+                "reps": int(max(1, min(4, int(seg.get("reps", 1) or 1)))),
+                "tempo": seg.get("tempo", "normal") if seg.get("tempo") in TEMPO else "normal",
+                "intensity": seg.get("intensity", "medium") if seg.get("intensity") in INTENSITY else "medium",
+            })
+        except Exception as exc:
+            errors.append(f"segment {i} ({seg.get('template')}/{seg.get('variant')}): {exc}")
+    return resolved, errors, notes
+
+
+def compose_plan(segments: List[Dict[str, Any]], brief: Dict[str, Any], view: Optional[str],
+                 duration: Optional[float]) -> Dict[str, Any]:
+    """Glue library segments into one keyframe plan (absolute timing, transitions, repetitions)."""
+    built = []
+    for seg in segments:
+        out = ml.build_segment(seg["template"], seg["variant"], INTENSITY[seg["intensity"]])
+        out["duration"] *= TEMPO[seg["tempo"]]
+        built.append((seg, out))
+    # A single pose sequence describing a repeating drill becomes a seamless loop.
+    if len(built) == 1 and built[0][0]["template"] == "poses" and brief.get("repeating_cycle"):
+        keys = built[0][1]["keys"]
+        if len(keys) >= 3 and keys[-1]["phase"] == keys[0]["phase"]:
+            keys.pop()
+            n = len(keys)
+            for i, k in enumerate(keys):
+                k["t"] = i / n
+            built[0][1]["duration"] *= n / (n + 1)
+        built[0][1]["loop"] = True
+    # Keep the whole clip under ~8 s by trimming repetitions.
+    def total_len() -> float:
+        return sum((s["reps"] if not o["loop"] or len(built) > 1 else 1) * o["duration"] for s, o in built)
+    while total_len() > 8.0 and any(s["reps"] > 1 for s, _ in built):
+        max(built, key=lambda b: b[0]["reps"] * b[1]["duration"])[0]["reps"] -= 1
+    single_loop = len(built) == 1 and built[0][1]["loop"]
+    keys_abs: List[Tuple[float, Dict[str, Any]]] = []
+    clock = 0.0
+    if single_loop:
+        seg, out = built[0]
+        for k in out["keys"]:
+            keys_abs.append((k["t"] * out["duration"], copy.deepcopy(k)))
+        clock = out["duration"]
+    else:
+        for si, (seg, out) in enumerate(built):
+            reps = seg["reps"] if not out["loop"] else max(2, seg["reps"])
+            if keys_abs:
+                clock += 0.3  # transition between segments
+            for r in range(reps):
+                cycle = [copy.deepcopy(k) for k in out["keys"]]
+                if out["loop"]:
+                    close = copy.deepcopy(out["keys"][0]); close["t"] = 1.0
+                    cycle.append(close)
+                for j, k in enumerate(cycle):
+                    if (r > 0 or keys_abs) and j == 0 and keys_abs and abs(clock - keys_abs[-1][0]) < 1e-6:
+                        continue  # identical boundary key between repetitions
+                    keys_abs.append((clock + k["t"] * out["duration"], k))
+                clock += out["duration"]
+    total = max(clock, 1e-3)
+    keyframes = []
+    for t_abs, k in keys_abs:
+        k["t"] = t_abs / total
+        keyframes.append(k)
+    # Enforce strictly increasing times.
+    keyframes.sort(key=lambda k: k["t"])
+    first_view = built[0][1]["view"] if built else "three_quarter"
+    plan = sanitize_plan({
+        "title": brief.get("title", ""),
+        "movement_summary": brief.get("movement_summary", ""),
+        "coaching_cues": brief.get("coaching_cues", []),
+        "loop": single_loop,
+        "duration_seconds": min(8.0, total) if not duration else duration,
+        "camera_view": view if view in VIEWS else first_view,
+        "keyframes": keyframes,
+    })
+    if any(abs(k["body"]["pitch"]) > 45 for k in plan["keyframes"]):
+        plan["camera_view"] = "side"  # horizontal bodies read best from the side
+    plan["segments"] = segments
+    plan["brief"] = {k: brief.get(k) for k in ("sport_or_context", "phases", "closest_standard_movements")}
+    return plan
+
+
+def plan_movement(movement: str, extra: str = "", duration: Optional[float] = None,
+                  refine: bool = False) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """Multi-call pipeline: interpret -> compose (enum-constrained) -> validate -> repair -> build."""
+    calls: List[Dict[str, Any]] = []
+    brief, meta = _call_model(INTERPRET_INSTRUCTIONS, f"Movement request: {movement}\n{extra}".strip(),
+                              "low", INTERPRET_SCHEMA, "movement_brief", 4000)
+    calls.append({"stage": "interpret", **meta})
+    compose_in = _compose_input(movement, extra, brief)
+    raw, meta = _call_model(COMPOSE_INSTRUCTIONS, compose_in, "medium" if refine else "low",
+                            COMPOSE_SCHEMA, "segment_plan", 6000)
+    segments, errors, notes = validate_segments(raw.get("segments", []))
+    calls.append({"stage": "compose", **meta, "segments": raw.get("segments"), "errors": errors, "notes": notes})
+    if errors:
+        raw2, meta2 = _call_model(COMPOSE_INSTRUCTIONS, _compose_input(movement, extra, brief, errors, raw),
+                                  "medium", COMPOSE_SCHEMA, "segment_plan", 6000)
+        segments2, errors2, notes2 = validate_segments(raw2.get("segments", []))
+        calls.append({"stage": "repair", **meta2, "segments": raw2.get("segments"), "errors": errors2})
+        if segments2 and len(errors2) <= len(errors):
+            segments, raw = segments2, raw2
+    if not segments:
+        # Nothing usable from the library: fall back to the free-form planner.
+        plan, more = plan_freeform(movement, extra, duration, refine)
+        return plan, calls + more
+    plan = compose_plan(segments, brief, raw.get("camera_view"), duration)
     return plan, calls
 
 
@@ -1405,7 +1631,8 @@ def _build_response(plan: Dict[str, Any], duration: Optional[float], fps: int, s
 
 @app.post("/generate")
 def generate(req: GenerateRequest) -> Dict[str, Any]:
-    key = _cache_key(req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds, req.quality, MODEL)
+    key = _cache_key("v3", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
+                     req.quality, MODEL)
     plan = cache_get(key) if req.use_cache else None
     calls: List[Dict[str, Any]] = []
     cached = plan is not None

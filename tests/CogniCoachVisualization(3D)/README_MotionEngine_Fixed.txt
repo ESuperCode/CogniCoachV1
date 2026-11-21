@@ -42,22 +42,22 @@ Root causes of the old, bad animations (all verified by rendering the Unity buil
     metres into them.
   * The model had to invent raw 3D coordinates, which cheap models do badly.
 
-The new pipeline:
-  1. PLAN    gpt-5-mini writes anatomical keyframes in the terms a coach uses: where each hand is
-             relative to the chest, where each foot is, hip height, trunk lean/twist, which way the
-             elbows point, which feet are planted, whether both hands hold one implement. The prompt
-             carries calibrated reference poses (stances, jab, golf, sprint, kick, push-up...) and
-             animation craft rules (phases, timing, kinetic chain, anticipation/follow-through).
-  2. CHECK   Plans are clamped and auto-repaired (sign-convention mistakes, unreachable hands,
-             hands inside the torso, crossed feet...). If the solver finds >= 2 real problems, one
-             extra review call fixes them. Quality "high" always runs that review pass.
-  3. SOLVE   Monotone cubic splines between keys (no overshoot), then a full hierarchical FK/IK
-             model of the measured rig: arm and leg IK with elbow/knee direction control and
-             temporal continuity, planted-foot locking (no skating), two-handed grips, torso
-             collision avoidance, rotation-space smoothing, Euler-flip-free output.
-  4. EMIT    Unity local Euler angles (Z-X-Y) in the existing frame format. One-shot moves get a
-             hold + smooth return to the start pose so playback loops cleanly. Left-handed athletes
-             are an exact mirror of the right-handed plan.
+The pipeline (v3) - rigid code, flexible model:
+  motion_library.py holds hand-built, render-verified templates (run/swim/swing/overhead/punch/
+  kick/jump/strength/floor/agility/ball skills, ~90 variants) plus ~40 named poses. The model never
+  writes animation numbers.
+  1. INTERPRET  call 1: the model turns the request into a short coach brief (phases, implement,
+                orientation, repeating?, closest standard movements, cues).
+  2. COMPOSE    call 2: the model picks segments from the catalog (template is a JSON enum, so it
+                cannot be invalid) with variant, reps, tempo, intensity. Novel drills become a
+                sequence of named poses ("low_crouch_hands_down>reach_right_hand_to_left_foot>...").
+  3. VALIDATE   code fuzzy-matches every choice; anything unknown goes back to the model with the
+                exact error (call 3, repair). Free-form keyframes are only a last resort.
+  4. BUILD      code glues segments (timing, transitions, reps capped to 8 s, loops), enforces
+                two-hand reach for gripped implements, picks a side camera for horizontal bodies,
+                then solves FK/IK exactly as before (foot locking, collisions, smoothing).
+  Typical generation: 10-20 s, 2 small calls. To add a sport skill, add a variant to
+  motion_library.py and check it with: python motion_engine.py --selftest
 
 The HTML now blends frames with quaternion slerp (no Euler pops), auto-plays, shows the title and
 coaching cues, has camera-view buttons (front / 3/4 / side / back), a Hand selector, a Quality
