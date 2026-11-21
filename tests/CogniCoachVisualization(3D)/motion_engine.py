@@ -236,13 +236,23 @@ def sanitize_plan(plan: Dict[str, Any]) -> Dict[str, Any]:
     kfs = [sanitize_keyframe(k, i / max(1, n - 1)) for i, k in enumerate(raw)]
     kfs.sort(key=lambda k: k["t"])
     ts = np.array([k["t"] for k in kfs], dtype=float)
+    loop_plan = bool(plan.get("loop", False))
     if ts[-1] - ts[0] < 1e-6:
-        ts = np.linspace(0, 1, n)
-    ts = (ts - ts[0]) / (ts[-1] - ts[0])
-    # Enforce a minimum spacing so splines stay well behaved.
-    for i in range(1, n):
-        ts[i] = max(ts[i], ts[i - 1] + 0.012)
-    ts = ts / ts[-1]
+        ts = np.linspace(0, 1, n) if not loop_plan else np.arange(n) / n
+    if loop_plan and ts[0] >= 0 and ts[-1] < 1.0 - 1e-6:
+        # A cycle: keys live in [0, 1) and the solver closes the loop back to the first key.
+        # Stretching them to end at 1.0 would make the last key a duplicate of the first.
+        ts = ts - ts[0]
+        for i in range(1, n):
+            ts[i] = max(ts[i], ts[i - 1] + 0.012)
+        if ts[-1] > 0.985:
+            ts = ts * (0.985 / ts[-1])
+    else:
+        ts = (ts - ts[0]) / (ts[-1] - ts[0])
+        # Enforce a minimum spacing so splines stay well behaved.
+        for i in range(1, n):
+            ts[i] = max(ts[i], ts[i - 1] + 0.012)
+        ts = ts / ts[-1]
     for k, t in zip(kfs, ts):
         k["t"] = float(t)
     fix_mirrored_left_side(kfs)
@@ -1443,6 +1453,14 @@ def validate_segments(segments: List[Dict[str, Any]]) -> Tuple[List[Dict[str, An
 def compose_plan(segments: List[Dict[str, Any]], brief: Dict[str, Any], view: Optional[str],
                  duration: Optional[float]) -> Dict[str, Any]:
     """Glue library segments into one keyframe plan (absolute timing, transitions, repetitions)."""
+    # Consecutive boxing segments are one fluid combination, not separate clips.
+    merged: List[Dict[str, Any]] = []
+    for seg in segments:
+        if merged and seg["template"] == "punch" and merged[-1]["template"] == "punch":
+            merged[-1] = dict(merged[-1], variant=merged[-1]["variant"] + "-" + seg["variant"])
+        else:
+            merged.append(dict(seg))
+    segments = merged
     built = []
     for seg in segments:
         out = ml.build_segment(seg["template"], seg["variant"], INTENSITY[seg["intensity"]])
@@ -1450,14 +1468,15 @@ def compose_plan(segments: List[Dict[str, Any]], brief: Dict[str, Any], view: Op
         built.append((seg, out))
     # A single pose sequence describing a repeating drill becomes a seamless loop.
     if len(built) == 1 and built[0][0]["template"] == "poses" and brief.get("repeating_cycle"):
-        keys = built[0][1]["keys"]
-        if len(keys) >= 3 and keys[-1]["phase"] == keys[0]["phase"]:
-            keys.pop()
-            n = len(keys)
-            for i, k in enumerate(keys):
-                k["t"] = i / n
-            built[0][1]["duration"] *= n / (n + 1)
-        built[0][1]["loop"] = True
+        seg0 = built[0][0]
+        names = [x.strip() for x in seg0["variant"].split(">") if x.strip()]
+        if names and names[-1] != names[0]:
+            names.append(names[0])  # close the cycle with a real transition back to the start
+        out = ml.build_segment("poses", ">".join(names), INTENSITY[seg0["intensity"]])
+        out["duration"] *= TEMPO[seg0["tempo"]]
+        out["keys"].pop()  # the final key equals the first; the solver closes the loop
+        out["loop"] = True
+        built[0] = (seg0, out)
     # Keep the whole clip under ~8 s by trimming repetitions.
     def total_len() -> float:
         return sum((s["reps"] if not o["loop"] or len(built) > 1 else 1) * o["duration"] for s, o in built)
@@ -1503,7 +1522,7 @@ def compose_plan(segments: List[Dict[str, Any]], brief: Dict[str, Any], view: Op
         "camera_view": view if view in VIEWS else first_view,
         "keyframes": keyframes,
     })
-    if any(abs(k["body"]["pitch"]) > 45 for k in plan["keyframes"]):
+    if any(abs(k["body"]["pitch"]) > 65 for k in plan["keyframes"]):
         plan["camera_view"] = "side"  # horizontal bodies read best from the side
     plan["segments"] = segments
     plan["brief"] = {k: brief.get(k) for k in ("sport_or_context", "phases", "closest_standard_movements")}

@@ -154,11 +154,12 @@ def tpl_swim(variant: str, amp: float) -> Dict[str, Any]:
         outsweep = K(0.25, "outsweep", plant="none", re="out", le="out", body=(84, 0, 0), head=(5, 0, 0),
                      rh=(0.22, 0.45, 0.48), lh=(0.22, 0.45, 0.48), rf=(0.0, 0.08, 0.0, 10), lf=(0.0, 0.08, 0.0, 10))
         insweep = K(0.45, "insweep + breathe", plant="none", re="out", le="out", body=(74, 0, 0), head=(-25, 0, 0),
-                    rh=(0.4, 0.02, 0.1), lh=(0.4, 0.02, 0.1), rf=(-0.12, 0.14, 0.22, 35), lf=(-0.12, 0.14, 0.22, 35))
-        recover = K(0.6, "recovery + kick set", plant="none", re="down", le="down", body=(80, 0, 0), head=(0, 0, 0),
-                    rh=(0.3, 0.35, 0.08), lh=(0.3, 0.35, 0.08), rf=(-0.28, 0.28, 0.38, 45), lf=(-0.28, 0.28, 0.38, 45))
+                    rh=(0.4, 0.02, 0.1), lh=(0.4, 0.02, 0.1), rf=(-0.04, 0.16, 0.2, 35), lf=(-0.04, 0.16, 0.2, 35))
+        recover = K(0.6, "heels to seat, knees apart", plant="none", re="down", le="down", body=(82, 0, 0),
+                    head=(0, 0, 0), pel=(0, 0, 10, 0),
+                    rh=(0.3, 0.35, 0.08), lh=(0.3, 0.35, 0.08), rf=(-0.16, 0.3, 0.36, 50), lf=(-0.16, 0.3, 0.36, 50))
         kick = K(0.75, "whip kick", plant="none", re="out", le="out", body=(86, 0, 0), head=(10, 0, 0),
-                 rh=(0.15, 0.6, 0.12), lh=(0.15, 0.6, 0.12), rf=(0.0, 0.32, 0.08, 30), lf=(0.0, 0.32, 0.08, 30))
+                 rh=(0.15, 0.6, 0.12), lh=(0.15, 0.6, 0.12), rf=(0.02, 0.38, 0.1, 40), lf=(0.02, 0.38, 0.1, 40))
         return {"keys": [glide, outsweep, insweep, recover, kick], "duration": 1.6, "loop": True, "view": "side"}
     if variant == "butterfly":
         # Arms: catch wide, keyhole pull under the chest, push past the hips, then a straight-arm
@@ -484,6 +485,29 @@ def tpl_kick(variant: str, amp: float) -> Dict[str, Any]:
                            lf=(0.15, 0.1, 0, 60))),
                 K(1.0, "guard", **guard)]
         return {"keys": keys, "duration": 1.4, "loop": False, "view": "front"}
+    if variant in ("soccer_pass", "inside_foot_pass"):
+        # Inside-of-the-foot pass: plant foot beside the ball, kicking leg turned out (toe_out 70)
+        # so the inside of the foot faces the target, short controlled swing, firm ankle.
+        arms = dict(rh=(0.1, -0.45, 0.4), lh=(0.1, -0.45, 0.4))
+        keys = [
+            K(0.0, "approach", **_merge(STANDING, **arms, pel=(-0.06, 0, 4), tor=(12, 0, 0),
+                                        rf=(-0.05, 0.12, 0, 10), lf=(0.05, 0.12, 0, 10))),
+            K(0.3, "plant beside ball", plant="left",
+              **_merge(STANDING, **arms, pel=(-0.1, 0, 4), tor=(14, 0, 0), lf=(0.1, 0.18, 0, 10),
+                       rf=(-0.2, 0.12, 0.12, 60))),
+            K(0.5, "backswing, foot turned out", plant="left",
+              **_merge(STANDING, rh=(0.0, -0.4, 0.45), lh=(0.2, -0.3, 0.45), pel=(-0.12, 10, 4), tor=(14, 5, 0),
+                       lf=(0.1, 0.18, 0, 10), rf=(-0.25, 0.14, 0.18, 70))),
+            K(0.66, "contact (inside of foot)", plant="left",
+              **_merge(STANDING, rh=(0.15, -0.4, 0.4), lh=(0.15, -0.35, 0.45), pel=(-0.12, -5, 4), tor=(18, -5, 0),
+                       lf=(0.1, 0.18, 0, 10), rf=(0.12, 0.06, 0.1, 75))),
+            K(0.8, "short follow-through", plant="left",
+              **_merge(STANDING, **arms, pel=(-0.1, -10, 4), tor=(16, -8, 0),
+                       lf=(0.1, 0.18, 0, 10), rf=(0.3, 0.04, 0.14, 70))),
+            K(1.0, "set", **_merge(STANDING, **arms, pel=(-0.06, 0, 4), tor=(12, 0, 0),
+                                   rf=(0.15, 0.14, 0, 15), lf=(0.05, 0.14, 0, 10))),
+        ]
+        return {"keys": keys, "duration": 1.4, "loop": False, "view": "three_quarter"}
     if variant in ("knee_strike",):
         guard = dict(rh=(0.25, 0.1, 0.15), lh=(0.28, 0.1, 0.15), pel=(-0.06, 10, 4), tor=(10, 10, 0),
                      rf=(-0.15, 0.15, 0, 20), lf=(0.15, 0.1, 0, 15))
@@ -557,6 +581,22 @@ def tpl_jump(variant: str, amp: float) -> Dict[str, Any]:
         return {"keys": keys, "duration": 1.2, "loop": True, "view": "front"}
     if variant == "box_jump":
         pass
+    if variant in ("broad_jump", "standing_long_jump"):
+        keys = [
+            K(0.0, "stand", **_merge(STANDING, rf=(0, 0.14, 0, 10), lf=(0, 0.14, 0, 10))),
+            K(0.3, "swing arms back + load", re="back", le="back",
+              **_merge(STANDING, rh=(-0.4, -0.35, 0.3), lh=(-0.4, -0.35, 0.3), pel=(-0.3, 0, 14), tor=(55, 0, 0))),
+            K(0.45, "drive forward", plant="none",
+              **_merge(STANDING, rh=(0.45, 0.35, 0.25), lh=(0.45, 0.35, 0.25), pel=(0.1, 0, 0), tor=(25, 0, 0),
+                       body=(20, 0, 0), rf=(-0.1, 0.14, 0.05, 10), lf=(-0.1, 0.14, 0.05, 10))),
+            K(0.62, "flight, knees forward", plant="none",
+              **_merge(STANDING, rh=(0.45, 0.1, 0.25), lh=(0.45, 0.1, 0.25), pel=(0.3, 0, 0), tor=(20, 0, 0),
+                       body=(5, 0, 0), rf=(0.25, 0.14, 0.35, 10), lf=(0.25, 0.14, 0.35, 10))),
+            K(0.8, "stick the landing", **_merge(STANDING, rh=(0.45, -0.2, 0.25), lh=(0.45, -0.2, 0.25),
+                                                 pel=(-0.32, 0, 14), tor=(40, 0, 0))),
+            K(1.0, "stand", **_merge(STANDING, rf=(0, 0.14, 0, 10), lf=(0, 0.14, 0, 10))),
+        ]
+        return {"keys": keys, "duration": 1.8, "loop": False, "view": "side"}
     tuck = variant in ("tuck_jump",)
     squat_jump = variant in ("squat_jump", "box_jump")
     load_h = -0.4 if squat_jump else -0.25
@@ -664,6 +704,13 @@ def tpl_strength(variant: str, amp: float) -> Dict[str, Any]:
         k0 = K(0.0, "arms long", rh=HANG, lh=HANG)
         k1 = K(0.5, "curl up", rh=(0.25, -0.05, 0.3), lh=(0.25, -0.05, 0.3))
         return {"keys": [k0, k1], "duration": 2.0, "loop": True, "view": "side"}
+    if variant in ("arm_circles",):
+        def ac(t, ang):
+            import math as _m
+            a_ = _m.radians(ang)
+            hand = (0.05 + 0.18 * _m.sin(a_), 0.18 * _m.cos(a_), 0.92)
+            return K(t, "circle", rh=hand, lh=hand)
+        return {"keys": [ac(i / 6, i * 60) for i in range(6)], "duration": 1.2, "loop": True, "view": "front"}
     if variant in ("calf_raise",):
         k0 = K(0.0, "flat", rh=(0.0, -0.45, 0.35), lh=(0.0, -0.45, 0.35), re="out", le="out")
         k1 = K(0.5, "up on toes", rh=(0.0, -0.45, 0.35), lh=(0.0, -0.45, 0.35), re="out", le="out", pel=(0.08, 0, 0))
@@ -725,6 +772,37 @@ def tpl_floor(variant: str, amp: float) -> Dict[str, Any]:
         up = K(0.5, "hips up", plant="none", body=(-62, 0, 0), tor=(-20, 0, 0), rh=(-0.05, -0.55, 0.35),
                lh=(-0.05, -0.55, 0.35), rf=(0.35, 0.14, 0.45, 10), lf=(0.35, 0.14, 0.45, 10))
         return {"keys": [lie, up], "duration": 2.0, "loop": True, "view": "side"}
+    if variant in ("russian_twist",):
+        base = dict(body=(-50, 0, 0), plant="none", rf=(0.3, 0.12, 0.38, 10), lf=(0.3, 0.12, 0.38, 10))
+        k0 = K(0.0, "twist right", grip=True, body=(-50, 0, 0), plant="none", rf=base["rf"], lf=base["lf"],
+               tor=(25, 45 * a, 0), rh=(0.4, -0.35, 0.05), lh=(0.4, -0.35, 0.05))
+        k1 = swap_sides(k0, 0.5, "twist left")
+        return {"keys": [k0, k1], "duration": 1.6, "loop": True, "view": "three_quarter"}
+    if variant in ("inchworm", "inchworm_walkout"):
+        keys = [
+            K(0.0, "stand", rh=HANG, lh=HANG),
+            K(0.18, "hinge, hands to floor", rh=(0.35, -0.62, 0.2), lh=(0.35, -0.62, 0.2), tor=(85, 0, 0), pel=(-0.04, 0, 25)),
+            K(0.34, "walk hands out", plant="none", rh=(0.25, -0.6, 0.25), lh=(0.25, -0.6, 0.25), body=(45, 0, 0),
+              tor=(40, 0, 0), re="back", le="back"),
+            K(0.5, "plank", plant="none", body=(76, 0, 0), rh=(0.0, -0.6, 0.32), lh=(0.0, -0.6, 0.32), re="back", le="back"),
+            K(0.58, "plank hold", plant="none", body=(76, 0, 0), rh=(0.0, -0.6, 0.32), lh=(0.0, -0.6, 0.32), re="back", le="back"),
+            K(0.75, "walk hands back", plant="none", rh=(0.25, -0.6, 0.25), lh=(0.25, -0.6, 0.25), body=(45, 0, 0),
+              tor=(40, 0, 0), re="back", le="back"),
+            K(0.88, "hinge", rh=(0.35, -0.62, 0.2), lh=(0.35, -0.62, 0.2), tor=(85, 0, 0), pel=(-0.04, 0, 25)),
+            K(1.0, "stand", rh=HANG, lh=HANG),
+        ]
+        return {"keys": keys, "duration": 4.5, "loop": False, "view": "side"}
+    if variant in ("bear_crawl",):
+        # Hands and feet on the floor, knees hovering; opposite hand and foot move together.
+        def bc(t, ph, rh_f, lh_f, rf_f, lf_f, plant):
+            return K(t, ph, plant="none", re="back", le="back", body=(72, 0, 0), tor=(-8, 0, 0), pel=(0, 0, 0),
+                     rh=(rh_f, -0.6, 0.3), lh=(lh_f, -0.6, 0.3),
+                     rf=(rf_f, 0.14, 0.42, 5), lf=(lf_f, 0.14, 0.42, 5))
+        k0 = bc(0.0, "right hand + left foot forward", 0.15, -0.12, -0.08, 0.12, "none")
+        k1 = bc(0.25, "pass", 0.02, 0.02, 0.02, 0.02, "none")
+        k2 = bc(0.5, "left hand + right foot forward", -0.12, 0.15, 0.12, -0.08, "none")
+        k3 = bc(0.75, "pass", 0.02, 0.02, 0.02, 0.02, "none")
+        return {"keys": [k0, k1, k2, k3], "duration": 1.2, "loop": True, "view": "side"}
     if variant in ("superman",):
         k0 = K(0.0, "lying face down", plant="none", body=(88, 0, 0), rh=(0.05, 0.6, 0.25), lh=(0.05, 0.6, 0.25))
         k1 = K(0.5, "lift arms + legs", plant="none", body=(88, 0, 0), tor=(-20, 0, 0), head=(-15, 0, 0),
@@ -746,13 +824,15 @@ def tpl_agility(variant: str, amp: float) -> Dict[str, Any]:
         k5 = swap_sides(k2, 0.85, "close step")
         return {"keys": [k0, k1, k2, k3, k4, k5], "duration": 1.6, "loop": True, "view": "front"}
     if variant in ("carioca", "grapevine"):
-        base = dict(pel=(-0.08, 0, 4), tor=(12, 0, 0), rh=(0.05, -0.35, 0.6), lh=(0.05, -0.35, 0.6))
+        base = dict(pel=(-0.1, 0, 4), tor=(12, 0, 0), rh=(0.1, -0.42, 0.48), lh=(0.1, -0.42, 0.48))
         k0 = K(0.0, "feet apart", **_merge(base, rf=(0, 0.2, 0, 10), lf=(0, 0.2, 0, 10)))
         k1 = K(0.25, "left crosses in front", plant="right",
-               **_merge(base, lf=(0.18, -0.08, 0.15, 10), rf=(0, 0.2, 0, 10), pel=(-0.08, 35 * a, 4), tor=(12, -20, 0)))
+               **_merge(base, lf=(0.18, -0.08, 0.15, 10), rf=(0, 0.2, 0, 10), pel=(-0.1, 40 * a, 4), tor=(12, -25, 0),
+                        rh=(-0.05, -0.4, 0.5), lh=(0.25, -0.4, 0.42)))
         k2 = K(0.5, "feet apart", **_merge(base, rf=(0, 0.2, 0, 10), lf=(0, 0.2, 0, 10)))
         k3 = K(0.75, "left crosses behind", plant="right",
-               **_merge(base, lf=(-0.18, -0.08, 0.12, 10), rf=(0, 0.2, 0, 10), pel=(-0.08, -35 * a, 4), tor=(12, 20, 0)))
+               **_merge(base, lf=(-0.18, -0.08, 0.12, 10), rf=(0, 0.2, 0, 10), pel=(-0.1, -40 * a, 4), tor=(12, 25, 0),
+                        rh=(0.25, -0.4, 0.42), lh=(-0.05, -0.4, 0.5)))
         return {"keys": [k0, k1, k2, k3], "duration": 1.2, "loop": True, "view": "front"}
     if variant in ("drop_step", "crossover_step", "cut", "jab_step"):
         keys = [K(0.0, "athletic stance", **READY),
@@ -783,6 +863,29 @@ def tpl_ball(variant: str, amp: float) -> Dict[str, Any]:
             K(1.0, "land", **_merge(base, rh=(0.3, -0.3, 0.2), lh=(0.3, -0.3, 0.2), pel=(-0.12, 0, 6), tor=(18, 0, 0))),
         ]
         return {"keys": keys, "duration": 1.8, "loop": False, "view": "side"}
+    if variant in ("basketball_layup", "layup"):
+        # Right-hand layup in place: right-left gather, drive the right knee up, lift off the left
+        # foot, ball carried up with two hands, right hand extends to lay it off the board.
+        keys = [
+            K(0.0, "gather (right foot)", grip=True, plant="right",
+              **_merge(STANDING, rh=(0.3, -0.3, 0.12), lh=(0.3, -0.3, 0.12), pel=(-0.1, 10, 6), tor=(20, 10, 0),
+                       rf=(0.1, 0.12, 0, 10), lf=(-0.25, 0.12, 0.2, 10))),
+            K(0.3, "left foot plant", grip=True,
+              **_merge(STANDING, rh=(0.3, -0.15, 0.15), lh=(0.3, -0.15, 0.15), pel=(-0.18, 0, 6), tor=(15, 0, 0),
+                       rf=(-0.2, 0.12, 0.1, 10), lf=(0.15, 0.12, 0, 10))),
+            K(0.5, "take off, right knee drives", plant="none", grip=True,
+              **_merge(STANDING, rh=(0.25, 0.35, 0.22), lh=(0.25, 0.35, 0.22), pel=(0.25, 0, 0), tor=(0, 0, 0),
+                       rf=(0.25, 0.12, 0.45, 10), lf=(0.0, 0.12, 0.03, 10), head=(-20, 0, 0))),
+            K(0.62, "release at the top", plant="none", re="forward",
+              **_merge(STANDING, rh=(0.25, 0.62, 0.22), lh=(0.25, 0.2, 0.2), pel=(0.4, 0, 0), tor=(0, 0, 0),
+                       rf=(0.25, 0.12, 0.42, 10), lf=(0.0, 0.12, 0.03, 10), head=(-25, 0, 0))),
+            K(0.8, "descend", plant="none",
+              **_merge(STANDING, rh=(0.3, -0.1, 0.3), lh=(0.3, -0.1, 0.3), pel=(0.15, 0, 0),
+                       rf=(0.05, 0.14, 0.08, 10), lf=(0.0, 0.14, 0.05, 10))),
+            K(1.0, "two-foot landing", **_merge(STANDING, rh=(0.3, -0.3, 0.3), lh=(0.3, -0.3, 0.3), pel=(-0.2, 0, 8),
+                                                tor=(25, 0, 0), rf=(0, 0.16, 0, 12), lf=(0, 0.16, 0, 12))),
+        ]
+        return {"keys": keys, "duration": 1.6, "loop": False, "view": "side"}
     if variant in ("chest_pass", "bounce_pass"):
         low = -0.25 if variant == "bounce_pass" else 0.0
         keys = [
@@ -856,10 +959,10 @@ POSES: Dict[str, Dict[str, Any]] = {
     "left_knee_raise": dict(lf=(0.2, 0.12, 0.5, 10), lh=(-0.2, -0.45, 0.3), rh=(0.3, -0.2, 0.2), _plant="right", _re="back", _le="back"),
     "balance_on_left_leg": dict(rf=(-0.1, 0.12, 0.25, 10), rh=(0.0, -0.1, 0.8), lh=(0.0, -0.1, 0.8), _plant="left"),
     "balance_on_right_leg": dict(lf=(-0.1, 0.12, 0.25, 10), rh=(0.0, -0.1, 0.8), lh=(0.0, -0.1, 0.8), _plant="right"),
-    "reach_right_hand_to_left_foot": dict(pel=(-0.35, 0, 15), tor=(60, -30, 0), rh=(0.55, -0.5, -0.35),
-                                          lh=(-0.15, -0.3, 0.55), rf=(0, 0.22, 0, 20), lf=(0, 0.22, 0, 20)),
-    "reach_left_hand_to_right_foot": dict(pel=(-0.35, 0, 15), tor=(60, 30, 0), lh=(0.55, -0.5, -0.35),
-                                          rh=(-0.15, -0.3, 0.55), rf=(0, 0.22, 0, 20), lf=(0, 0.22, 0, 20)),
+    "reach_right_hand_to_left_foot": dict(pel=(-0.35, 0, 15), tor=(65, -35, 0), rh=(0.25, -0.62, -0.18),
+                                          lh=(-0.2, -0.35, 0.5), rf=(0, 0.22, 0, 20), lf=(0, 0.22, 0, 20)),
+    "reach_left_hand_to_right_foot": dict(pel=(-0.35, 0, 15), tor=(65, 35, 0), lh=(0.25, -0.62, -0.18),
+                                          rh=(-0.2, -0.35, 0.5), rf=(0, 0.22, 0, 20), lf=(0, 0.22, 0, 20)),
     "reach_low_right": dict(pel=(-0.3, 15, 12, 6), tor=(50, 30, -10), rh=(0.55, -0.55, 0.35), lh=(0.1, -0.3, 0.4),
                             rf=(0.1, 0.35, 0, 25), lf=(0, 0.2, 0, 15)),
     "reach_low_left": dict(pel=(-0.3, -15, 12, -6), tor=(50, -30, 10), lh=(0.55, -0.55, 0.35), rh=(0.1, -0.3, 0.4),
@@ -899,17 +1002,44 @@ def tpl_poses(variant: str, amp: float) -> Dict[str, Any]:
         match = difflib.get_close_matches(token, list(POSES), 1, 0.45)
         if match:
             names.append(match[0])
+    names = [n for i, n in enumerate(names) if i == 0 or n != names[i - 1]]
     if not names:
         names = ["standing"]
     if len(names) == 1:
         names = names + names
-    # Each pose is reached and briefly held.
+    # Timing like a real athlete: big changes (standing -> floor) take longer than small ones,
+    # and each pose is briefly held so it reads clearly before the next move.
+    def vec(name: str) -> List[float]:
+        spec = dict(rh=HANG, lh=HANG, rf=STAND_FOOT, lf=STAND_FOOT, pel=(0, 0, 0, 0), tor=(0, 0, 0), body=(0, 0, 0))
+        spec.update({k: v for k, v in POSES[name].items() if not k.startswith("_")})
+        out: List[float] = []
+        for key, scale in (("rh", 1.0), ("lh", 1.0), ("rf", 1.0), ("lf", 1.0), ("pel", 1.0), ("tor", 0.01),
+                           ("body", 0.015)):
+            vals = list(spec[key])
+            if key in ("rf", "lf"):
+                vals = vals[:3]
+            if key == "pel":
+                vals = [vals[0], vals[1] * 0.01]
+            out += [float(x) * scale for x in vals]
+        return out
+
+    hold = 0.15
+    times = [0.0]
+    for prev, cur in zip(names, names[1:]):
+        dist = sum(abs(x - y) for x, y in zip(vec(prev), vec(cur)))
+        move = min(1.1, 0.25 + 0.25 * dist)
+        times.append(times[-1] + hold + move)
     keys: List[Dict[str, Any]] = []
-    n = len(names)
-    for i, name in enumerate(names):
-        t = i / (n - 1) if n > 1 else 0.0
+    for i, (name, t) in enumerate(zip(names, times)):
         keys.append(pose_key(name, t))
-    return {"keys": keys, "duration": max(1.2, 0.9 * (n - 1)) / max(0.6, amp), "loop": False, "view": "three_quarter"}
+        if 0 < i < len(names) - 1:
+            held = pose_key(name, t + hold)
+            held["phase"] = name.replace("_", " ") + " (hold)"
+            keys.append(held)
+    total = times[-1]
+    for k in keys:
+        k["t"] = k["t"] / total
+    return {"keys": keys, "duration": total / max(0.6, amp), "loop": False, "view": "three_quarter"}
 
 
 # -----------------------------------------------------------------------------
@@ -934,19 +1064,21 @@ TEMPLATES: Dict[str, Tuple[Callable[[str, float], Dict[str, Any]], List[str], st
                           "uppercut", "rear_hook", "slip", "duck"],
               "boxing/striking combos; variant = shots joined by '-' from: jab, cross, hook, uppercut, "
               "lead_uppercut, rear_hook, slip, duck"),
-    "kick": (tpl_kick, ["soccer_instep", "punt", "front_kick", "roundhouse_kick", "side_kick", "knee_strike"],
+    "kick": (tpl_kick, ["soccer_instep", "soccer_pass", "punt", "front_kick", "roundhouse_kick", "side_kick", "knee_strike"],
              "kicking actions"),
     "jump": (tpl_jump, ["vertical_jump", "squat_jump", "tuck_jump", "box_jump", "jumping_jack", "jump_rope",
-                        "skater_jump", "lateral_hops"], "jumps and plyometrics"),
+                        "skater_jump", "lateral_hops", "broad_jump"], "jumps and plyometrics"),
     "strength": (tpl_strength, ["squat", "goblet_squat", "sumo_squat", "forward_lunge", "reverse_lunge",
                                 "walking_lunge", "split_squat", "lateral_lunge", "deadlift", "romanian_deadlift",
                                 "kettlebell_swing", "single_leg_rdl", "overhead_press", "push_press",
-                                "bent_over_row", "bicep_curl", "calf_raise"], "gym / strength exercises"),
+                                "bent_over_row", "bicep_curl", "calf_raise", "arm_circles"],
+                 "gym / strength / warm-up exercises"),
     "floor": (tpl_floor, ["push_up", "plank", "forearm_plank", "mountain_climber", "burpee", "sit_up", "crunch",
-                          "glute_bridge", "superman"], "exercises on the floor"),
+                          "glute_bridge", "superman", "bear_crawl", "russian_twist", "inchworm"],
+              "exercises on or near the floor"),
     "agility": (tpl_agility, ["defensive_slide", "lateral_shuffle", "carioca", "drop_step", "crossover_step"],
                 "footwork and agility patterns"),
-    "ball": (tpl_ball, ["basketball_jump_shot", "basketball_free_throw", "chest_pass", "bounce_pass", "dribble",
+    "ball": (tpl_ball, ["basketball_jump_shot", "basketball_free_throw", "basketball_layup", "chest_pass", "bounce_pass", "dribble",
                         "volleyball_bump", "volleyball_set", "catch"], "ball handling, passing and shooting"),
     "poses": (tpl_poses, [], "custom drill as a sequence of named poses joined by '>' (see POSES); "
                              "use for stretches, holds, novel drills, reaches, transitions"),

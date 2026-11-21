@@ -56,7 +56,11 @@ The pipeline (v3) - rigid code, flexible model:
   4. BUILD      code glues segments (timing, transitions, reps capped to 8 s, loops), enforces
                 two-hand reach for gripped implements, picks a side camera for horizontal bodies,
                 then solves FK/IK exactly as before (foot locking, collisions, smoothing).
-  Typical generation: 10-20 s, 2 small calls. To add a sport skill, add a variant to
+  Before any of this, a NORMALIZE call simplifies long/chatty prompts into one canonical movement
+  and an enum-constrained library match; exact matches are built directly by code (1 call, ~9 s,
+  identical output however the request is phrased). Pose drills get natural timing (bigger moves
+  take longer, short holds), boxing segments merge into one fluid combination.
+  Typical generation: 8-15 s. To add a sport skill, add a variant to
   motion_library.py and check it with: python motion_engine.py --selftest
 
 The HTML now blends frames with quaternion slerp (no Euler pops), auto-plays, shows the title and
