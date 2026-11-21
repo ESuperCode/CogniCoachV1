@@ -90,6 +90,7 @@ RIG_INFO_PATH = Path(__file__).with_name("rig_info.md")
 
 DEFAULT_FPS = 24
 HIP_DROP_SCALE = 0.85
+MAX_COLLISION_PASSES = 4
 SWIVEL_MAX_DEG_PER_FRAME = 9.0  # elbow/knee bend-plane rotation limit at 24 fps  # the rig's legs are ~15% shorter than a real 1.75 m athlete's
 MAX_FRAMES = 360
 SPARSE_EPS_DEG = 0.05
@@ -587,30 +588,58 @@ def _segment_box_penetration(a: np.ndarray, b: np.ndarray, frame_rot: np.ndarray
     return best, push
 
 
+def _arm_penetration(world: Dict[str, np.ndarray], pos: Dict[str, np.ndarray], side: str):
+    """Deepest penetration of this arm (upper arm or forearm) into the torso or pelvis boxes."""
+    boxes = [
+        (world["spine"], world["spine"] @ np.array([0.0, TORSO_HALF[1], 0.0]), TORSO_HALF),
+        (world["hip"], np.zeros(3), PELVIS_HALF),
+    ]
+    best = (0.0, np.zeros(3), "none")
+    sh, el, ha = pos[side + "_shoulder"], pos[side + "_elbow"], pos[side + "_hand"]
+    for rot, centre, half in boxes:
+        d1, p1 = _segment_box_penetration(sh + (el - sh) * 0.35, el, rot, centre, half, LIMB_RADIUS * 0.8)
+        d2, p2 = _segment_box_penetration(el, ha, rot, centre, half, LIMB_RADIUS * 0.8)
+        if d1 > best[0]:
+            best = (d1, p1, "upper")
+        if d2 > best[0]:
+            best = (d2, p2, "fore")
+    return best
+
+
 def _resolve_arm_collisions(kf: Dict[str, Any], local: Dict[str, np.ndarray], world: Dict[str, np.ndarray],
-                            pos: Dict[str, np.ndarray], side: str) -> int:
-    """Push an arm out of the torso by re-solving IK on a hand target moved out of the body."""
-    torso_centre = world["spine"] @ np.array([0.0, TORSO_HALF[1], 0.0])
+                            pos: Dict[str, np.ndarray], side: str, keep_hand: bool = False) -> int:
+    """Hard constraint: an arm may never pass through the torso or hips.
+
+    Forearm/hand inside -> move the hand target out of the body (preferably to the front).
+    Upper arm/elbow inside -> keep the hand where it is and swing the elbow out instead.
+    """
     fixes = 0
-    for _ in range(4):
-        d1, p1 = _segment_box_penetration(pos[side + "_shoulder"] + (pos[side + "_elbow"] - pos[side + "_shoulder"]) * 0.35,
-                                          pos[side + "_elbow"], world["spine"], torso_centre, TORSO_HALF, LIMB_RADIUS * 0.8)
-        d2, p2 = _segment_box_penetration(pos[side + "_elbow"], pos[side + "_hand"], world["spine"], torso_centre,
-                                          TORSO_HALF, LIMB_RADIUS * 0.8)
-        depth, push = (d1, p1) if d1 >= d2 else (d2, p2)
+    for it in range(10):
+        depth, push, part = _arm_penetration(world, pos, side)
         if depth < 0.05:
             break
-        # Prefer pushing forwards (in front of the chest) unless the limb is clearly behind.
+        if keep_hand:
+            part = "upper"  # a hand gripping an implement stays on it: only the elbow moves
+        elif part == "upper" and it >= 3:
+            part = "fore"  # elbow still trapped: move the hand out too (pulls the whole arm clear)
         fwd = world["spine"][:, 2]
+        chest = world["spine"] @ np.array([0.0, TORSO_HALF[1], 0.0])
+        hand_behind = float(np.dot(pos[side + "_hand"] - chest, fwd)) < -TORSO_HALF[2]
         if np.dot(push, fwd) < -0.5:
-            direction = push
+            direction = push if hand_behind else fwd  # only clear backwards if already behind
         elif abs(np.dot(push, world["spine"][:, 0])) > 0.7:
             direction = push
         else:
             direction = fwd
-        target = pos[side + "_hand"] + direction * depth
         root = pos[side + "_shoulder"]
-        upper, lower, _ = two_bone_ik(root, target, _elbow_pole(world, side), UPPER_ARM, FOREARM, world["spine"], "arm")
+        if part == "upper":
+            # Elbow inside the body: re-aim the elbow outward/forward, hand target unchanged.
+            pole = direction + world["spine"][:, 0] * (1.0 if side == "right" else -1.0) * 0.5
+            target = pos[side + "_hand"]
+        else:
+            pole = _elbow_pole(world, side)
+            target = pos[side + "_hand"] + direction * (depth + 0.3)
+        upper, lower, _ = two_bone_ik(root, target, pole, UPPER_ARM, FOREARM, world["spine"], "arm")
         local[side + "shoulder"], local[side + "elbow"] = upper, lower
         world.update(world_rotations(local))
         pos.update(forward_kinematics(world))
@@ -665,7 +694,8 @@ def elbow_pole_vector(choice: str, sign: float) -> np.ndarray:
 
 def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = None, fps: int = DEFAULT_FPS,
                    return_to_start: bool = True,
-                   _collision_offsets: Optional[List[Dict[str, np.ndarray]]] = None) -> Tuple[List[Dict[str, float]], Dict[str, Any]]:
+                   _collision_offsets: Optional[List[Dict[str, Any]]] = None,
+                   _pass: int = 1) -> Tuple[List[Dict[str, float]], Dict[str, Any]]:
     kfs = plan["keyframes"]
     loop = bool(plan.get("loop", False))
     duration = float(duration_seconds or plan.get("duration_seconds", 2.0))
@@ -700,6 +730,41 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
     # between two far-apart positions sweeps an arc at full arm length instead of cutting a straight
     # line past the shoulder (which made the elbow fold up mid-swing).
     shoulder_out = SHOULDER_OFFSET[0] * UNIT_TO_M
+    # Arm-swing waypoints: if a hand's direction from its shoulder turns by more than 120 degrees
+    # between two keys, insert a waypoint so the arm swings through a natural arc (down past the
+    # hip for back<->front swings) instead of whipping through the shoulder.
+    for side in ("right", "left"):
+        g = f"{side}_hand"
+        key_t, key_v = [], []
+        for i, k in enumerate(kfs):
+            key_t.append(float(ts[i]))
+            key_v.append(np.array([k[g]["out"] - shoulder_out, k[g]["up"], k[g]["forward"]]))
+        new_t, new_v = list(key_t), list(key_v)
+        for _ in range(4):  # subdivide until no segment turns more than ~90 degrees
+            changed = False
+            out_t, out_v = [new_t[0]], [new_v[0]]
+            for i in range(1, len(new_t)):
+                a_v, b_v = new_v[i - 1], new_v[i]
+                la, lb = float(np.linalg.norm(a_v)), float(np.linalg.norm(b_v))
+                if la > 0.15 and lb > 0.15 and float(np.dot(a_v, b_v) / (la * lb)) < 0.0:
+                    mid = a_v / la + b_v / lb
+                    if np.linalg.norm(mid) < 0.3:
+                        mid = np.array([0.15, -1.0, 0.25])  # opposite directions: swing through the bottom
+                    mid = mid / np.linalg.norm(mid) * (0.5 * (la + lb))
+                    out_t.append(0.5 * (new_t[i - 1] + new_t[i]))
+                    out_v.append(mid)
+                    changed = True
+                out_t.append(new_t[i])
+                out_v.append(b_v)
+            new_t, new_v = out_t, out_v
+            if not changed:
+                break
+        if len(new_t) != len(key_t):
+            arr = np.array(new_v)
+            tt = np.array(new_t)
+            channels[(g, "out")] = interpolate_channel(tt, arr[:, 0] + shoulder_out, samples, loop)
+            channels[(g, "up")] = interpolate_channel(tt, arr[:, 1], samples, loop)
+            channels[(g, "forward")] = interpolate_channel(tt, arr[:, 2], samples, loop)
     reach_channels: Dict[str, np.ndarray] = {}
     for side in ("right", "left"):
         g = f"{side}_hand"
@@ -784,8 +849,14 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
                     fixed = off_sh + (point_m - off_sh) * (limit / d)
                     point_m = point_m + (fixed - point_m) * grip_w
             chest_point = keep_hand_outside_torso(point_m, sgn) / UNIT_TO_M
+            pole_world = world["spine"] @ kf[f"{side}_elbow_pole"]
             if _collision_offsets is not None:
-                chest_point = chest_point + _collision_offsets[fi][side]
+                corr = _collision_offsets[fi]
+                chest_point = chest_point + corr[side]
+                w_el = corr[side + "_pole_w"]
+                if w_el > 0:
+                    # Smoothly steer the elbow the way earlier passes found keeps it out of the body.
+                    pole_world = pole_world * (1.0 - w_el) + (world["spine"] @ corr[side + "_pole"]) * w_el * 2.0
             target = world["spine"] @ (chest_point + np.array([0.0, SHOULDER_OFFSET[1], 0.0]))
             if side == off and grip_w > 0.0:
                 # Two hands on one ball/handle: aim the off hand beside the lead hand (solved just
@@ -794,7 +865,7 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
                 off_dir = world["spine"][:, 0] * (-1.0 if dominant == "right" else 1.0)
                 target = target + (lead_world + off_dir * 4.0 - target) * grip_w
                 stats["grip_frames"] += 1
-            upper, lower, _ = two_bone_ik(pos[side + "_shoulder"], target, world["spine"] @ kf[f"{side}_elbow_pole"],
+            upper, lower, _ = two_bone_ik(pos[side + "_shoulder"], target, pole_world,
                                           UPPER_ARM, FOREARM, world["spine"], "arm", ik_memory, side + "_arm")
             local[side + "shoulder"], local[side + "elbow"] = upper, lower
         world = world_rotations(local)
@@ -825,20 +896,25 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
             push = (min_gap - dist) / 2.0
             local_feet["right"][0] += push
             local_feet["left"][0] -= push
+        sit_vec = world["body"] @ np.array([0.0, 0.0, sit_back / UNIT_TO_M])
         for side, sign in (("left", -1.0), ("right", 1.0)):
             target = world["body"] @ local_feet[side]
             planted, weight = kf["flags"][f"{side}_foot_planted"]
             if planted and locks[side] is None:
-                locks[side] = target.copy()
+                # Lock the foot's floor position WITHOUT the hips-back offset; the current offset is
+                # re-applied every frame, so squatting before a jump can't leave a stale lock.
+                locks[side] = target - sit_vec
             if not planted:
                 locks[side] = None
             if locks[side] is not None and weight > 0.0:
-                anchor = locks[side].copy()
+                anchor = locks[side] + sit_vec
                 anchor[1] = target[1]
                 target = target + (anchor - target) * weight
                 stats["foot_lock_frames"] += 1
             toe = math.radians(sign * foot["toe_out"])
-            knee_dir = world["body"] @ np.array([math.sin(toe) + sign * 0.15, -0.15, math.cos(toe)])
+            # Knee points where the foot points (toe_out); no extra outward bias, so kicks and
+            # strides swing straight instead of bowing sideways.
+            knee_dir = world["body"] @ np.array([math.sin(toe), -0.15, math.cos(toe)])
             upper, lower, res = two_bone_ik(pos[side + "_hip"], target, knee_dir,
                                             THIGH, SHIN, world["hip"], "leg", ik_memory, side + "_leg")
             local[side + "hip"], local[side + "knee"] = upper, lower
@@ -846,18 +922,23 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
         world = world_rotations(local)
         pos = forward_kinematics(world)
 
-        w_grip = kf["flags"]["hands_together"][1]
-
-        frame_offsets = {"left": np.zeros(3), "right": np.zeros(3)}
-        if _collision_offsets is None:
-            for side in ("left", "right"):
-                if side == off and w_grip > 0.5:
-                    continue
-                before = pos[side + "_hand"].copy()
-                fixes = _resolve_arm_collisions(kf, local, world, pos, side)
-                stats["collision_fixes"] += fixes
-                if fixes:
-                    frame_offsets[side] = world["spine"].T @ (pos[side + "_hand"] - before)
+        frame_offsets: Dict[str, Any] = {}
+        for side in (dominant, off):
+            before = pos[side + "_hand"].copy()
+            gripping = side == off and kf["flags"]["hands_together"][1] > 0.5
+            fixes = _resolve_arm_collisions(kf, local, world, pos, side, keep_hand=gripping)
+            stats["collision_fixes"] += fixes
+            depth_after = _arm_penetration(world, pos, side)[0]
+            if gripping and depth_after > 1.0:
+                # The gripping arm can't clear the body on its own: next pass moves the whole grip
+                # (lead hand, and the off hand with it) forward, away from the chest.
+                frame_offsets[dominant] = frame_offsets.get(dominant, np.zeros(3)) + np.array([0.0, 0.0, depth_after + 1.0])
+                frame_offsets[dominant + "_pole_w"] = max(frame_offsets.get(dominant + "_pole_w", 0.0), 1e-3)
+            stats["max_arm_penetration_m"] = max(stats.get("max_arm_penetration_m", 0.0), depth_after * UNIT_TO_M)
+            frame_offsets[side] = world["spine"].T @ (pos[side + "_hand"] - before) if fixes else np.zeros(3)
+            el = pos[side + "_elbow"] - pos[side + "_shoulder"]
+            frame_offsets[side + "_pole"] = world["spine"].T @ (el / max(1e-9, np.linalg.norm(el)))
+            frame_offsets[side + "_pole_w"] = 1.0 if fixes else 0.0
         recorded_offsets.append(frame_offsets)
 
         track.append({k: v.copy() for k, v in pos.items()})
@@ -865,30 +946,12 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
         rot_track.append({k: orthonormalize(v) for k, v in local.items()})
         body_track.append(dict(kf["body"]))
 
-    if _collision_offsets is None and any(np.any(o[s] != 0) for o in recorded_offsets for s in o):
-        # Pass 2: the per-frame collision pushes are smoothed in time and baked into the hand
-        # targets, so arms ease around the body instead of twitching out of it frame by frame.
-        n = len(recorded_offsets)
-        kernel = np.exp(-0.5 * (np.arange(-4, 5) / 2.0) ** 2)
-        smoothed: List[Dict[str, np.ndarray]] = [{} for _ in range(n)]
-        for side in ("left", "right"):
-            arr = np.array([o[side] for o in recorded_offsets])
-            out = np.zeros_like(arr)
-            for i in range(n):
-                acc, wsum = np.zeros(3), 0.0
-                for j, w in zip(range(i - 4, i + 5), kernel):
-                    jj = j % n if loop else min(max(j, 0), n - 1)
-                    acc += w * arr[jj]
-                    wsum += w
-                # Never push less than the raw need at this frame (stay out of the torso).
-                sm = acc / wsum
-                raw = arr[i]
-                if np.linalg.norm(raw) > np.linalg.norm(sm):
-                    sm = sm + (raw - sm) * 0.5
-                out[i] = sm
-            for i in range(n):
-                smoothed[i][side] = out[i]
-        return compile_motion(plan, duration_seconds, fps, return_to_start, smoothed)
+    if _pass < MAX_COLLISION_PASSES and any(o[side + "_pole_w"] > 0 for o in recorded_offsets for side in ("left", "right")):
+        # Collision corrections found this pass are spread in time (applied a few frames early and
+        # released late), smoothed, and fed back as inputs to the next pass - so the arm eases
+        # around the body. The per-frame hard check remains as a last-resort safety net.
+        new = smooth_collision_corrections(recorded_offsets, _collision_offsets, loop)
+        return compile_motion(plan, duration_seconds, fps, return_to_start, new, _pass + 1)
 
     frames = frames_from_rotations(smooth_rotations(rot_track, loop), body_track)
 
@@ -902,6 +965,43 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
 
     report = verify(plan, frames, track, fps, stats, loop)
     return frames, report
+
+
+def smooth_collision_corrections(recorded: List[Dict[str, Any]], previous: Optional[List[Dict[str, Any]]],
+                                 loop: bool) -> List[Dict[str, Any]]:
+    n = len(recorded)
+    kernel = np.exp(-0.5 * (np.arange(-4, 5) / 2.0) ** 2)
+
+    def idx(j: int) -> int:
+        return j % n if loop else min(max(j, 0), n - 1)
+
+    out: List[Dict[str, Any]] = [{} for _ in range(n)]
+    for side in ("left", "right"):
+        hand = np.array([r[side] for r in recorded])
+        poles = np.array([r[side + "_pole"] for r in recorded])
+        wts = np.array([r[side + "_pole_w"] for r in recorded])
+        # Dilate: each frame takes the largest correction within +-3 frames (start early, end late).
+        dil_hand = np.zeros_like(hand)
+        for i in range(n):
+            window = [idx(j) for j in range(i - 3, i + 4)]
+            dil_hand[i] = hand[max(window, key=lambda j: float(np.linalg.norm(hand[j])))]
+        dil_w = np.array([max(wts[idx(j)] for j in range(i - 3, i + 4)) for i in range(n)])
+        for i in range(n):
+            acc_h, acc_p, acc_w, ws = np.zeros(3), np.zeros(3), 0.0, 0.0
+            for j, k in zip(range(i - 4, i + 5), kernel):
+                jj = idx(j)
+                acc_h += k * dil_hand[jj]
+                acc_w += k * dil_w[jj]
+                acc_p += k * wts[jj] * poles[jj]
+                ws += k
+            prev_h = previous[i][side] if previous else np.zeros(3)
+            prev_w = previous[i][side + "_pole_w"] if previous else 0.0
+            prev_p = previous[i][side + "_pole"] if previous else np.zeros(3)
+            p = acc_p + prev_p * prev_w
+            out[i][side] = prev_h + acc_h / ws
+            out[i][side + "_pole_w"] = min(1.0, max(prev_w, acc_w / ws))
+            out[i][side + "_pole"] = p / max(1e-9, np.linalg.norm(p)) if np.linalg.norm(p) > 1e-9 else poles[i]
+    return out
 
 
 JOINT_NAMES = ["hip", "spine", "neck", "lefthip", "righthip", "leftknee", "rightknee",
@@ -1074,8 +1174,20 @@ def verify(plan: Dict[str, Any], frames: List[Dict[str, float]], track: List[Dic
                 leg_clash += 1
     if leg_clash:
         issues.append(f"Legs touch/overlap in {leg_clash} samples.")
+    # Typical limb speed while actually moving (holds/pauses excluded), for playback-speed tuning.
+    eff = ["left_hand", "right_hand", "left_foot", "right_foot", "head"]
+    if n > 2:
+        spd = np.max([np.linalg.norm(np.diff(np.array([t[k] for t in track]), axis=0), axis=1) * UNIT_TO_M * fps
+                      for k in eff], axis=0)
+        moving = spd[spd > 0.25]
+        speed_median = float(np.median(moving)) if len(moving) else 0.0
+        moving_frac = float(len(moving) / len(spd))
+    else:
+        speed_median, moving_frac = 0.0, 0.0
     return {
         "passed": not issues,
+        "speed_median_moving_mps": round(speed_median, 3),
+        "moving_fraction": round(moving_frac, 3),
         "issues": issues,
         "frame_count": len(frames),
         "fps": fps,
@@ -1438,9 +1550,10 @@ to SIMPLIFY them into the single core movement, so the animation stays clean and
 - key_details: at most 3 details that change the BODY MOTION (side, tempo, stance, repetitions).
   Ignore everything else.
 - library_match: the library entry that IS this movement ("template:variant"), or "none".
-  match_quality: "exact" only if the request is PURELY that standard movement. If the drill adds
-  anything (cones, touches, reactions, turns, pauses/holds, extra steps, combinations of moves),
-  use "close" even if the core movement is in the library. "exact" only if that entry is the same movement (synonyms count: "soccer shot",
+  match_quality: "exact" when the request is that standard movement. Details about HOW it is
+  performed (good form, power, tempo, half/short/full swing, slice/topspin, hold the finish, a
+  coaching focus) do NOT break exactness. Use "close" only when the drill ADDS other elements
+  (cones, touches, reactions, turns, extra steps or moves, combinations). "exact" only if that entry is the same movement (synonyms count: "soccer shot",
   "striking a football" -> kick:soccer_instep; "fly stroke" -> swim:butterfly); "close" if similar
   but not the same; "none" otherwise. Prefer an exact library entry whenever one fits, and
   when the request adds a distinctive element (rotation, jump, two hands, a specific shot) choose the
@@ -1673,7 +1786,8 @@ Beat fields (all chosen from fixed menus):
   that leg (knee_drive, kick_front, heel_to_butt, kick_side, swing_back, step_forward, step_back,
   step_out_side, cross_in_front, cross_behind, lift_small). Both legs off the floor = a hop/jump.
 - hands_together: both hands on one ball/implement.
-- macro: "none" normally. If part of the drill IS a standard library movement (e.g. a jump shot,
+- macro: ALWAYS use a macro for racket/club/bat/stick strokes and throws when one fits (the
+  arm menus cannot express a proper stroke). "none" otherwise. If part of the drill IS a standard library movement (e.g. a jump shot,
   a sprint, a tennis forehand, a jab-cross), set macro to it and the engine plays that professional
   animation for this beat (other fields are ignored for that beat).
 
@@ -1772,6 +1886,56 @@ ONESHOT_INSTRUCTIONS = (
 PLANNER_EFFORT = os.getenv("MOTION_PLANNER_EFFORT", "low")
 
 
+FOREHAND_VARIANTS = {"tennis_forehand", "padel_forehand", "squash_forehand", "badminton_forehand",
+                     "table_tennis_forehand"}
+BACKHAND_VARIANTS = {"tennis_backhand", "tennis_backhand_one_handed", "badminton_backhand"}
+
+
+def fix_stroke_side(match: str, text: str) -> str:
+    """The model sometimes maps 'backhand' requests to a forehand stroke (or vice versa): fix it."""
+    if ":" not in match:
+        return match
+    template, variant = match.split(":", 1)
+    t = text.lower()
+    wants_back = "backhand" in t
+    wants_fore = "forehand" in t and not wants_back
+    two = any(w in t for w in ("two hand", "two-hand", "two handed", "two-handed", "double hand", "two hander"))
+    if wants_back and variant in FOREHAND_VARIANTS | BACKHAND_VARIANTS:
+        if "badminton" in t:
+            return "swing:badminton_backhand"
+        return "swing:tennis_backhand" if two else (
+            "swing:tennis_backhand_one_handed" if variant in FOREHAND_VARIANTS or "one" in t or "slice" in t
+            or "squash" in t or "padel" in t else match)
+    if wants_fore and variant in BACKHAND_VARIANTS:
+        return "swing:table_tennis_forehand" if ("table tennis" in t or "ping pong" in t) else "swing:tennis_forehand"
+    return match
+
+
+STROKE_ARM_ACTIONS = {"throw_cock", "throw_release", "follow_through_across", "swing_back"}
+
+
+def substitute_improvised_strokes(beats: List[Dict[str, Any]], brief: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], str]:
+    """Racket/club/bat/stick strokes need hand-built technique the generic arm menus can't express.
+
+    If the model improvised a stroke out of throwing/swinging arm actions (instead of using a library
+    macro), replace that run of beats with the closest library stroke, keeping surrounding footwork.
+    """
+    match = brief.get("library_match", "none")
+    if brief.get("implement") not in ("racket", "club", "bat", "stick") or ":" not in match:
+        return beats, ""
+    if not match.startswith(("swing:", "overhead:")):
+        return beats, ""
+    if any(b.get("macro", "none") != "none" for b in beats):
+        return beats, ""
+    is_stroke = [b.get("right_arm") in STROKE_ARM_ACTIONS or b.get("left_arm") in STROKE_ARM_ACTIONS for b in beats]
+    if not any(is_stroke):
+        return beats, ""
+    first = is_stroke.index(True)
+    last = len(is_stroke) - 1 - is_stroke[::-1].index(True)
+    macro_beat = dict(beats[first], macro=match, label=f"{match.split(':', 1)[1].replace('_', ' ')}")
+    return beats[:first] + [macro_beat] + beats[last + 1:], match
+
+
 def _exact_template_plan(brief: Dict[str, Any], duration: Optional[float]) -> Optional[Dict[str, Any]]:
     match = brief.get("library_match", "none")
     if match == "none" or brief.get("match_quality") != "exact" or ":" not in match:
@@ -1804,11 +1968,19 @@ def plan_movement(movement: str, extra: str = "", duration: Optional[float] = No
     calls.append({"stage": "plan", **meta, "canonical_name": out.get("canonical_name"),
                   "library_match": out.get("library_match"), "match_quality": out.get("match_quality"),
                   "beats": len(out.get("beats") or [])})
+    side_text = f"{movement} {out.get('canonical_name', '')}"
+    fixed = fix_stroke_side(out.get("library_match", "none"), side_text)
+    if fixed != out.get("library_match"):
+        calls[-1]["stroke_side_fixed"] = f"{out.get('library_match')} -> {fixed}"
+        out["library_match"] = fixed
     if not refine:
         plan = _exact_template_plan(out, duration)
         if plan is not None:
             return plan, calls
     raw = {"loop": out.get("loop"), "camera_view": out.get("camera_view"), "beats": out.get("beats") or []}
+    raw["beats"], swapped = substitute_improvised_strokes(raw["beats"], out)
+    if swapped:
+        calls[-1]["stroke_substituted"] = swapped
     errors = check_beats(raw)
     if errors:
         raw2, meta2 = _call_model(CHOREO_INSTRUCTIONS, _choreo_input(out, movement, errors, raw), "medium",
@@ -1871,6 +2043,7 @@ class GenerateRequest(BaseModel):
     dominant_side: Literal["left", "right"] = "right"
     extra_instructions: str = Field(default="", max_length=800)
     quality: Literal["fast", "high"] = "high"
+    speed: Literal["auto", "realtime"] = "auto"  # auto = playback FPS tuned for natural on-screen speed
     use_cache: bool = True
     repair_attempts: int = Field(default=0, ge=0, le=1)  # kept for backwards compatibility (ignored)
 
@@ -1880,6 +2053,7 @@ class CompileRequest(BaseModel):
     duration_seconds: Optional[float] = Field(default=None, ge=0.6, le=8.0)
     playback_fps: int = Field(default=DEFAULT_FPS, ge=6, le=60)
     dominant_side: Literal["left", "right"] = "right"
+    speed: Literal["auto", "realtime"] = "auto"
 
 
 app = FastAPI(title="CogniCoach Motion Engine", version="2.0.0")
@@ -1911,15 +2085,38 @@ def get_rig() -> Dict[str, Any]:
     }
 
 
+TARGET_VIEW_SPEED_MPS = float(os.getenv("MOTION_TARGET_SPEED", "1.6"))
+
+
+def auto_playback_fps(report: Dict[str, Any], fps: int) -> Tuple[int, float]:
+    """Choose a playback FPS so the clip's typical limb speed looks natural on screen.
+
+    Frames are unchanged; only the rate they are played at. A compressed curve keeps relative
+    rhythm (sprints still look faster than stretches) while pulling extremes into a watchable band.
+    Returns (playback_fps, time_scale) where time_scale > 1 means slowed down.
+    """
+    speed = report.get("speed_median_moving_mps", 0.0)
+    if speed <= 0.3 or report.get("moving_fraction", 0.0) < 0.15:
+        return fps, 1.0  # holds / very slow controlled drills: play as generated
+    scale = (speed / TARGET_VIEW_SPEED_MPS) ** 0.6
+    scale = max(1 / 1.3, min(1.8, scale))
+    if abs(scale - 1.0) < 0.1:
+        return fps, 1.0
+    return int(round(fps / scale)), scale
+
+
 def _build_response(plan: Dict[str, Any], duration: Optional[float], fps: int, side: str,
-                    calls: List[Dict[str, Any]], cached: bool) -> Dict[str, Any]:
+                    calls: List[Dict[str, Any]], cached: bool, speed_mode: str = "auto") -> Dict[str, Any]:
     solved = mirror_plan(plan) if side == "left" else plan
     frames, report = compile_motion(solved, duration, fps)
+    playback_fps, time_scale = auto_playback_fps(report, fps) if speed_mode == "auto" else (fps, 1.0)
+    report["generated_fps"] = fps
+    report["playback_time_scale"] = round(time_scale, 2)
     text = mirror_text if side == "left" else (lambda t: t)
     return {
         "frames": sparse(frames),
-        "playback_fps": fps,
-        "duration_seconds": float(duration or plan["duration_seconds"]),
+        "playback_fps": playback_fps,
+        "duration_seconds": round(len(frames) / playback_fps, 2),
         "loop": plan["loop"],
         "camera_view": plan["camera_view"],
         "dominant_side": side,
@@ -1936,7 +2133,7 @@ def _build_response(plan: Dict[str, Any], duration: Optional[float], fps: int, s
 
 @app.post("/generate")
 def generate(req: GenerateRequest) -> Dict[str, Any]:
-    key = _cache_key("v8", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
+    key = _cache_key("v11", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
                      req.quality, MODEL)
     plan = cache_get(key) if req.use_cache else None
     calls: List[Dict[str, Any]] = []
@@ -1952,7 +2149,8 @@ def generate(req: GenerateRequest) -> Dict[str, Any]:
             raise HTTPException(status_code=502, detail=f"Motion planning failed: {exc}") from exc
         cache_put(key, plan)
     try:
-        return _build_response(plan, req.duration_seconds, req.playback_fps, req.dominant_side, calls, cached)
+        return _build_response(plan, req.duration_seconds, req.playback_fps, req.dominant_side, calls, cached,
+                               req.speed)
     except Exception as exc:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Motion compile failed: {exc}") from exc
@@ -1962,7 +2160,8 @@ def generate(req: GenerateRequest) -> Dict[str, Any]:
 def compile_endpoint(req: CompileRequest) -> Dict[str, Any]:
     try:
         plan = sanitize_plan(req.plan)
-        return _build_response(plan, req.duration_seconds, req.playback_fps, req.dominant_side, [], False)
+        return _build_response(plan, req.duration_seconds, req.playback_fps, req.dominant_side, [], False,
+                               req.speed)
     except Exception as exc:
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=f"Could not compile supplied plan: {exc}") from exc

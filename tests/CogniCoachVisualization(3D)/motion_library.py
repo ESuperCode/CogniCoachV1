@@ -247,8 +247,8 @@ def tpl_swim(variant: str, amp: float) -> Dict[str, Any]:
 
 def tpl_swing(variant: str, amp: float) -> Dict[str, Any]:
     """Implement swings for a right-hander (racket, club, bat, stick)."""
-    if variant in ("golf_drive", "golf_iron", "golf_chip", "golf_putt"):
-        scale = {"golf_drive": 1.0, "golf_iron": 0.85, "golf_chip": 0.35, "golf_putt": 0.12}[variant] * amp
+    if variant in ("golf_drive", "golf_iron", "golf_pitch", "golf_chip", "golf_putt"):
+        scale = {"golf_drive": 1.0, "golf_iron": 0.85, "golf_pitch": 0.6, "golf_chip": 0.35, "golf_putt": 0.12}[variant] * amp
         base = dict(pel=(-0.06, 0, 8), tor=(38, 0, 0), rf=(0.0, 0.22 if scale > 0.5 else 0.14, 0, 8),
                     lf=(0.0, 0.22 if scale > 0.5 else 0.14, 0, 18), head=(25, 0, 0))
         addr = (0.3, -0.58, 0.02)
@@ -272,18 +272,18 @@ def tpl_swing(variant: str, amp: float) -> Dict[str, Any]:
                        tor=(38 - 30 * scale, -90 * scale, 10 * scale), pel=(-0.02, -50 * scale, 2),
                        head=(5, -35 * scale, 0), rf=(0.0, 0.22, 0.05 * scale, 8))),
         ]
-        dur = {"golf_drive": 2.3, "golf_iron": 2.1, "golf_chip": 1.6, "golf_putt": 1.6}[variant]
+        dur = {"golf_drive": 2.3, "golf_iron": 2.1, "golf_pitch": 1.9, "golf_chip": 1.6, "golf_putt": 1.6}[variant]
         return {"keys": keys, "duration": dur, "loop": False, "view": "front"}
     if variant in ("baseball_bat", "softball_bat"):
         base = dict(pel=(-0.08, 25, 4), tor=(12, 35, 0), rf=(-0.15, 0.22, 0, 10), lf=(0.18, 0.22, 0, 20),
                     head=(5, -45, 0))
-        hands_up = (0.12, 0.08, 0.3)
+        hands_up = (0.25, 0.08, 0.22)  # hands near the rear shoulder but clearly in front of the chest
         keys = [
             K(0.0, "stance", grip=True, re="down", **_merge(base, rh=hands_up, lh=hands_up)),
             K(0.3, "load + stride", grip=True, plant="right",
-              **_merge(base, rh=(0.05, 0.12, 0.38), lh=hands_up, tor=(12, 50, 0), pel=(-0.1, 35, 4),
+              **_merge(base, rh=(0.22, 0.12, 0.3), lh=hands_up, tor=(12, 50, 0), pel=(-0.1, 35, 4),
                        lf=(0.25, 0.2, 0.12, 20))),
-            K(0.5, "foot plant", grip=True, **_merge(base, rh=(0.05, 0.1, 0.38), lh=hands_up, tor=(12, 45, 0),
+            K(0.5, "foot plant", grip=True, **_merge(base, rh=(0.22, 0.1, 0.3), lh=hands_up, tor=(12, 45, 0),
                                                      pel=(-0.1, 15, 4), lf=(0.3, 0.2, 0, 25))),
             K(0.62, "hips fire", grip=True, **_merge(base, rh=(0.25, -0.05, 0.3), lh=hands_up, tor=(14, 15, 0),
                                                      pel=(-0.1, -30, 4), lf=(0.3, 0.2, 0, 25))),
@@ -296,6 +296,30 @@ def tpl_swing(variant: str, amp: float) -> Dict[str, Any]:
                        lf=(0.3, 0.2, 0, 25), rf=(-0.1, 0.18, 0.06, 10), head=(5, -30, 0))),
         ]
         return {"keys": keys, "duration": 1.5, "loop": False, "view": "front"}
+    if variant in ("tennis_backhand_one_handed", "tennis_slice_backhand", "badminton_backhand"):
+        # One-handed backhand: the hitting (right) hand takes the racket back across the body to the
+        # left shoulder with the left hand supporting the throat, the right foot steps across,
+        # contact in front of the front foot, then the arm extends toward the target while the left
+        # arm goes back for balance (chest stays sideways).
+        high = 0.15 if variant != "badminton_backhand" else 0.35
+        base = dict(pel=(-0.1, 0, 4), tor=(18, 0, 0), rf=(0.0, 0.25, 0, 12), lf=(0.0, 0.25, 0, 12))
+        keys = [
+            K(0.0, "ready", grip=True, **_merge(base, rh=(0.33, -0.33, 0.1), lh=(0.33, -0.33, 0.1))),
+            K(0.3, "turn: racket back to left shoulder", grip=True,
+              **_merge(base, rh=(0.3, high - 0.05, -0.12), lh=(0.3, high - 0.05, -0.12), tor=(18, -65 * amp, 0),
+                       pel=(-0.12, -40, 4), rf=(0.1, 0.18, 0, 20))),
+            K(0.48, "step across", plant="left", le="back",
+              **_merge(base, rh=(0.3, high, -0.1), lh=(0.0, -0.2, 0.4), tor=(18, -60 * amp, 0),
+                       pel=(-0.12, -40, 4), rf=(0.3, 0.05, 0.08, 20))),
+            K(0.62, "contact in front", le="back",
+              **_merge(base, rh=(0.55, -0.25, 0.1), lh=(-0.15, -0.3, 0.45), tor=(20, -25, 0),
+                       pel=(-0.14, -25, 4), rf=(0.35, 0.05, 0, 25))),
+            K(0.78, "extend to target", le="back",
+              **_merge(base, rh=(0.5, 0.05 + high * 0.5, 0.45), lh=(-0.25, -0.25, 0.5), tor=(16, -10, 0),
+                       pel=(-0.12, -20, 4), rf=(0.35, 0.05, 0, 25))),
+            K(1.0, "recover", grip=True, **_merge(base, rh=(0.33, -0.33, 0.1), lh=(0.33, -0.33, 0.1))),
+        ]
+        return {"keys": keys, "duration": 1.7, "loop": False, "view": "three_quarter"}
     if variant in ("tennis_backhand", "tennis_two_handed_backhand"):
         base = dict(pel=(-0.1, 0, 4), tor=(18, 0, 0), rf=(0.0, 0.25, 0, 12), lf=(0.0, 0.25, 0, 12))
         rdy = (0.32, -0.35, 0.1)
@@ -320,7 +344,7 @@ def tpl_swing(variant: str, amp: float) -> Dict[str, Any]:
         high = 0.4 if variant == "hockey_slapshot" else 0.1
         keys = [
             K(0.0, "set", grip=True, **_merge(base, rh=lo, lh=lo)),
-            K(0.4, "wind-up", grip=True, **_merge(base, rh=(0.05, -0.3 + high, 0.45), lh=lo, tor=(25, 55, 0),
+            K(0.4, "wind-up", grip=True, **_merge(base, rh=(0.25, -0.3 + high, 0.4), lh=lo, tor=(25, 55, 0),
                                                   pel=(-0.12, 30, 6))),
             K(0.62, "downswing", grip=True, **_merge(base, rh=(0.3, -0.5, 0.3), lh=lo, tor=(30, 15, 0), pel=(-0.13, -10, 6))),
             K(0.7, "contact", grip=True, **_merge(base, rh=(0.42, -0.55, 0.0), lh=lo, tor=(30, -20, 0), pel=(-0.12, -35, 6))),
@@ -1189,7 +1213,8 @@ TEMPLATES: Dict[str, Tuple[Callable[[str, float], Dict[str, Any]], List[str], st
             "running/marching gaits in place (loops)"),
     "track": (tpl_track, ["hurdle"], "track and field running events"),
     "swim": (tpl_swim, ["freestyle", "backstroke", "breaststroke", "butterfly"], "swimming strokes (loops)"),
-    "swing": (tpl_swing, ["tennis_forehand", "tennis_backhand", "golf_drive", "golf_iron", "golf_chip", "golf_putt",
+    "swing": (tpl_swing, ["tennis_forehand", "tennis_backhand", "tennis_backhand_one_handed", "badminton_backhand",
+                          "golf_drive", "golf_iron", "golf_pitch", "golf_chip", "golf_putt",
                           "baseball_bat", "softball_bat", "hockey_slapshot", "hockey_wristshot", "field_hockey_hit",
                           "lacrosse_shot", "table_tennis_forehand", "padel_forehand", "squash_forehand",
                           "badminton_forehand", "cricket_drive"],
@@ -1413,8 +1438,14 @@ def sanitize_beat(beat: Dict[str, Any]) -> Dict[str, Any]:
     if b.get("stance") in ("plank", "push_up_bottom", "lying_face_down", "lying_face_up", "bear_position") \
             and b.get("trunk") in ("hinge", "deep_hinge", "lean_forward", "lean_back"):
         b["trunk"] = "keep"  # the body is already horizontal
-    if b.get("hands_together") and (ra in ONE_ARM_ACTIONS or ra in ("auto", "relaxed")):
-        b["hands_together"] = False  # nothing to hold with a one-arm strike or loose arms
+    if b.get("hands_together"):
+        grip_map = {"throw_cock": "swing_back", "throw_release": "push_forward", "punch": "push_forward",
+                    "follow_through_across": "follow_through_across", "hook": "push_forward", "uppercut": "push_forward"}
+        if ra in ("auto", "relaxed"):
+            b["hands_together"] = False  # nothing held with loose arms
+        else:
+            b["right_arm"] = grip_map.get(ra, ra)
+            b["left_arm"] = b["right_arm"]  # both hands on one implement move together
     return b
 
 

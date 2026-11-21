@@ -802,6 +802,11 @@
         startMotionLoop();
         var report = payload.report || {};
         var status = "Generated " + motionFrames.length + " frames" + (payload.cached ? " (cached)" : "") + ".";
+        var timeScale = report.playback_time_scale || 1;
+        if (Math.abs(timeScale - 1) > 0.05) {
+          status += " Auto speed: " + (timeScale > 1 ? "slowed " + timeScale.toFixed(1) + "x" : "sped up " + (1 / timeScale).toFixed(1) + "x") +
+            " (" + (payload.playback_fps || 24) + " fps) for natural on-screen pace.";
+        }
         if (report.issues && report.issues.length) { status += " Note: " + report.issues[0]; }
         setMotionStatus(status, false);
         console.log("Motion plan:", payload.plan);

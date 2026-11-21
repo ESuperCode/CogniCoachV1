@@ -67,6 +67,14 @@ The pipeline (v5) - rigid code, flexible model, works for ANY drill:
   loop seam), elbow/knee swivel limit, time-smoothed collision corrections (two-pass solve), one IK
   solve per arm for two-hand grips, arcs at near-full arm length for big arm swings, guardrails
   that fix contradictory beat choices (both arms throwing, both knees driving, scissor crosses).
+  Auto playback speed: after the frames are built, the engine measures the typical limb speed while
+  moving (holds excluded) and sets playback_fps so clips look natural on screen (fast moves slowed
+  up to 1.8x, slow ones sped up to 1.3x, compressed so relative rhythm survives). Frames are
+  unchanged. Send "speed": "realtime" to disable. MOTION_TARGET_SPEED tunes the target (1.6 m/s).
+  Hard body constraint: arms can never pass through the torso/hips (elbow swings out or the hand
+  clears to the front; a gripping hand never leaves the implement), corrections smoothed over up
+  to 4 passes. Racket/club/bat strokes the model improvises are replaced by the library stroke, and
+  forehand/backhand side is checked against the request.
   To extend the grammar, add entries to STANCES / ARM_ACTIONS / LEG_ACTIONS in motion_library.py.
 
 The HTML now blends frames with quaternion slerp (no Euler pops), auto-plays, shows the title and
