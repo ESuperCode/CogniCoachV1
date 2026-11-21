@@ -35,4 +35,19 @@
 How to read this schema:
 All objects are arranged in this hierarchy in the unity game. All joints are not actual objects but instead empty objects just used to rotate limbs around certain points. For the non joint object(the actual limb objects) there are two sets of three values the first set is is the dimensions of the object(x_width,y_height,z_length) basically its just the scale values set in unity, and for the second set of three values, they are the x,y,z position values, so the center of mass is at (0,0,0). The joint objects also have xyz coordinates which are the positions (X,y,z). The limb position coordinates are mostly just -1/2 * height which means that they are connected to the joint at the absolute top, there are also ones like the neck where it is 1/2 * height because it is connected at the absolute bottom, the reason I put this value is because some of them aren't perfectly aligned like that for example the shoulders.
 
+## Motion engine contract
+
+`motion_engine.py` reads this hierarchy at startup and exposes the parsed digital rig at `GET /rig`.
+The language model does not need to produce joint angles or 3D coordinates. It emits compact movement
+segments with:
+
+- `anchor`: `left_hand`, `right_hand`, `left_foot`, `right_foot`, `torso`, or `pelvis`
+- `path`: `linear`, `arc`, or `ellipse`
+- `direction`, `amplitude`, `cycles`, `phase`, and `oscillating`
+- `force`: `leverage`, `whip`, or `thrust`
+- optional supporting anchors and a `reverse_force` for oscillating actions
+
+The numerical compiler expands those segments into synchronized anchor trajectories, solves the
+limbs against the parsed proportions, and clamps joint rotations to athlete-safe limits. It keeps
+the existing sparse frame format consumed by `RagdollTest_AI.html`.
 

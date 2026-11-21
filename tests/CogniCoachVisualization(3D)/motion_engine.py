@@ -28,7 +28,9 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import traceback
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Sequence, Tuple
 
 import numpy as np
@@ -40,10 +42,44 @@ from pydantic import BaseModel, Field
 # -----------------------------------------------------------------------------
 # Settings and nominal rig proportions (Unity units; nominal height 1.75)
 # -----------------------------------------------------------------------------
-APIKEY=input("Api Key: \n")
-MODEL = os.getenv("OPENAI_MODEL", "gpt-6-astra")
+APIKEY = os.getenv("OPENAI_API_KEY")
+MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 HOST = os.getenv("MOTION_HOST", "127.0.0.1")
 PORT = int(os.getenv("MOTION_PORT", "8000"))
+RIG_INFO_PATH = Path(__file__).with_name("rig_info.md")
+
+
+def _parse_rig_definition(path: Path) -> Dict[str, Any]:
+    """Read the hand-authored rig spec and expose the parsed joint/poly data."""
+    nodes: Dict[str, Dict[str, List[float]]] = {}
+    if not path.exists():
+        return nodes
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("*"):
+            continue
+        body = stripped[1:].strip()
+        if not body:
+            continue
+        name_match = re.match(r"([A-Za-z0-9_]+)", body)
+        if not name_match:
+            continue
+        name = name_match.group(1)
+        tuples = re.findall(r"\(([^)]+)\)", body)
+        if not tuples:
+            continue
+        values = []
+        for item in tuples:
+            parts = [float(x.strip()) for x in item.split(",") if x.strip()]
+            if len(parts) >= 3:
+                values.append(parts[:3])
+        if values:
+            nodes[name] = {"position": values[0], "components": values}
+    return nodes
+
+
+RIG = _parse_rig_definition(RIG_INFO_PATH)
 BODY_HEIGHT = 1.75
 SHOULDER_HALF_WIDTH = 0.195
 SHOULDER_Y = 0.445
@@ -54,6 +90,21 @@ HIP_ANCHOR_Y = -0.035
 THIGH_LENGTH = 0.425
 SHIN_LENGTH = 0.425
 ANKLE_FORWARD_OFFSET = 0.055
+
+# Calibrate the solver to the rig's anatomical flexion direction. The original engine used a
+# generic Euler assumption; the actual rig is human anatomy, so elbows and knees should only bend in
+# flexion (not backwards). Keeping the hinge value negative stabilizes the pose without disrupting
+# the original solver flow.
+KNEE_FLEXION_MIN_DEG = 0.0
+KNEE_FLEXION_MAX_DEG = 125.0
+ELBOW_FLEXION_MIN_DEG = -145.0
+ELBOW_FLEXION_MAX_DEG = 0.0
+
+# Anatomical flexion is represented as the negative local hinge rotation in the solver's Euler basis.
+# The target-relative forward vector decides whether the bend should remain in the natural flexion
+# direction for that limb or swing behind the body, preserving useful tennis/swimming follow-through.
+KNEE_FLEXION_DEFAULT_SIGN = 1.0
+ELBOW_FLEXION_DEFAULT_SIGN = -1.0
 
 # The HTML sample uses 8 FPS. We generate at 12 by default and set the HTML control
 # to that rate; each frame is one playback step in the current HTML implementation.
@@ -155,6 +206,26 @@ may be compact, but it must contain the action's important phases. Motion should
 weight shift, torso contribution, arm/leg coordination, and follow-through where appropriate.
 Keep all limbs anatomically plausible and targets reachable. Avoid extreme body-root jumps.
 
+You are responsible for translating any requested movement into these trajectories; do not assume the
+compiler has sport-specific templates or will infer missing phases. Describe the complete cycle, including
+bilateral phase offsets when limbs alternate. Use the same physical convention for every movement:
+the torso's anatomical axial twist belongs in the Y component of spine_euler_deg, while X is forward
+flexion/extension and Z is lateral side-bending. Keep the elbow and knee bend hints consistent with
+the target path and never use a backward-facing hinge solution. For cyclic actions, make the first and
+last waypoint compatible so playback loops without one limb stopping halfway through its cycle.
+
+Before filling the seven waypoints, privately decompose the requested action into body orientation and
+travel, the primary limb path, supporting-limb paths, torso contribution, and force-producing recovery.
+Encode every part in the numeric targets. Never leave a limb static unless the movement explicitly
+stabilizes it. A target path is not a joint angle: place the hand or foot where the anatomy must be at
+that phase and let the solver find the joint rotations. For overhead or surface-reaching actions, hand
+targets must visibly pass above the shoulder anchor (higher Y), not flatten into a shoulder-height
+circle. For axial torso rotation, vary spine Y while keeping spine X and Z near zero unless the action
+explicitly calls for flexion or side-bending. For propulsion actions, feet must have alternating
+non-planted targets with meaningful displacement; do not mark them planted to simplify the plan.
+For alternating limbs, use opposite phase timing so one limb does not stop while the other completes
+the whole cycle. Check target reachability before returning the JSON.
+
 Output exactly 7 waypoints in chronological order. `t` should increase from 0 to 1. A reasonable
 initial progression is approximately 0.00, 0.15, 0.30, 0.47, 0.64, 0.82, 1.00, adjusted to the action.
 Each waypoint must specify every field in the schema. Use concise phase names. Feet marked planted
@@ -176,7 +247,7 @@ class GenerateRequest(BaseModel):
     playback_fps: int = Field(default=DEFAULT_PLAYBACK_FPS, ge=6, le=30)
     dominant_side: Literal["left", "right"] = "right"
     extra_instructions: str = Field(default="", max_length=600)
-    repair_attempts: int = Field(default=2, ge=0, le=2)
+    repair_attempts: int = Field(default=0, ge=0, le=1)
 
 
 app = FastAPI(title="CogniCoach Motion Engine", version="0.1.0")
@@ -191,12 +262,36 @@ app.add_middleware(
 
 def get_client() -> OpenAI:
     
-    return OpenAI(api_key=APIKEY)
+    if not APIKEY:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured for the motion service.")
+    return OpenAI(api_key=APIKEY, max_retries=0)
 
 
 @app.get("/health")
 def health() -> Dict[str, Any]:
     return {"ok": True, "model": MODEL, "nominal_body_height": BODY_HEIGHT}
+
+
+@app.get("/rig")
+def get_rig() -> Dict[str, Any]:
+    """Expose the parsed digital rig so the runtime tracks the source-of-truth body specification."""
+    return {
+        "rig_path": str(RIG_INFO_PATH),
+        "exists": RIG_INFO_PATH.exists(),
+        "height_units": BODY_HEIGHT,
+        "segments": {
+            "shoulder_half_width": SHOULDER_HALF_WIDTH,
+            "shoulder_y": SHOULDER_Y,
+            "upper_arm_length": UPPER_ARM_LENGTH,
+            "forearm_length": FOREARM_LENGTH,
+            "hip_half_width": HIP_HALF_WIDTH,
+            "hip_anchor_y": HIP_ANCHOR_Y,
+            "thigh_length": THIGH_LENGTH,
+            "shin_length": SHIN_LENGTH,
+            "ankle_forward_offset": ANKLE_FORWARD_OFFSET,
+        },
+        "nodes": RIG,
+    }
 
 
 # -----------------------------------------------------------------------------
@@ -374,11 +469,17 @@ def numerical_jacobian(func, q: np.ndarray, epsilon_deg: float = 0.5) -> np.ndar
 def _limit_local_angles(q: np.ndarray, chain: str) -> np.ndarray:
     q = np.asarray(q, dtype=float).copy()
     q[:3] = np.clip(q[:3], -135.0, 135.0)
-    q[3] = clamp_num(q[3], -145.0 if chain == "arm" else -125.0,
-                     145.0 if chain == "arm" else 125.0)
+    if chain == "arm":
+        q[3] = clamp_num(q[3], ELBOW_FLEXION_MIN_DEG, ELBOW_FLEXION_MAX_DEG)
+    else:
+        q[3] = clamp_num(q[3], KNEE_FLEXION_MIN_DEG, KNEE_FLEXION_MAX_DEG)
     # y/z rotations at elbows and knees are allowed but discouraged; the rig axes are not yet calibrated.
     q[4:6] = np.clip(q[4:6], -55.0, 55.0)
     return q
+
+
+def _anatomical_bend_sign(chain: str) -> float:
+    return KNEE_FLEXION_DEFAULT_SIGN if chain == "leg" else ELBOW_FLEXION_DEFAULT_SIGN
 
 
 def solve_two_link(
@@ -424,8 +525,8 @@ def solve_two_link(
     geometric_bend = clamp_num(geometric_bend, 0.0, 145.0 if chain == "arm" else 125.0)
     if seed is None:
         q = np.zeros(6, dtype=float)
-        # X is a provisional hinge axis; calibrate if the Unity rig flexes about another axis.
-        q[3] = -geometric_bend
+        # The Unity rig's knee hinge flexes in the positive local-X direction.
+        q[3] = _anatomical_bend_sign(chain) * abs(geometric_bend)
     else:
         q = np.asarray(seed, dtype=float).reshape(6).copy()
         # Balance frame-to-frame continuity against the bend dictated by the current target distance.
@@ -433,6 +534,7 @@ def solve_two_link(
         # A large hinted bend is allowed to influence only when it remains geometrically plausible.
         if geometric_bend > 5.0:
             q[3] = 0.85 * q[3] - 0.15 * min(hinted_bend, geometric_bend)
+        q[3] = _anatomical_bend_sign(chain) * abs(q[3])
     q = _limit_local_angles(q, chain)
 
     # Variable weighting lets shoulder/hip orient in 3D while discouraging non-hinge rotations
@@ -589,6 +691,8 @@ def call_planner(req: GenerateRequest, previous_plan: Dict[str, Any] | None = No
             model=MODEL,
             instructions=PLANNER_INSTRUCTIONS,
             input=user_prompt,
+            reasoning={"effort": "low"},
+            store=False,
             text={
                 "format": {
                     "type": "json_schema",
@@ -597,16 +701,25 @@ def call_planner(req: GenerateRequest, previous_plan: Dict[str, Any] | None = No
                     "schema": PLAN_SCHEMA,
                 }
             },
-            max_output_tokens=12000,
+            max_output_tokens=4000,
         )
     except Exception as exc:
         # Keep details server-side in traceback; return a useful error message to browser.
         traceback.print_exc()
         raise HTTPException(status_code=502, detail=f"OpenAI motion-planning request failed: {exc}") from exc
     try:
-        if not response.output_text:
+        if getattr(response, "status", None) == "incomplete":
+            details = getattr(response, "incomplete_details", None)
+            reason = getattr(details, "reason", "unknown") if details is not None else "unknown"
+            raise ValueError(f"The model returned incomplete structured output ({reason}).")
+        output_text = str(getattr(response, "output_text", "") or "").strip()
+        if not output_text:
             raise ValueError("The model returned no text output.")
-        parsed = json.loads(response.output_text)
+        if output_text.startswith("```"):
+            output_text = output_text.split("\n", 1)[-1]
+            if output_text.rstrip().endswith("```"):
+                output_text = output_text.rstrip()[:-3].rstrip()
+        parsed = json.loads(output_text)
         return sanitize_plan(parsed)
     except Exception as exc:
         traceback.print_exc()
@@ -617,7 +730,11 @@ def call_planner(req: GenerateRequest, previous_plan: Dict[str, Any] | None = No
 # Compile anchor trajectories into sparse joint frames
 # -----------------------------------------------------------------------------
 
-def compile_motion(plan: Dict[str, Any], duration_seconds: float, fps: int) -> Tuple[List[Dict[str, float]], Dict[str, Any]]:
+def compile_motion(
+    plan: Dict[str, Any],
+    duration_seconds: float,
+    fps: int,
+) -> Tuple[List[Dict[str, float]], Dict[str, Any]]:
     frame_count = max(2, min(MAX_FRAMES, int(round(duration_seconds * fps))))
     times = np.linspace(0.0, 1.0, frame_count)
 
@@ -630,14 +747,18 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: float, fps: int) -> T
     frames: List[Dict[str, float]] = []
     detailed: List[Dict[str, Any]] = []
 
-    for frame_idx, t in enumerate(times):
+    for t in times:
         p = sample_plan(plan, float(t))
         root = vec3(p["pelvis_offset_m"])
         hip_euler = vec3(p["hip_euler_deg"])
         spine_euler = vec3(p["spine_euler_deg"])
 
-        larm, larm_info = solve_two_link(p["left_hand_m"], spine_euler, "left", seed["left_arm"], "arm", p["left_elbow_bend_deg"])
-        rarm, rarm_info = solve_two_link(p["right_hand_m"], spine_euler, "right", seed["right_arm"], "arm", p["right_elbow_bend_deg"])
+        larm, larm_info = solve_two_link(
+            p["left_hand_m"], spine_euler, "left", seed["left_arm"], "arm", p["left_elbow_bend_deg"]
+        )
+        rarm, rarm_info = solve_two_link(
+            p["right_hand_m"], spine_euler, "right", seed["right_arm"], "arm", p["right_elbow_bend_deg"]
+        )
         lleg, lleg_info = solve_two_link(p["left_foot_m"], hip_euler, "left", seed["left_leg"], "leg", p["left_knee_bend_deg"])
         rleg, rleg_info = solve_two_link(p["right_foot_m"], hip_euler, "right", seed["right_leg"], "leg", p["right_knee_bend_deg"])
         seed["left_arm"], seed["right_arm"] = larm, rarm
@@ -878,7 +999,11 @@ def verify_motion(plan: Dict[str, Any], frames: List[Dict[str, float]], detailed
 @app.post("/generate")
 def generate(req: GenerateRequest) -> Dict[str, Any]:
     plan = call_planner(req)
-    frames, report = compile_motion(plan, req.duration_seconds, req.playback_fps)
+    frames, report = compile_motion(
+        plan,
+        req.duration_seconds,
+        req.playback_fps,
+    )
     repair_log: List[Dict[str, Any]] = []
     for attempt in range(req.repair_attempts):
         if report.get("passed_geometric_checks", False):
@@ -887,7 +1012,11 @@ def generate(req: GenerateRequest) -> Dict[str, Any]:
         repair_log.append({"attempt": attempt + 1, "failure_signature": previous_failure_signature})
         try:
             repaired = call_planner(req, previous_plan=plan, report=report)
-            new_frames, new_report = compile_motion(repaired, req.duration_seconds, req.playback_fps)
+            new_frames, new_report = compile_motion(
+                repaired,
+                req.duration_seconds,
+                req.playback_fps,
+            )
             # Keep the repair only if it strictly reduces failures, or achieves a pass.
             if new_report["failure_count"] <= report["failure_count"] or new_report["passed_geometric_checks"]:
                 plan, frames, report = repaired, new_frames, new_report

@@ -410,7 +410,7 @@
       function cloneBodyCode(frame) {
         var frameBody = Object.assign({}, DEFAULT_BODY_CODE, frame || {});
         frameBody.positionx = (Number(frameBody.positionx) || 0) + bodyPosition.positionx;
-        frameBody.positiony = (Number(frameBody.positiony) || 0) + bodyPosition.positiony;
+        frameBody.positiony = (Number(frameBody.positiony) || 0) + bodyPosition.positiony+180;
         frameBody.positionz = (Number(frameBody.positionz) || 0) + bodyPosition.positionz;
         return frameBody;
       }
@@ -662,10 +662,18 @@
                   playback_fps: fps,
                   dominant_side: "right",
                   extra_instructions: "Make the movement useful as a clear visual demonstration for a sports coaching app.",
-                  repair_attempts: 2
+                  repair_attempts: 0
                 })
               });
-              var payload = await response.json();
+              var responseText = await response.text();
+              var payload;
+              try {
+                payload = responseText ? JSON.parse(responseText) : {};
+              } catch (parseError) {
+                throw new Error(
+                  "Motion service returned invalid JSON (HTTP " + response.status + ")."
+                );
+              }
               if (!response.ok) {
                 throw new Error(payload.detail || ("Motion service returned HTTP " + response.status));
               }
@@ -750,7 +758,7 @@
             bodyPosition.positionx += xDirection * positionStep;
           } else {
             var yDirection = event.key === "ArrowRight" ? 1 : -1;
-            bodyPosition.positiony += yDirection * positionStep;
+            bodyPosition.positiony -= yDirection * positionStep;
           }
 
           resendCurrentPose();

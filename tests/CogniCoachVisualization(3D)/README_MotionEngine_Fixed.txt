@@ -36,6 +36,11 @@ Setup (Windows PowerShell)
 Security
 --------
 Do not put OPENAI_API_KEY in HTML or client-side JavaScript. The key stays in the Python backend.
+Local testing:
+  - Copy .env.example to .env in the repository root.
+  - Set OPENAI_API_KEY=your-key only in the ignored .env file.
+  - Alternatively set OPENAI_API_KEY in the PowerShell process before starting the server.
+  - Never commit or paste the key into motion_engine.py.
 
 Notes / limitations
 -------------------
