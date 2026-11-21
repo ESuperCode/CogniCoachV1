@@ -1311,7 +1311,14 @@ TEMPO = {"slow": 1.35, "normal": 1.0, "fast": 0.8}
 INTENSITY = {"low": 0.8, "medium": 1.0, "high": 1.15}
 VIEWS = ["front", "side", "three_quarter", "back"]
 
-INTERPRET_SCHEMA = _obj({
+LIBRARY_CHOICES = [f"{t}:{v}" for t, v in ml.all_choices()]
+
+NORMALIZE_SCHEMA = _obj({
+    "canonical_name": {"type": "string"},
+    "simplified_description": {"type": "string"},
+    "key_details": {"type": "array", "items": {"type": "string"}},
+    "library_match": {"type": "string", "enum": LIBRARY_CHOICES + ["none"]},
+    "match_quality": {"type": "string", "enum": ["exact", "close", "none"]},
     "title": {"type": "string"},
     "movement_summary": {"type": "string"},
     "sport_or_context": {"type": "string"},
@@ -1325,17 +1332,25 @@ INTERPRET_SCHEMA = _obj({
     "coaching_cues": {"type": "array", "items": {"type": "string"}},
 })
 
-INTERPRET_INSTRUCTIONS = """
-You are a sports biomechanics coach. Read the movement request and describe precisely what the
-athlete's body does, as a short brief for an animator. Requests can be standard sports skills,
-gym exercises, or brand-new drills invented by a coach: for new drills, work out the body actions
-from the description. Assume a right-handed athlete.
-- phases: 2-8 short steps in order; each names the main body parts and what they do
-  (e.g. "drop into a low crouch, hands touch the floor", "right hand reaches across to the left foot").
-- closest_standard_movements: 1-4 well-known movements/exercises that look most like this one.
-- repeating_cycle: true for continuous cyclic actions (running, swimming, skipping, shuffling...).
-- coaching_cues: 3-5 short practical cues a coach would say.
-Be concrete and brief.
+NORMALIZE_INSTRUCTIONS = """
+You are a sports biomechanics coach preparing a request for an animation system that can only show
+ONE clear movement at a time. Users often write long, chatty or over-detailed requests; your job is
+to SIMPLIFY them into the single core movement, so the animation stays clean and consistent.
+
+- canonical_name: the standard name of the core movement, 2-6 words (e.g. "soccer instep shot",
+  "butterfly swim stroke", "single-leg Romanian deadlift"). Drop setting, story, equipment brands,
+  emotions and coaching chatter. If several movements are requested, name the main sequence briefly.
+- simplified_description: one plain sentence (max 25 words) of what the body does.
+- key_details: at most 3 details that change the BODY MOTION (side, tempo, stance, repetitions).
+  Ignore everything else.
+- library_match: the library entry that IS this movement ("template:variant"), or "none".
+  match_quality: "exact" only if that entry is the same movement (synonyms count: "soccer shot",
+  "striking a football" -> kick:soccer_instep; "fly stroke" -> swim:butterfly); "close" if similar
+  but not the same; "none" otherwise. Prefer an exact library entry whenever one fits.
+- phases: 2-8 short ordered steps naming body parts and actions (for movements not in the library).
+- closest_standard_movements: 1-4 well-known movements that look most like it.
+- repeating_cycle: true for continuous cyclic actions (running, swimming, shuffling, skipping...).
+- coaching_cues: 3-5 short practical cues. Assume a right-handed athlete.
 """.strip()
 
 COMPOSE_SCHEMA = _obj({
@@ -1356,7 +1371,10 @@ You cannot invent motion data: you only choose library entries, in order, as "se
 Rules:
 1. If one template variant matches the movement, use exactly that one segment.
 2. Combine several segments in order for combos and multi-part drills (e.g. a sprint into a jump,
-   a squat followed by an overhead press).
+   a squat followed by an overhead press). ALWAYS use a real template for every part that has one
+   (high knees -> run:high_knees, squat jump -> jump:squat_jump, push-up -> floor:push_up); "poses"
+   is only for the parts no template covers. Example: "3 high knees then squat and jump" ->
+   [run high_knees reps 2] + [jump squat_jump reps 1].
 3. For movements that no template covers (stretches, holds, novel coach drills, reaching patterns),
    use template "poses" with variant = pose names joined by ">", e.g.
    "athletic_stance>reach_right_hand_to_left_foot>low_crouch_hands_down>reach_left_hand_to_right_foot".
@@ -1380,12 +1398,16 @@ LIBRARY CATALOG:
 
 def _compose_input(movement: str, extra: str, brief: Dict[str, Any], errors: Optional[List[str]] = None,
                    previous: Optional[Dict[str, Any]] = None) -> str:
-    parts = [f"REQUEST: {movement}"]
-    if extra.strip():
-        parts.append(f"EXTRA NOTES: {extra.strip()}")
+    # The raw (possibly long, chatty) request is deliberately NOT passed on: only the simplified
+    # brief, which keeps the composition consistent.
+    _ = (movement, extra)
+    parts = [f"MOVEMENT: {brief.get('canonical_name') or movement[:80]}",
+             f"WHAT THE BODY DOES: {brief.get('simplified_description', '')}"]
+    if brief.get("key_details"):
+        parts.append("KEY DETAILS: " + "; ".join(str(x) for x in brief["key_details"][:3]))
     parts.append("COACH BRIEF:\n" + json.dumps({k: brief.get(k) for k in (
         "sport_or_context", "implement", "body_orientation", "repeating_cycle", "phases",
-        "closest_standard_movements", "tempo", "intensity")}, ensure_ascii=False))
+        "closest_standard_movements", "library_match", "tempo", "intensity")}, ensure_ascii=False))
     if errors:
         parts.append("YOUR PREVIOUS ANSWER:\n" + json.dumps(previous))
         parts.append("PROBLEMS FOUND BY THE VALIDATOR (fix them):\n" + "\n".join("- " + e for e in errors))
@@ -1490,11 +1512,29 @@ def compose_plan(segments: List[Dict[str, Any]], brief: Dict[str, Any], view: Op
 
 def plan_movement(movement: str, extra: str = "", duration: Optional[float] = None,
                   refine: bool = False) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-    """Multi-call pipeline: interpret -> compose (enum-constrained) -> validate -> repair -> build."""
+    """Multi-call pipeline.
+
+    1. normalize: simplify the request into one canonical movement + brief + exact library match.
+    2. exact match -> code builds it directly (no further model freedom: most consistent).
+       otherwise   -> compose (enum-constrained segments from the simplified brief only)
+                      -> validate -> repair call with the validator's errors -> build.
+    """
     calls: List[Dict[str, Any]] = []
-    brief, meta = _call_model(INTERPRET_INSTRUCTIONS, f"Movement request: {movement}\n{extra}".strip(),
-                              "low", INTERPRET_SCHEMA, "movement_brief", 4000)
-    calls.append({"stage": "interpret", **meta})
+    request = f"Movement request: {movement.strip()}"
+    if extra.strip():
+        request += f"\nNotes: {extra.strip()}"
+    brief, meta = _call_model(NORMALIZE_INSTRUCTIONS, request, "low", NORMALIZE_SCHEMA, "movement_brief", 5000)
+    calls.append({"stage": "normalize", **meta, "canonical_name": brief.get("canonical_name"),
+                  "library_match": brief.get("library_match"), "match_quality": brief.get("match_quality")})
+    match = brief.get("library_match", "none")
+    if match != "none" and brief.get("match_quality") == "exact" and not refine:
+        template, variant = match.split(":", 1)
+        seg = {"template": template, "variant": variant, "reps": 1,
+               "tempo": brief.get("tempo", "normal") if brief.get("tempo") in TEMPO else "normal",
+               "intensity": brief.get("intensity", "medium") if brief.get("intensity") in INTENSITY else "medium"}
+        segments, errors, _ = validate_segments([seg])
+        if segments and not errors:
+            return compose_plan(segments, brief, None, duration), calls
     compose_in = _compose_input(movement, extra, brief)
     raw, meta = _call_model(COMPOSE_INSTRUCTIONS, compose_in, "medium" if refine else "low",
                             COMPOSE_SCHEMA, "segment_plan", 6000)
@@ -1503,16 +1543,14 @@ def plan_movement(movement: str, extra: str = "", duration: Optional[float] = No
     if errors:
         raw2, meta2 = _call_model(COMPOSE_INSTRUCTIONS, _compose_input(movement, extra, brief, errors, raw),
                                   "medium", COMPOSE_SCHEMA, "segment_plan", 6000)
-        segments2, errors2, notes2 = validate_segments(raw2.get("segments", []))
+        segments2, errors2, _ = validate_segments(raw2.get("segments", []))
         calls.append({"stage": "repair", **meta2, "segments": raw2.get("segments"), "errors": errors2})
         if segments2 and len(errors2) <= len(errors):
             segments, raw = segments2, raw2
     if not segments:
-        # Nothing usable from the library: fall back to the free-form planner.
-        plan, more = plan_freeform(movement, extra, duration, refine)
+        plan, more = plan_freeform(brief.get("canonical_name") or movement, extra, duration, refine)
         return plan, calls + more
-    plan = compose_plan(segments, brief, raw.get("camera_view"), duration)
-    return plan, calls
+    return compose_plan(segments, brief, raw.get("camera_view"), duration), calls
 
 
 # -----------------------------------------------------------------------------
@@ -1631,7 +1669,7 @@ def _build_response(plan: Dict[str, Any], duration: Optional[float], fps: int, s
 
 @app.post("/generate")
 def generate(req: GenerateRequest) -> Dict[str, Any]:
-    key = _cache_key("v3", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
+    key = _cache_key("v4", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
                      req.quality, MODEL)
     plan = cache_get(key) if req.use_cache else None
     calls: List[Dict[str, Any]] = []

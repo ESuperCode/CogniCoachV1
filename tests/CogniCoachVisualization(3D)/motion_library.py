@@ -161,15 +161,24 @@ def tpl_swim(variant: str, amp: float) -> Dict[str, Any]:
                  rh=(0.15, 0.6, 0.12), lh=(0.15, 0.6, 0.12), rf=(0.0, 0.32, 0.08, 30), lf=(0.0, 0.32, 0.08, 30))
         return {"keys": [glide, outsweep, insweep, recover, kick], "duration": 1.6, "loop": True, "view": "side"}
     if variant == "butterfly":
-        def fly(t, ph, hand, el, pitch, feet):
-            return K(t, ph, plant="none", re=el, le=el, body=(pitch, 0, 0), rh=hand, lh=hand,
-                     rf=(feet, 0.1, 0.0, 5), lf=(feet, 0.1, 0.0, 5))
-        keys = [fly(0.0, "entry", (0.12, 0.6, 0.3), "out", 92, -0.05),
-                fly(0.2, "catch", (0.35, 0.42, 0.38), "out", 86, 0.12),
-                fly(0.4, "pull", (0.45, 0.0, 0.12), "out", 80, -0.08),
-                fly(0.55, "push + breathe", (0.18, -0.55, 0.28), "back", 74, 0.15),
-                fly(0.75, "recovery over water", (-0.3, -0.05, 0.62), "back", 82, -0.05)]
-        return {"keys": keys, "duration": 1.2, "loop": True, "view": "side"}
+        # Arms: catch wide, keyhole pull under the chest, push past the hips, then a straight-arm
+        # recovery swung OUT to the sides ABOVE the body (forward < 0 = above the back), re-entry
+        # shoulder-width ahead. Legs: two dolphin kicks per cycle; knees bend (feet rise toward the
+        # surface) then whip straight, with the hips undulating (body pitch / pelvis tilt).
+        def fly(t, ph, hand, el, pitch, tilt, feet_fwd, feet_lift, head_nod=0):
+            return K(t, ph, plant="none", re=el, le=el, body=(pitch, 0, 0), pel=(0, 0, tilt, 0),
+                     head=(head_nod, 0, 0), rh=hand, lh=hand,
+                     rf=(feet_fwd, 0.08, feet_lift, 0), lf=(feet_fwd, 0.08, feet_lift, 0))
+        keys = [
+            fly(0.0, "entry + 1st kick down", (0.05, 0.6, 0.3), "out", 94, -8, 0.12, 0.0),
+            fly(0.14, "catch wide", (0.3, 0.42, 0.42), "out", 90, 0, -0.05, 0.12),
+            fly(0.3, "keyhole pull", (0.45, 0.02, 0.12), "out", 84, 8, -0.15, 0.3),
+            fly(0.44, "push + 2nd kick down + breathe", (0.15, -0.55, 0.3), "back", 76, -6, 0.12, 0.0, -30),
+            fly(0.56, "exit at hips", (-0.12, -0.5, 0.42), "back", 80, 0, 0.02, 0.06, -20),
+            fly(0.7, "recovery swings out over water", (-0.32, -0.02, 0.62), "back", 86, 4, -0.08, 0.18),
+            fly(0.85, "recovery forward above water", (-0.18, 0.42, 0.45), "back", 90, 6, -0.15, 0.3),
+        ]
+        return {"keys": keys, "duration": 1.3, "loop": True, "view": "side"}
     if variant == "backstroke":
         body = (-86, 0, 0)
         # Face up: forward (out of chest) points to the sky.
@@ -483,25 +492,43 @@ def tpl_kick(variant: str, amp: float) -> Dict[str, Any]:
                                                             rh=(0.4, -0.15, 0.05), lh=(0.4, -0.15, 0.05))),
                 K(1.0, "clinch", **guard)]
         return {"keys": keys, "duration": 1.0, "loop": False, "view": "side"}
-    # Soccer instep / punt / rugby kick (default)
+    # Soccer instep shot (default). Sagittal leg swing: plant foot beside the ball, kicking knee
+    # cocked behind, knee drives forward over the ball, shin snaps through, follow-through up the
+    # line of the shot and land on the kicking foot. Left arm out wide for balance, right arm
+    # swings back then forward in counter-rotation. No sideways leg motion.
+    arms_ready = dict(rh=(0.12, -0.5, 0.3), lh=(0.12, -0.5, 0.3))
     keys = [
-        K(0.0, "approach", **_merge(STANDING, pel=(-0.05, 0, 2), tor=(10, 0, 0), rh=(0.15, -0.5, 0.3), lh=(0.15, -0.5, 0.3))),
-        K(0.25, "plant foot", plant="left",
-          **_merge(STANDING, lf=(0.12, 0.22, 0, 15), rf=(-0.2, 0.12, 0.15, 10), pel=(-0.1, -10, 0, -5),
-                   tor=(5, -10, -8), rh=(0.0, -0.25, 0.55), lh=(0.25, -0.35, 0.45))),
-        K(0.45, "backswing", plant="left",
-          **_merge(STANDING, lf=(0.12, 0.22, 0, 15), rf=(-0.35, 0.1, 0.42 * a, 5), pel=(-0.12, 15, 0, -5),
-                   tor=(-5, 20, -10), rh=(-0.05, -0.15, 0.6), lh=(0.35, -0.15, 0.5))),
-        K(0.58, "contact", plant="left",
-          **_merge(STANDING, lf=(0.12, 0.22, 0, 15), rf=(0.3, 0.06, 0.12, 5), pel=(-0.12, -15, 0, -5),
-                   tor=(15, -15, -10), rh=(0.05, -0.2, 0.55), lh=(0.3, -0.3, 0.3))),
+        K(0.0, "last stride", plant="right",
+          **_merge(STANDING, **arms_ready, pel=(-0.04, 0, 4), tor=(12, 0, 0),
+                   rf=(0.05, 0.11, 0, 5), lf=(-0.25, 0.11, 0.25, 5))),
+        K(0.25, "plant foot beside ball", plant="left",
+          **_merge(STANDING, pel=(-0.1, 10, 4, -4), tor=(8, 15, -6),
+                   lf=(0.12, 0.16, 0, 8), rf=(-0.22, 0.1, 0.3, 0),
+                   rh=(-0.15, -0.4, 0.38), lh=(0.2, -0.2, 0.55))),
+        K(0.42, "backswing (knee cocked)", plant="left", re="back",
+          **_merge(STANDING, pel=(-0.12, 18 * a, 2, -5), tor=(2, 25 * a, -8),
+                   lf=(0.12, 0.16, 0, 8), rf=(-0.32, 0.08, 0.5 * a, 0),
+                   rh=(-0.25, -0.35, 0.35), lh=(0.25, -0.1, 0.62))),
+        K(0.54, "knee drives over ball", plant="left",
+          **_merge(STANDING, pel=(-0.12, 0, 6, -5), tor=(12, 0, -6),
+                   lf=(0.12, 0.16, 0, 8), rf=(0.02, 0.08, 0.3, 0),
+                   rh=(0.0, -0.45, 0.3), lh=(0.3, -0.15, 0.55))),
+        K(0.6, "contact (laces)", plant="left",
+          **_merge(STANDING, pel=(-0.12, -15 * a, 6, -5), tor=(18, -15 * a, -5),
+                   lf=(0.12, 0.16, 0, 8), rf=(0.22, 0.08, 0.1, 0),
+                   rh=(0.15, -0.45, 0.22), lh=(0.25, -0.2, 0.5))),
         K(0.75, "follow-through", plant="left",
-          **_merge(STANDING, lf=(0.12, 0.22, 0, 15), rf=(0.58, 0.04, 0.5 * a, 5), pel=(-0.1, -25, 0, -5),
-                   tor=(0, -20, -5), rh=(0.2, -0.25, 0.4), lh=(0.25, -0.35, 0.35))),
-        K(1.0, "land + recover", **_merge(STANDING, pel=(-0.06, 0, 2), tor=(10, 0, 0), rf=(0.2, 0.12, 0, 10),
-                                          rh=(0.15, -0.5, 0.3), lh=(0.15, -0.5, 0.3))),
+          **_merge(STANDING, pel=(-0.1, -25 * a, 4, -4), tor=(10, -25 * a, -3),
+                   lf=(0.12, 0.16, 0, 8), rf=(0.5, 0.08, 0.45 * a, 0),
+                   rh=(0.3, -0.35, 0.1), lh=(0.05, -0.35, 0.45))),
+        K(0.9, "land on kicking foot", plant="right",
+          **_merge(STANDING, pel=(-0.12, -10, 6), tor=(18, -5, 0),
+                   rf=(0.3, 0.12, 0, 5), lf=(-0.15, 0.12, 0.15, 5),
+                   rh=(0.2, -0.4, 0.3), lh=(0.0, -0.45, 0.35))),
+        K(1.0, "balanced", **_merge(STANDING, **arms_ready, pel=(-0.06, 0, 4), tor=(12, 0, 0),
+                                   rf=(0.15, 0.12, 0, 5), lf=(-0.05, 0.12, 0, 5))),
     ]
-    return {"keys": keys, "duration": 1.3, "loop": False, "view": "three_quarter"}
+    return {"keys": keys, "duration": 1.5, "loop": False, "view": "side"}
 
 
 def tpl_jump(variant: str, amp: float) -> Dict[str, Any]:
@@ -578,7 +605,7 @@ def tpl_strength(variant: str, amp: float) -> Dict[str, Any]:
     if variant in ("lunge", "forward_lunge", "reverse_lunge", "walking_lunge", "split_squat"):
         hips = dict(rh=(0.0, -0.45, 0.35), lh=(0.0, -0.45, 0.35), re="out", le="out")
         top = K(0.0, "stand", **_merge(STANDING, **{k: v for k, v in hips.items() if k in ("rh", "lh")}), re="out", le="out")
-        step = K(0.3, "step", plant="left", re="out", le="out", rh=hips["rh"], lh=hips["lh"],
+        step = K(0.3, "step", plant="none", re="out", le="out", rh=hips["rh"], lh=hips["lh"],
                  rf=(0.3 if variant != "reverse_lunge" else -0.3, 0.12, 0.08, 10), lf=(0, 0.12, 0, 10), pel=(-0.05, 0, 0))
         front = 0.45 if variant != "reverse_lunge" else 0.0
         backf = -0.05 if variant != "reverse_lunge" else -0.5
@@ -589,7 +616,7 @@ def tpl_strength(variant: str, amp: float) -> Dict[str, Any]:
         bottom = K(0.55, "bottom (back knee low)", re="out", le="out", rh=hips["rh"], lh=hips["lh"],
                    pel=(-0.32 * a, 0, 0), tor=(5, 0, 0), **bottom_feet)
         hold = copy.deepcopy(bottom); hold["t"] = 0.65; hold["phase"] = "hold"
-        back = K(0.85, "push back", plant="left", re="out", le="out", rh=hips["rh"], lh=hips["lh"],
+        back = K(0.85, "push back", plant="none", re="out", le="out", rh=hips["rh"], lh=hips["lh"],
                  rf=(0.25 if variant != "reverse_lunge" else -0.25, 0.12, 0.08, 10), lf=(0, 0.12, 0, 10),
                  pel=(-0.05, 0, 0))
         end = copy.deepcopy(top); end["t"] = 1.0
@@ -771,8 +798,8 @@ def tpl_ball(variant: str, amp: float) -> Dict[str, Any]:
         return {"keys": keys, "duration": 1.4, "loop": False, "view": "side"}
     if variant in ("dribble", "basketball_dribble"):
         base = dict(pel=(-0.15, 0, 8), tor=(30, 0, 0), lh=(0.35, -0.2, 0.15), rf=(0.05, 0.25, 0, 12), lf=(-0.05, 0.25, 0, 12))
-        k0 = K(0.0, "push ball down", **_merge(base, rh=(0.3, -0.55, 0.3)))
-        k1 = K(0.5, "receive", **_merge(base, rh=(0.25, -0.35, 0.32)))
+        k0 = K(0.0, "push ball down", **_merge(base, rh=(0.32, -0.62, 0.32), pel=(-0.18, 0, 8)))
+        k1 = K(0.5, "receive at hip", re="back", **_merge(base, rh=(0.15, -0.22, 0.35), pel=(-0.13, 0, 8)))
         return {"keys": [k0, k1], "duration": 0.55, "loop": True, "view": "three_quarter"}
     if variant in ("volleyball_bump", "volleyball_pass", "forearm_pass"):
         keys = [K(0.0, "ready", grip=True, **_merge(READY, rh=(0.45, -0.45, 0.0), lh=(0.45, -0.45, 0.0), pel=(-0.2, 0, 10), tor=(30, 0, 0))),
