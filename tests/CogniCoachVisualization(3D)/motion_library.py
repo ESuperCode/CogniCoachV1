@@ -651,7 +651,7 @@ def tpl_jump(variant: str, amp: float) -> Dict[str, Any]:
         closed = K(0.0, "feet together", rh=HANG, lh=HANG, rf=(0, 0.1, 0, 10), lf=(0, 0.1, 0, 10), pel=(-0.05, 0, 0))
         up = K(0.25, "hop out", plant="none", rh=(0.05, -0.05, 0.85), lh=(0.05, -0.05, 0.85),
                rf=(0, 0.3, 0.02, 15), lf=(0, 0.3, 0.02, 15), pel=(0.1 * a, 0, 0))
-        open_ = K(0.5, "wide + hands overhead", rh=(0.05, 0.62, 0.22), lh=(0.05, 0.62, 0.22),
+        open_ = K(0.5, "wide + hands overhead", rh=(0.05, 0.65, 0.27), lh=(0.05, 0.65, 0.27),
                   rf=(0, 0.42, 0, 20), lf=(0, 0.42, 0, 20), pel=(-0.08, 0, 0))
         down = K(0.75, "hop in", plant="none", rh=(0.05, -0.05, 0.85), lh=(0.05, -0.05, 0.85),
                  rf=(0, 0.3, 0.02, 15), lf=(0, 0.3, 0.02, 15), pel=(0.1 * a, 0, 0))
@@ -1083,7 +1083,7 @@ POSES: Dict[str, Dict[str, Any]] = {
     "lateral_lunge_left": dict(lf=(0, 0.45, 0, 25), rf=(0, 0.35, 0, 20), pel=(-0.3, 0, 15, 10), tor=(30, 0, 5),
                                rh=(0.5, -0.15, 0.05), lh=(0.5, -0.15, 0.05)),
     "toe_touch": dict(tor=(85, 0, 0), pel=(-0.02, 0, 25), rh=(0.35, -0.62, 0.15), lh=(0.35, -0.62, 0.15)),
-    "overhead_reach": dict(rh=(0.05, 0.63, 0.22), lh=(0.05, 0.63, 0.22), head=(-15, 0, 0)),
+    "overhead_reach": dict(rh=(0.05, 0.65, 0.3), lh=(0.05, 0.65, 0.3), head=(-15, 0, 0)),
     "t_pose": dict(rh=(0.0, 0.0, 0.95), lh=(0.0, 0.0, 0.95)),
     "arms_forward": dict(rh=(0.64, 0.0, 0.25), lh=(0.64, 0.0, 0.25)),
     "hands_on_hips": dict(rh=(0.0, -0.45, 0.35), lh=(0.0, -0.45, 0.35), _re="out", _le="out"),
@@ -1345,12 +1345,12 @@ ARM_ACTIONS = {
     "guard": dict(hand=(0.28, 0.06, 0.13)),
     "on_hips": dict(hand=(0.0, -0.45, 0.35), elbow="out"),
     "behind_head": dict(hand=(-0.05, 0.2, 0.12), elbow="out"),
-    "overhead": dict(hand=(0.05, 0.63, 0.22)),
+    "overhead": dict(hand=(0.05, 0.65, 0.3)),
     "forward_reach": dict(hand=(0.64, 0.0, 0.25)),
     "side_reach": dict(hand=(0.0, 0.0, 0.95)),
     "reach_high_forward": dict(hand=(0.4, 0.48, 0.25)),
     "reach_low_forward": dict(hand=(0.5, -0.5, 0.22), lean=35),
-    "reach_across": dict(hand=(0.45, -0.1, -0.3), twist=-35),
+    "reach_across": dict(hand=(0.42, -0.12, -0.18), twist=-35),
     "touch_floor_front": dict(hand=(0.45, -0.62, 0.22), lean=70, level=-0.3),
     "touch_same_foot": dict(hand=(0.3, -0.62, 0.3), lean=80, level=-0.15),
     "touch_opposite_foot": dict(hand=(0.25, -0.62, -0.18), lean=65, twist=-35, level=-0.3),
@@ -1368,6 +1368,11 @@ ARM_ACTIONS = {
     "contest_high": dict(hand=(0.2, 0.63, 0.18)),
     "plank_support": dict(hand=(0.0, -0.6, 0.32), elbow="back"),
     "touch_opposite_shoulder": dict(hand=(0.18, 0.02, -0.28)),
+    "wrap_hug": dict(hand=(0.38, -0.35, -0.08), elbow="out", lean=35),
+    "pull_in": dict(hand=(0.15, -0.3, 0.2), elbow="back"),
+    "push_forward": dict(hand=(0.62, -0.05, 0.08)),
+    "row_pull": dict(hand=(0.05, -0.4, 0.32), elbow="back"),
+    "catch_low": dict(hand=(0.45, -0.5, 0.12), lean=30, level=-0.15),
     "auto": dict(hand=None),
 }
 # Leg actions for the RIGHT leg (forward, out, lift, toe_out) + whether the foot is on the floor.
@@ -1387,8 +1392,35 @@ LEG_ACTIONS = {
 }
 
 
+ONE_ARM_ACTIONS = {"throw_cock", "throw_release", "follow_through_across", "punch", "uppercut", "hook"}
+LIFTING_LEGS = {"knee_drive", "kick_front", "heel_to_butt", "kick_side", "swing_back"}
+
+
+def sanitize_beat(beat: Dict[str, Any]) -> Dict[str, Any]:
+    """Guardrails that turn contradictory menu choices into clean, plausible ones."""
+    b = dict(beat)
+    ra, la = b.get("right_arm", "auto"), b.get("left_arm", "auto")
+    if ra == la and ra in ONE_ARM_ACTIONS:
+        b["left_arm"] = "auto"  # a throw/punch is done by ONE arm; the other counter-balances
+    rl, ll = b.get("right_leg", "planted"), b.get("left_leg", "planted")
+    airborne = b.get("stance") == "airborne"
+    if rl in LIFTING_LEGS and ll in LIFTING_LEGS and not airborne:
+        b["left_leg"] = "planted"  # can't drive both knees while standing: keep one
+    if rl == ll and rl in ("step_forward", "step_back"):
+        b["right_leg"] = b["left_leg"] = "planted"  # both feet the same way = same stance
+    if rl == ll and rl in ("cross_in_front", "cross_behind"):
+        b["right_leg"], b["left_leg"] = "cross_in_front", "cross_behind"  # a scissor, not a collision
+    if b.get("stance") in ("plank", "push_up_bottom", "lying_face_down", "lying_face_up", "bear_position") \
+            and b.get("trunk") in ("hinge", "deep_hinge", "lean_forward", "lean_back"):
+        b["trunk"] = "keep"  # the body is already horizontal
+    if b.get("hands_together") and (ra in ONE_ARM_ACTIONS or ra in ("auto", "relaxed")):
+        b["hands_together"] = False  # nothing to hold with a one-arm strike or loose arms
+    return b
+
+
 def _beat_keyframe(beat: Dict[str, Any], prev: Dict[str, Any], t: float) -> Dict[str, Any]:
     """Resolve one beat into a full keyframe, carrying 'keep' values over from the previous one."""
+    beat = sanitize_beat(beat)
     st_name = beat.get("stance", "keep")
     state = copy.deepcopy(prev)
     if st_name in STANCES:
@@ -1515,6 +1547,29 @@ def _beat_keyframe(beat: Dict[str, Any], prev: Dict[str, Any], t: float) -> Dict
     return kf, state
 
 
+def _pose_points(kf: Dict[str, Any]) -> List[Tuple[float, ...]]:
+    pts = []
+    for grp in ("right_hand", "left_hand"):
+        h = kf.get(grp, {})
+        pts.append((h.get("forward", 0.05), h.get("up", -0.6), h.get("out", 0.33)))
+    for grp in ("right_foot", "left_foot"):
+        f = kf.get(grp, {})
+        pts.append((f.get("forward", 0.0), f.get("out", 0.12), f.get("lift", 0.0)))
+    return pts
+
+
+def min_transition_time(a: Dict[str, Any], b: Dict[str, Any]) -> float:
+    """Shortest believable time to move from pose a to pose b (seconds)."""
+    import math as _m
+    travel = max(_m.dist(p, q) for p, q in zip(_pose_points(a), _pose_points(b)))
+    hip = abs(a.get("pelvis", {}).get("height", 0.0) - b.get("pelvis", {}).get("height", 0.0))
+    rot = 0.0
+    for g, f in (("body", "pitch"), ("body", "turn"), ("body", "roll"), ("torso", "twist"), ("torso", "lean")):
+        rot = max(rot, abs(a.get(g, {}).get(f, 0.0) - b.get(g, {}).get(f, 0.0)))
+    # Fast athletic limbs ~3.5 m/s, hips ~1.5 m/s, whole-body rotations ~300 deg/s, trunk ~400 deg/s.
+    return max(0.12, travel / 3.5 + 0.06, hip / 1.5 + 0.06, rot / 330.0 + 0.06)
+
+
 def build_beats(beats: List[Dict[str, Any]], loop: bool, amp: float = 1.0) -> Dict[str, Any]:
     """Turn a beat list into keyframes. Beats may also be library macros ('template:variant')."""
     state = dict(rf=STANCES["standing"][0], lf=STANCES["standing"][1], height=0.0, pitch=0, roll=0, base_planted=True,
@@ -1549,15 +1604,24 @@ def build_beats(beats: List[Dict[str, Any]], loop: bool, amp: float = 1.0) -> Di
             last["phase"] = beat.get("label", "hold")[:40]
             keys_abs.append((clock, last))
             continue
-        clock += dt
         kf, state = _beat_keyframe(beat, state, 0.0)
+        # Physical speed limit: a beat can't be faster than the distance the body must travel allows
+        # (an athlete can't go from standing to a plank in 0.2 s). This removes snapping transitions.
+        dt = max(dt, min_transition_time(keys_abs[-1][1], kf))
+        clock += dt
         keys_abs.append((clock, kf))
     if loop:
-        clock += 0.4  # transition back to the first beat
+        # Transition back to the first beat obeys the same speed limit as every other beat.
+        clock += max(0.4, min_transition_time(keys_abs[-1][1], keys_abs[1][1] if len(keys_abs) > 1 else kf0))
+        if len(keys_abs) > 1:
+            keys_abs = keys_abs[1:]  # the cycle starts at the first real beat, not the neutral start
+            t0 = keys_abs[0][0]
+            keys_abs = [(t - t0, k) for t, k in keys_abs]
+            clock -= t0
     else:
-        clock += 0.5
         end, _ = _beat_keyframe(dict(stance=first["stance"], trunk="upright", facing="front", label="finish"),
                                 state, 0.0)
+        clock += max(0.5, min_transition_time(keys_abs[-1][1], end))
         keys_abs.append((clock, end))
     total = max(clock, 0.5)
     keys = []

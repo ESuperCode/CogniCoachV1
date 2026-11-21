@@ -60,7 +60,13 @@ The pipeline (v5) - rigid code, flexible model, works for ANY drill:
                  standing leg, floor-aware arm support, camera choice. A structural check triggers
                  one repair call if the beats are empty/static.
   3. SOLVE       FK/IK as before (foot locking, collisions, smoothing, Euler-safe output).
-  Typical: 8-10 s for standard skills, 15-25 s for invented drills.
+  Speed: simplification and choreography now happen in ONE structured call (the schema makes the
+  model simplify first, then choreograph), so standard skills take ~8 s and invented drills ~15 s.
+  MOTION_PLANNER_EFFORT=minimal is ~35% faster again but produced more motion glitches in testing.
+  Cleanliness safeguards in code: physical speed limit per beat (distance/rotation based, incl. the
+  loop seam), elbow/knee swivel limit, time-smoothed collision corrections (two-pass solve), one IK
+  solve per arm for two-hand grips, arcs at near-full arm length for big arm swings, guardrails
+  that fix contradictory beat choices (both arms throwing, both knees driving, scissor crosses).
   To extend the grammar, add entries to STANCES / ARM_ACTIONS / LEG_ACTIONS in motion_library.py.
 
 The HTML now blends frames with quaternion slerp (no Euler pops), auto-plays, shows the title and
