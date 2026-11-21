@@ -1356,7 +1356,9 @@ to SIMPLIFY them into the single core movement, so the animation stays clean and
 - library_match: the library entry that IS this movement ("template:variant"), or "none".
   match_quality: "exact" only if that entry is the same movement (synonyms count: "soccer shot",
   "striking a football" -> kick:soccer_instep; "fly stroke" -> swim:butterfly); "close" if similar
-  but not the same; "none" otherwise. Prefer an exact library entry whenever one fits.
+  but not the same; "none" otherwise. Prefer an exact library entry whenever one fits, and
+  when the request adds a distinctive element (rotation, jump, two hands, a specific shot) choose the
+  variant that contains it (e.g. "walking lunge with a torso twist" -> strength:lunge_with_twist).
 - phases: 2-8 short ordered steps naming body parts and actions (for movements not in the library).
 - closest_standard_movements: 1-4 well-known movements that look most like it.
 - repeating_cycle: true for continuous cyclic actions (running, swimming, shuffling, skipping...).
@@ -1396,7 +1398,11 @@ Rules:
    - sun salutation: "standing>overhead_reach>toe_touch>lunge_right_forward>plank>push_up_bottom>lean_back_arch>plank>toe_touch>overhead_reach>standing"
    You may mix "poses" segments with other templates.
 4. variant must be copied EXACTLY from the catalog list for that template (punch: shots joined
-   with "-"; poses: pose names joined with ">").
+   with "-", written out in order including repeats, e.g. "double jab, uppercut" = "jab-jab-uppercut",
+   reps 1; poses: pose names joined with ">").
+7. Only use poses that are genuinely part of the movement's sport (never a boxing guard in
+   basketball, never lying down in a standing drill). If no template or fitting pose exists for a
+   part, leave that part out rather than inventing it.
 5. reps: 1-4 (cycles for repeating templates; repetitions for one-shot actions). Use 1 unless the
    drill asks for repetitions or a combination needs it.
 6. camera_view: side for running/squats/push-ups/swimming/sagittal motion, front for lateral or

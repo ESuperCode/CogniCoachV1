@@ -141,6 +141,36 @@ def tpl_run(variant: str, amp: float) -> Dict[str, Any]:
     return {"keys": keys, "duration": c["dur"], "loop": True, "view": "side"}
 
 
+def tpl_track(variant: str, amp: float) -> Dict[str, Any]:
+    a = amp
+    if variant in ("hurdle", "sprint_hurdle", "hurdle_clearance"):
+        # Lead leg (right) attacks straight forward with the knee leading then extends; opposite arm
+        # reaches forward; trail leg (left) is pulled through flat, knee out to the side, then drives
+        # forward into the next stride.
+        lean = dict(body=(5, 0, 0), tor=(14, 0, 0))
+        keys = [
+            K(0.0, "approach stride", plant="left", re="back", le="back",
+              **_merge(lean, rf=(0.2, 0.11, 0.35, 5), lf=(-0.1, 0.11, 0, 5), rh=(-0.2, -0.45, 0.3), lh=(0.3, -0.2, 0.2))),
+            K(0.2, "attack: lead knee drives", plant="left", re="back", le="down",
+              **_merge(lean, rf=(0.35, 0.1, 0.5, 5), lf=(-0.25, 0.11, 0.02, 5), rh=(-0.2, -0.45, 0.32), lh=(0.5, -0.1, 0.15),
+                       pel=(0.05, 0, 0))),
+            K(0.35, "clearance: lead leg extends, chest dips", plant="none", re="back", le="down",
+              **_merge(lean, body=(8, 0, 0), tor=(24 * a, 0, 0), rf=(0.64, 0.1, 0.5, 5), lf=(-0.3, 0.2, 0.25, 30),
+                       rh=(-0.15, -0.45, 0.35), lh=(0.62, -0.15, 0.0), pel=(0.25, 0, 0))),
+            K(0.5, "trail leg pulls through flat", plant="none", re="back", le="back",
+              **_merge(lean, body=(8, 0, 0), tor=(22, 0, 0), rf=(0.25, 0.1, 0.15, 5), lf=(-0.05, 0.42, 0.45, 70),
+                       rh=(0.2, -0.3, 0.3), lh=(0.0, -0.4, 0.45), pel=(0.2, 0, 0))),
+            K(0.65, "land on lead leg, trail knee drives", plant="right", re="back", le="back",
+              **_merge(lean, rf=(0.0, 0.11, 0, 5), lf=(0.2, 0.12, 0.45, 10), rh=(0.3, -0.2, 0.2), lh=(-0.2, -0.45, 0.3))),
+            K(0.82, "next stride", plant="left", re="back", le="back",
+              **_merge(lean, rf=(-0.25, 0.11, 0.3, 5), lf=(0.1, 0.11, 0, 5), rh=(-0.2, -0.45, 0.3), lh=(0.3, -0.2, 0.2))),
+            K(1.0, "approach stride", plant="left", re="back", le="back",
+              **_merge(lean, rf=(0.2, 0.11, 0.35, 5), lf=(-0.1, 0.11, 0, 5), rh=(-0.2, -0.45, 0.3), lh=(0.3, -0.2, 0.2))),
+        ]
+        return {"keys": keys, "duration": 1.5, "loop": False, "view": "side"}
+    raise KeyError(variant)
+
+
 def tpl_swim(variant: str, amp: float) -> Dict[str, Any]:
     """Swimming strokes. Body horizontal (pitch 88 face-down; -88 for backstroke).
 
@@ -397,6 +427,64 @@ def tpl_overhead(variant: str, amp: float) -> Dict[str, Any]:
             K(1.0, "recover", **_merge(READY)),
         ]
         return {"keys": keys, "duration": 1.6, "loop": False, "view": "side"}
+    if variant in ("softball_windmill", "windmill_pitch"):
+        # Straight pitching arm makes a full forward circle (front -> top -> back -> down) while the
+        # left leg strides; release at the hip with the arm brushing the thigh, then follow-through up.
+        base = dict(rf=(0.0, 0.14, 0, 15), lf=(0.0, 0.14, 0, 15), pel=(-0.06, 0, 4), tor=(10, 0, 0))
+        keys = [
+            K(0.0, "set (ball in glove at chest)", grip=True, **_merge(base, rh=(0.3, -0.25, 0.05), lh=(0.3, -0.25, 0.05))),
+            K(0.15, "arm forward, start stride", plant="right",
+              **_merge(base, rh=(0.6, -0.05, 0.25), lh=(0.45, -0.15, 0.1), lf=(0.15, 0.14, 0.12, 20), tor=(8, 10, 0))),
+            K(0.3, "arm at top", plant="right",
+              **_merge(base, rh=(0.1, 0.63, 0.28), lh=(0.55, 0.0, 0.05), lf=(0.3, 0.14, 0.1, 25), pel=(-0.1, 25, 2),
+                       tor=(0, 35, 0))),
+            K(0.45, "arm back (open hips)", plant="right",
+              **_merge(base, rh=(-0.5, 0.25, 0.38), lh=(0.55, -0.05, 0.05), lf=(0.42, 0.12, 0.04, 30),
+                       pel=(-0.14, 40, 2), tor=(0, 50, 0))),
+            K(0.56, "stride foot lands, arm whips down",
+              **_merge(base, rh=(-0.25, -0.5, 0.38), lh=(0.35, -0.25, 0.15), lf=(0.45, 0.12, 0, 30),
+                       rf=(-0.15, 0.14, 0, 15), pel=(-0.16, 20, 4), tor=(5, 25, 0))),
+            K(0.64, "release at the hip",
+              **_merge(base, rh=(0.25, -0.58, 0.3), lh=(0.1, -0.35, 0.3), lf=(0.45, 0.12, 0, 30),
+                       rf=(-0.15, 0.14, 0, 15), pel=(-0.15, -10, 6), tor=(12, -5, 0))),
+            K(0.78, "follow-through up", plant="left", re="down",
+              **_merge(base, rh=(0.45, 0.05, 0.15), lh=(0.0, -0.4, 0.35), lf=(0.45, 0.12, 0, 30),
+                       rf=(0.0, 0.14, 0.15, 15), pel=(-0.12, -20, 6), tor=(15, -15, 0))),
+            K(1.0, "fielding position", **READY),
+        ]
+        return {"keys": keys, "duration": 1.6, "loop": False, "view": "side"}
+    if variant in ("shot_put", "shot_put_glide"):
+        # Glide: start facing away from the throw (body turned 180), crouch, glide back across the
+        # circle, turn the hips and chest to the front and drive the shot up and out from the neck.
+        neck = (0.1, 0.08, 0.15)
+        keys = [
+            K(0.0, "start, back to the throw", re="out",
+              **_merge(STANDING, body=(0, 170, 0), rh=neck, lh=(0.3, 0.2, 0.4), rf=(0, 0.12, 0, 10), lf=(-0.15, 0.12, 0.05, 10),
+                       plant="right")),
+            K(0.25, "crouch (low T)", plant="right", re="out",
+              **_merge(STANDING, body=(0, 170, 0), rh=neck, lh=(0.35, -0.1, 0.35), tor=(60, 0, 0), pel=(-0.3, 0, 15),
+                       lf=(-0.15, 0.12, 0.25, 10))),
+            K(0.42, "glide (left leg drives)", plant="none", re="out",
+              **_merge(STANDING, body=(0, 165, 0), rh=neck, lh=(0.35, -0.05, 0.4), tor=(55, 0, 0), pel=(-0.25, 0, 12),
+                       lf=(-0.35, 0.12, 0.2, 10), rf=(0.05, 0.12, 0.08, 10))),
+            K(0.55, "power position", re="out",
+              **_merge(STANDING, body=(0, 110, 0), rh=neck, lh=(0.4, 0.15, 0.3), tor=(30, 40, 10), pel=(-0.2, 30, 6),
+                       rf=(0.0, 0.18, 0, 30), lf=(-0.3, 0.18, 0, 20))),
+            K(0.7, "hips + chest turn to the front", re="out",
+              **_merge(STANDING, body=(0, 30, 0), rh=(0.2, 0.15, 0.15), lh=(0.2, -0.2, 0.45), tor=(10, -10, -5), pel=(-0.1, -10, 2),
+                       rf=(0.0, 0.18, 0, 30), lf=(-0.3, 0.18, 0, 20))),
+            K(0.78, "release (punch up and out)", re="down",
+              **_merge(STANDING, body=(0, 0, 0), rh=(0.55, 0.32, 0.1), lh=(0.05, -0.35, 0.45), tor=(0, -25, -10), pel=(0.05, -20, 0),
+                       rf=(0.0, 0.18, 0.05, 30), lf=(-0.3, 0.18, 0, 20), plant="left")),
+            K(0.9, "reverse (balance)", plant="right",
+              **_merge(STANDING, body=(0, -10, 0), rh=(0.35, -0.2, 0.1), lh=(-0.1, -0.35, 0.5), tor=(35, -20, 0), pel=(-0.15, -10, 8),
+                       rf=(0.1, 0.18, 0, 20), lf=(-0.35, 0.14, 0.3, 10))),
+            K(1.0, "recover", **_merge(STANDING, body=(0, 0, 0))),
+        ]
+        for k in keys[:-1]:
+            # The whole body turns ~180 degrees: feet travel with it, so they must not be locked.
+            k["left_foot_planted"] = k["right_foot_planted"] = False
+        return {"keys": keys, "duration": 2.2, "loop": False, "view": "front"}
     # Overhand throw (baseball pitch / quarterback / javelin-style / cricket bowl simplified).
     stride = 0.35 if variant in ("baseball_pitch", "javelin") else 0.28
     base = dict(rf=(0.0, 0.16, 0, 15), lf=(0.0, 0.16, 0, 15))
@@ -439,6 +527,8 @@ def tpl_punch(variant: str, amp: float) -> Dict[str, Any]:
         "rear_hook": [dict(rh=(0.35, 0.03, -0.05), tor=(12, -45, 0), pel=(-0.08, -25, 4), re="out",
                            rf=(-0.2, 0.17, 0.04, 45))],
         "slip": [dict(tor=(18, 15, 20), pel=(-0.12, 20, 4))],
+        "body_hook": [dict(lh=(0.38, -0.3, -0.05), tor=(28, -30, -10), pel=(-0.18, -5, 6), le="out", lf=(0.22, 0.1, 0.02, 45))],
+        "roll": [dict(pel=(-0.24, 20, 6), tor=(28, 25, 18)), dict(pel=(-0.24, 20, 6), tor=(28, 25, -18))],
         "duck": [dict(pel=(-0.25, 20, 6), tor=(25, 25, 0))],
     }
     tokens = [t.strip().lower().replace(" ", "_") for t in variant.replace(",", "-").split("-") if t.strip()]
@@ -662,6 +752,17 @@ def tpl_strength(variant: str, amp: float) -> Dict[str, Any]:
         end = copy.deepcopy(top); end["t"] = 1.0
         _ = backf
         return {"keys": [top, step, bottom, hold, back, end], "duration": 2.6, "loop": False, "view": "side"}
+    if variant in ("lunge_with_twist", "lunge_rotation"):
+        hands = (0.35, -0.15, 0.0)
+        top = K(0.0, "stand", grip=True, rh=hands, lh=hands)
+        down = K(0.3, "lunge down (right leg forward)", grip=True, rh=hands, lh=hands, pel=(-0.32 * a, 0, 0),
+                 rf=(0.45, 0.12, 0, 10), lf=(-0.45, 0.12, 0.04, 5), plant="none")
+        twist = K(0.5, "rotate over the front knee", grip=True, rh=(0.35, -0.1, 0.3), lh=(0.35, -0.1, 0.3),
+                  pel=(-0.32 * a, 0, 0), tor=(5, 50 * a, 0), rf=(0.45, 0.12, 0, 10), lf=(-0.45, 0.12, 0.04, 5))
+        back = K(0.7, "untwist", grip=True, rh=hands, lh=hands, pel=(-0.32 * a, 0, 0), rf=(0.45, 0.12, 0, 10),
+                 lf=(-0.45, 0.12, 0.04, 5))
+        end = copy.deepcopy(top); end["t"] = 1.0
+        return {"keys": [top, down, twist, back, end], "duration": 3.0, "loop": False, "view": "three_quarter"}
     if variant in ("lateral_lunge", "side_lunge", "cossack_squat"):
         top = K(0.0, "stand", rh=(0.25, -0.3, 0.1), lh=(0.25, -0.3, 0.1), rf=(0, 0.14, 0, 10), lf=(0, 0.14, 0, 10))
         bottom = K(0.5, "sit into right hip", rh=(0.5, -0.15, 0.05), lh=(0.5, -0.15, 0.05), rf=(0, 0.45, 0, 25),
@@ -834,6 +935,24 @@ def tpl_agility(variant: str, amp: float) -> Dict[str, Any]:
                **_merge(base, lf=(-0.18, -0.08, 0.12, 10), rf=(0, 0.2, 0, 10), pel=(-0.1, -40 * a, 4), tor=(12, 25, 0),
                         rh=(0.25, -0.4, 0.42), lh=(-0.05, -0.4, 0.5)))
         return {"keys": [k0, k1, k2, k3], "duration": 1.2, "loop": True, "view": "front"}
+    if variant in ("closeout", "basketball_closeout"):
+        def stride(t, ph, right_up):
+            r, l = ((0.15, 0.11, 0.35, 5), (-0.15, 0.11, 0, 5)) if right_up else ((-0.15, 0.11, 0, 5), (0.15, 0.11, 0.35, 5))
+            return K(t, ph, plant="left" if right_up else "right", re="back", le="back", body=(6, 0, 0), tor=(12, 0, 0),
+                     rf=r, lf=l, rh=(0.3 if not right_up else -0.2, -0.3, 0.25), lh=(0.3 if right_up else -0.2, -0.3, 0.25))
+        chop = dict(pel=(-0.18, 0, 8), tor=(22, 0, 0), rh=(0.2, 0.15, 0.3), lh=(0.25, 0.0, 0.3), rf=(0, 0.25, 0, 15), lf=(0, 0.25, 0, 15))
+        keys = [stride(0.0, "sprint stride", True), stride(0.12, "sprint stride", False), stride(0.24, "sprint stride", True),
+                K(0.34, "chop feet (short, fast)", plant="left", **_merge(chop, rf=(0, 0.25, 0.06, 15))),
+                K(0.42, "chop", plant="right", **_merge(chop, lf=(0, 0.25, 0.06, 15))),
+                K(0.5, "chop", plant="left", **_merge(chop, rf=(0, 0.25, 0.06, 15))),
+                K(0.6, "contest: hand high", **_merge(chop, rh=(0.25, 0.62, 0.2), pel=(-0.1, 0, 6), tor=(10, 0, 0))),
+                K(0.75, "slide to cut off the drive", plant="left",
+                  **_merge(chop, rh=(0.25, -0.1, 0.45), lh=(0.25, -0.1, 0.45), rf=(0, 0.5, 0.08, 15), lf=(0, 0.3, 0, 15))),
+                K(0.88, "close step", plant="right", **_merge(chop, rh=(0.25, -0.1, 0.45), lh=(0.25, -0.1, 0.45),
+                                                             rf=(0, 0.42, 0, 15), lf=(0, 0.15, 0.06, 15))),
+                K(1.0, "stance", **_merge(chop, rh=(0.25, -0.1, 0.45), lh=(0.25, -0.1, 0.45), rf=(0, 0.35, 0, 15),
+                                          lf=(0, 0.35, 0, 15)))]
+        return {"keys": keys, "duration": 2.6, "loop": False, "view": "front"}
     if variant in ("drop_step", "crossover_step", "cut", "jab_step"):
         keys = [K(0.0, "athletic stance", **READY),
                 K(0.35, "drop right foot back + turn", plant="left",
@@ -899,6 +1018,25 @@ def tpl_ball(variant: str, amp: float) -> Dict[str, Any]:
             K(1.0, "ready", **READY),
         ]
         return {"keys": keys, "duration": 1.4, "loop": False, "view": "side"}
+    if variant in ("crossover_dribble", "crossover"):
+        base = dict(pel=(-0.18, 0, 8), tor=(30, 0, 0), rf=(0.05, 0.28, 0, 12), lf=(-0.05, 0.28, 0, 12))
+        keys = [
+            K(0.0, "dribble right", **_merge(base, rh=(0.3, -0.62, 0.35), lh=(0.35, -0.15, 0.2))),
+            K(0.15, "receive right", re="back", **_merge(base, rh=(0.18, -0.25, 0.38), lh=(0.35, -0.15, 0.2))),
+            K(0.32, "push low across the body", plant="left",
+              **_merge(base, rh=(0.38, -0.62, 0.0), lh=(0.3, -0.45, 0.25), pel=(-0.22, -10, 8, -4), tor=(32, -10, -5),
+                       rf=(0.05, 0.36, 0, 12))),
+            K(0.45, "catch in left hand", re="down", le="back",
+              **_merge(base, rh=(0.35, -0.3, 0.1), lh=(0.2, -0.3, 0.4), pel=(-0.22, -15, 8), tor=(30, -15, 0))),
+            K(0.62, "explode: first step left", plant="right", le="back",
+              **_merge(base, body=(10, -10, 0), rh=(0.3, -0.15, 0.2), lh=(0.25, -0.6, 0.4), pel=(-0.15, -30, 6),
+                       tor=(30, -30, 0), lf=(0.35, 0.3, 0.12, 30))),
+            K(0.8, "drive past", le="back",
+              **_merge(base, body=(10, -10, 0), rh=(0.35, -0.1, 0.2), lh=(0.2, -0.3, 0.42), pel=(-0.16, -30, 6),
+                       tor=(30, -30, 0), lf=(0.4, 0.3, 0, 30))),
+            K(1.0, "dribble right", **_merge(base, rh=(0.3, -0.62, 0.35), lh=(0.35, -0.15, 0.2))),
+        ]
+        return {"keys": keys, "duration": 1.8, "loop": False, "view": "front"}
     if variant in ("dribble", "basketball_dribble"):
         base = dict(pel=(-0.15, 0, 8), tor=(30, 0, 0), lh=(0.35, -0.2, 0.15), rf=(0.05, 0.25, 0, 12), lf=(-0.05, 0.25, 0, 12))
         k0 = K(0.0, "push ball down", **_merge(base, rh=(0.32, -0.62, 0.32), pel=(-0.18, 0, 8)))
@@ -1049,6 +1187,7 @@ def tpl_poses(variant: str, amp: float) -> Dict[str, Any]:
 TEMPLATES: Dict[str, Tuple[Callable[[str, float], Dict[str, Any]], List[str], str]] = {
     "run": (tpl_run, ["jog", "sprint", "high_knees", "butt_kicks", "march", "backpedal", "a_skip"],
             "running/marching gaits in place (loops)"),
+    "track": (tpl_track, ["hurdle"], "track and field running events"),
     "swim": (tpl_swim, ["freestyle", "backstroke", "breaststroke", "butterfly"], "swimming strokes (loops)"),
     "swing": (tpl_swing, ["tennis_forehand", "tennis_backhand", "golf_drive", "golf_iron", "golf_chip", "golf_putt",
                           "baseball_bat", "softball_bat", "hockey_slapshot", "hockey_wristshot", "field_hockey_hit",
@@ -1056,29 +1195,30 @@ TEMPLATES: Dict[str, Tuple[Callable[[str, float], Dict[str, Any]], List[str], st
                           "badminton_forehand", "cricket_drive"],
               "striking with a racket, club, bat or stick"),
     "overhead": (tpl_overhead, ["baseball_pitch", "football_throw", "javelin", "softball_overhand", "dodgeball_throw",
-                                "cricket_bowl", "tennis_serve", "badminton_smash", "overhead_smash",
+                                "cricket_bowl", "softball_windmill", "shot_put", "tennis_serve", "badminton_smash", "overhead_smash",
                                 "volleyball_spike", "volleyball_serve_jump", "basketball_dunk", "header_jump",
                                 "soccer_throw_in", "two_hand_overhead_pass"],
                  "overhead throws, serves, spikes, smashes"),
     "punch": (tpl_punch, ["jab", "cross", "jab-cross", "jab-cross-hook", "jab-cross-hook-uppercut", "hook",
-                          "uppercut", "rear_hook", "slip", "duck"],
+                          "uppercut", "rear_hook", "body_hook", "slip", "duck", "roll"],
               "boxing/striking combos; variant = shots joined by '-' from: jab, cross, hook, uppercut, "
-              "lead_uppercut, rear_hook, slip, duck"),
+              "lead_uppercut, rear_hook, body_hook, slip, duck, roll (write repeats out: double jab = jab-jab)"),
     "kick": (tpl_kick, ["soccer_instep", "soccer_pass", "punt", "front_kick", "roundhouse_kick", "side_kick", "knee_strike"],
              "kicking actions"),
     "jump": (tpl_jump, ["vertical_jump", "squat_jump", "tuck_jump", "box_jump", "jumping_jack", "jump_rope",
                         "skater_jump", "lateral_hops", "broad_jump"], "jumps and plyometrics"),
     "strength": (tpl_strength, ["squat", "goblet_squat", "sumo_squat", "forward_lunge", "reverse_lunge",
-                                "walking_lunge", "split_squat", "lateral_lunge", "deadlift", "romanian_deadlift",
+                                "walking_lunge", "split_squat", "lunge_with_twist", "lateral_lunge", "deadlift", "romanian_deadlift",
                                 "kettlebell_swing", "single_leg_rdl", "overhead_press", "push_press",
                                 "bent_over_row", "bicep_curl", "calf_raise", "arm_circles"],
                  "gym / strength / warm-up exercises"),
     "floor": (tpl_floor, ["push_up", "plank", "forearm_plank", "mountain_climber", "burpee", "sit_up", "crunch",
                           "glute_bridge", "superman", "bear_crawl", "russian_twist", "inchworm"],
               "exercises on or near the floor"),
-    "agility": (tpl_agility, ["defensive_slide", "lateral_shuffle", "carioca", "drop_step", "crossover_step"],
+    "agility": (tpl_agility, ["defensive_slide", "lateral_shuffle", "carioca", "drop_step", "crossover_step",
+                              "closeout"],
                 "footwork and agility patterns"),
-    "ball": (tpl_ball, ["basketball_jump_shot", "basketball_free_throw", "basketball_layup", "chest_pass", "bounce_pass", "dribble",
+    "ball": (tpl_ball, ["basketball_jump_shot", "basketball_free_throw", "basketball_layup", "chest_pass", "bounce_pass", "dribble", "crossover_dribble",
                         "volleyball_bump", "volleyball_set", "catch"], "ball handling, passing and shooting"),
     "poses": (tpl_poses, [], "custom drill as a sequence of named poses joined by '>' (see POSES); "
                              "use for stretches, holds, novel drills, reaches, transitions"),

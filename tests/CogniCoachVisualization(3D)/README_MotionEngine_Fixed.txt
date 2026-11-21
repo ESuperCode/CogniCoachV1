@@ -44,7 +44,7 @@ Root causes of the old, bad animations (all verified by rendering the Unity buil
 
 The pipeline (v3) - rigid code, flexible model:
   motion_library.py holds hand-built, render-verified templates (run/swim/swing/overhead/punch/
-  kick/jump/strength/floor/agility/ball skills, ~90 variants) plus ~40 named poses. The model never
+  kick/jump/strength/floor/agility/ball skills, ~110 variants) plus ~40 named poses. The model never
   writes animation numbers.
   1. INTERPRET  call 1: the model turns the request into a short coach brief (phases, implement,
                 orientation, repeating?, closest standard movements, cues).
