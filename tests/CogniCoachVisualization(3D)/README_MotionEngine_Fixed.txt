@@ -1,118 +1,82 @@
-CogniCoach Motion Engine v2
-===========================
+CogniCoach Motion Engine - text to human animation with a small language model
+===============================================================================
 
-Files you touch
----------------
-motion_engine.py     Python backend: text prompt -> animation frames for the Unity ragdoll.
-RagdollTest_AI.html  Unity WebGL page with the "Generate AI Motion" controls.
-rig_info.md          Rig hierarchy / proportions (source of truth for the solver constants).
+Core idea ("rigid mechanism + flexible slime")
+----------------------------------------------
+A small, cheap text model (default gpt-5-mini) is NOT asked to output joint angles, coordinates or
+animation data, and the engine contains NO pre-programmed movements (no sport skills, exercises or
+pose libraries). Instead:
 
-One-time setup
---------------
-1. Install:   python -m pip install --upgrade openai fastapi uvicorn numpy pydantic
-2. API key (pick ONE, do it once):
-   a) Windows, permanent for every new terminal:   setx OPENAI_API_KEY "sk-..."
-      (then open a NEW terminal; setx does not change the current one)
-      macOS/Linux: add  export OPENAI_API_KEY="sk-..."  to ~/.zshrc or ~/.bashrc
-   b) Or create a file named .env next to motion_engine.py containing one line:
-         OPENAI_API_KEY=sk-...
-      .env files are already git-ignored, so it can never be committed.
-   An environment variable always wins over .env.
-3. Optional settings (env vars or .env):
-      OPENAI_MODEL=gpt-5-mini            (default; the engine was tuned for it)
-      MOTION_REASONING_EFFORT=low        (low is the sweet spot; output length dominates latency)
-      MOTION_ALLOWED_ORIGINS=https://cognicoachai.com,https://www.cognicoachai.com   (default *)
-      MOTION_CACHE_DIR=./motion_cache    (persist generated plans across restarts)
-      MOTION_HOST / MOTION_PORT          (default 127.0.0.1:8000)
+  * the model describes ANY movement in a fixed, enum-only spatial grammar (flexible part), and
+  * deterministic code turns that description into physically and anatomically valid motion on the
+    measured rig (rigid part), and checks the result, feeding objective problems back to the model.
 
-Run
----
-   python motion_engine.py              starts the API on http://127.0.0.1:8000
-   python motion_engine.py --selftest   offline solver check, no API key needed
-Serve the folder over HTTP (the .unityweb files are Brotli: the server must send
-"Content-Encoding: br"), open RagdollTest_AI.html, type a movement, press Generate AI Motion.
-Use ?api=https://your-backend to point the page at a different backend.
+Every movement - a soccer instep kick, a butterfly stroke, or a drill a coach invented a minute
+ago - is produced by the same mechanism from the same vocabulary.
 
-How it works (why it is better than before)
--------------------------------------------
-Root causes of the old, bad animations (all verified by rendering the Unity build):
-  * The old solver added Euler angles (spine + shoulder ...) but the HTML/Unity compose them as
-    quaternions through the hierarchy, so every solved limb ended up somewhere else.
-  * positionx/y/z are the WHOLE-BODY ROTATION in Unity, not a translation; the old engine wrote
-    metres into them.
-  * The model had to invent raw 3D coordinates, which cheap models do badly.
+Files
+-----
+motion_grammar.py    The grammar (menus) and the descriptor -> body-target compiler with its
+                     biomechanical inference rules. Contains no movement data.
+motion_engine.py     Language-model interface, validation/repair loop, kinematic solver, verifier,
+                     playback-speed tuning and the HTTP API.
+RagdollTest_AI.html  Unity WebGL viewer with the "Generate AI Motion" controls.
+rig_info.md          Rig hierarchy and proportions.
 
-The pipeline (v5) - rigid code, flexible model, works for ANY drill:
-  1. NORMALIZE   call 1 simplifies the request (canonical name, one-line description, phases,
-                 cues) and checks for an EXACT standard movement in motion_library.py.
-  2a. EXACT      standard skills (tennis forehand, butterfly, golf swing...) play the hand-built,
-                 render-verified template: one call, ~9 s, identical however it is phrased.
-  2b. ANYTHING ELSE (invented drills, combinations, cones, holds, turns) -> CHOREOGRAPH:
-                 call 2 writes the drill as a timeline of BEATS. Every field is an enum menu:
-                 stance (athletic, lunge, single-leg, plank, reverse tabletop, dive, airborne...),
-                 level, trunk (hinge, coil, side bend...), facing, an action per arm (touch
-                 opposite foot, punch, throw cock, overhead, contest...), an action per leg (knee
-                 drive, kick, step, cross behind...), timing (quick/slow/hold), or a "macro" that
-                 drops in a library template. The model never writes numbers.
-                 Code (motion_library.build_beats) turns beats into precise targets and adds the
-                 biomechanics itself: hinging/squatting to reach the floor, hip rotation on punches
-                 and throws, counter-swinging arms, pivoting feet on facing changes, protecting the
-                 standing leg, floor-aware arm support, camera choice. A structural check triggers
-                 one repair call if the beats are empty/static.
-  3. SOLVE       FK/IK as before (foot locking, collisions, smoothing, Euler-safe output).
-  Speed: simplification and choreography now happen in ONE structured call (the schema makes the
-  model simplify first, then choreograph), so standard skills take ~8 s and invented drills ~15 s.
-  MOTION_PLANNER_EFFORT=minimal is ~35% faster again but produced more motion glitches in testing.
-  Cleanliness safeguards in code: physical speed limit per beat (distance/rotation based, incl. the
-  loop seam), elbow/knee swivel limit, time-smoothed collision corrections (two-pass solve), one IK
-  solve per arm for two-hand grips, arcs at near-full arm length for big arm swings, guardrails
-  that fix contradictory beat choices (both arms throwing, both knees driving, scissor crosses).
-  Auto playback speed: after the frames are built, the engine measures the typical limb speed while
-  moving (holds excluded) and sets playback_fps so clips look natural on screen (fast moves slowed
-  up to 1.8x, slow ones sped up to 1.3x, compressed so relative rhythm survives). Frames are
-  unchanged. Send "speed": "realtime" to disable. MOTION_TARGET_SPEED tunes the target (1.6 m/s).
-  Hard body constraint: arms can never pass through the torso/hips (elbow swings out or the hand
-  clears to the front; a gripping hand never leaves the implement), corrections smoothed over up
-  to 4 passes. Racket/club/bat strokes the model improvises are replaced by the library stroke, and
-  forehand/backhand side is checked against the request.
-  To extend the grammar, add entries to STANCES / ARM_ACTIONS / LEG_ACTIONS in motion_library.py.
+Pipeline
+--------
+1. DESCRIBE (one structured-output call). Schema order forces the model to first simplify the request
+   (canonical name, one-sentence description, phases written per body part), then encode each phase as
+   a BEAT. Every beat field is an enum:
+     body : base (support + orientation), level (hip height), trunk, facing, timing
+     hand : height (floor..overhead) x direction (front, side, back, across, center...) x
+            reach (tucked/bent/extended) x elbow direction; or auto / at_side / keep
+     foot : position (under_hip, front, far_back, side, cross_back...) x height (floor..high)
+     hands_together for implements.
+2. BUILD (code, motion_grammar.build_beats). Descriptors -> exact chest/body-frame targets with
+   guaranteed reachability, plus inference rules the model never has to know:
+     - reach inference: hinge, then squat, until a low target (knee/shin/floor) is reachable
+     - trunk rotation implied by the arms (reaching across, winding back)
+     - counter-balance for lifted legs (lean back for a front kick, forward for a rear leg)
+     - automatic arms: counter-swing against the legs, balance arm, ready hands, floor support
+     - support logic: feet at "floor" are planted; both feet up = airborne; turning releases feet
+     - physically plausible minimum durations per beat from travel distance and rotation
+3. CHECK + REPAIR. The plan is solved and verified; the engine critiques it (too few/static beats,
+   loop mismatch, ending in the air, implausible straddles, and a SELF-CONSISTENCY check that the
+   model's own beat labels - "jump", "kick", "touch the cone", "punch" - match what the beat
+   encodes). If anything is found, one repair call receives exactly those findings.
+4. SOLVE (code). Monotone splines; arc waypoints for big arm and leg swings (limbs swing around the
+   shoulder/hip instead of through it); two-bone IK with anatomical knee direction from the hip->foot
+   line and elbow direction hints; planted-foot locking after landing; hard arm/body collision
+   constraint that preserves elbow intent; elbow posture constraint (no chicken wings); swivel
+   despiking with route selection; kinetic-chain lead (hips rotate before the chest); rotation-space
+   smoothing; Euler-flip-free output; left-handed mirroring.
+5. VERIFY + PLAYBACK. Pops, pass-through, posture (elbows, knee bow relative to the body's facing,
+   side bend), motion amount; playback FPS tuned from measured limb speed.
 
-The HTML now blends frames with quaternion slerp (no Euler pops), auto-plays, shows the title and
-coaching cues, has camera-view buttons (front / 3/4 / side / back), a Hand selector, a Quality
-selector, and "Vertical motion": the rig cannot translate, so hip drops and jumps (frame key
-"rooty", metres) are shown by sliding the canvas inside its frame.
+Typical cost: one call (~3.5k in / ~3k out tokens), 20-30 s; ~1/3 of requests trigger a repair
+(+20-25 s). Results are cached per prompt.
+
+Setup
+-----
+python -m pip install --upgrade openai fastapi uvicorn numpy pydantic
+API key once: setx OPENAI_API_KEY "sk-..." (Windows) or a .env file next to motion_engine.py.
+Run:  python motion_engine.py           (API on http://127.0.0.1:8000)
+      python motion_engine.py --selftest (offline grammar + solver test, no API key)
+Optional env: OPENAI_MODEL, MOTION_PLANNER_EFFORT (low), MOTION_ALLOWED_ORIGINS, MOTION_CACHE_DIR,
+MOTION_TARGET_SPEED (1.6 m/s), MOTION_HOST/PORT.
 
 API
 ---
-POST /generate
-  {"movement": "tennis forehand",          required
-   "duration_seconds": null,               null = planner picks a realistic duration
-   "playback_fps": 24,
-   "dominant_side": "right" | "left",
-   "extra_instructions": "",               e.g. "beginner level, slow tempo"
-   "quality": "fast" | "high",             high = +1 review call (~2x time)
-   "use_cache": true}
--> {"frames": [...], "playback_fps", "duration_seconds", "loop", "camera_view", "title",
-    "movement_summary", "coaching_cues", "plan", "report", "llm_calls", "cached"}
-POST /compile   {"plan": <plan from /generate>, ...}  re-solve a saved plan with no API call
-GET  /health, GET /rig
+POST /generate {"movement": "...", "dominant_side": "right"|"left", "quality": "fast"|"high",
+                "speed": "auto"|"realtime", "duration_seconds": null, "extra_instructions": ""}
+ -> frames, playback_fps, loop, camera_view, title, coaching_cues, plan (incl. the model's grammar
+    description in plan.description / plan.beats and the engine's inferences in plan.grammar_notes),
+    report (verification metrics), llm_calls.
+POST /compile {"plan": ...} re-solves a saved plan without any model call.
 
-Frames: sparse objects with the 33 joint keys (hipx ... rightelbowz), positionx/y/z (whole-body
-pitch/yaw/roll) and rooty (vertical root offset in metres; Unity ignores it today).
-In a page that already embeds the Unity build, call window.playGeneratedMotion(payload).
-
-Cost / speed (gpt-5-mini)
--------------------------
-About 3.5k input + 3k output tokens per generation, so well under one cent each, and 25-45 s
-(the time is the JSON output length). Identical prompts are served from the cache instantly.
-For cognicoachai.com, pre-generate the drill library once and serve cached plans.
-
-Integrating into cognicoachai.com
----------------------------------
-* Run motion_engine.py server-side (behind your web server); never put the API key in browser JS.
-* Set MOTION_ALLOWED_ORIGINS to your domain(s) and MOTION_CACHE_DIR to a persistent folder.
-* Point the page at it with ?api=https://motion.yourdomain or set window.COGNICOACH_MOTION_API
-  before the page script runs.
-* Optional Unity upgrade: let WebBridge/MotionController read "rooty" and add it to the hip
-  object's localPosition.y (metres * your rig scale). Squats and jumps then move for real and the
-  HTML "Vertical motion" canvas trick can be switched off.
+Limits
+------
+The Unity rig rotates joints only; the pelvis cannot translate, so travel happens in place and
+vertical motion ("rooty") is displayed by the HTML canvas offset. Quality of a movement depends on
+how well the model describes it in the grammar; the rigid part guarantees validity, not technique.

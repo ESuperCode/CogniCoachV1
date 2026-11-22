@@ -32,7 +32,6 @@ Run:
 from __future__ import annotations
 
 import copy
-import difflib
 import hashlib
 import json
 import math
@@ -80,7 +79,6 @@ def _load_dotenv(path: Path) -> None:
 _load_dotenv(Path(__file__).with_name(".env"))
 
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
-REASONING_EFFORT = os.getenv("MOTION_REASONING_EFFORT", "low")
 HOST = os.getenv("MOTION_HOST", "127.0.0.1")
 PORT = int(os.getenv("MOTION_PORT", "8000"))
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("MOTION_ALLOWED_ORIGINS", "*").split(",") if o.strip()]
@@ -473,8 +471,8 @@ def two_bone_ik(root: np.ndarray, target: np.ndarray, pole: np.ndarray, l1: floa
         alt = np.array([0.0, 0.0, 1.0]) if abs(vdir[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
         pole_perp = alt - np.dot(alt, vdir) * vdir
     pole_perp /= np.linalg.norm(pole_perp)
-    if prev is not None:
-        # Swivel limiter: the elbow/knee bend plane may only rotate a limited amount per frame
+    if prev is not None and chain == "arm":
+        # Swivel limiter (arms only - leg swivel follows the continuous sagittal knee rule): the elbow/knee bend plane may only rotate a limited amount per frame
         # around the shoulder->hand axis. This removes "elbow whipping" when targets or hints change
         # quickly, while real motion (hand/foot position) is untouched.
         prev_perp = prev - np.dot(prev, vdir) * vdir
@@ -753,6 +751,11 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
     for g, p in PARAM_PATHS:
         vals = np.array([k[g][p] for k in kfs], dtype=float)
         channels[(g, p)] = interpolate_channel(ts, vals, samples, loop)
+    # Kinetic chain: the hips start rotating ~60 ms before the chest (proximal-to-distal sequencing).
+    lead = min(0.06 / max(duration, 1e-3), 0.08)
+    vals = np.array([k["pelvis"]["twist"] for k in kfs], dtype=float)
+    lead_samples = (samples + lead) % 1.0 if loop else np.clip(samples + lead, 0.0, 1.0)
+    channels[("pelvis", "twist")] = interpolate_channel(ts, vals, lead_samples, loop)
     # Arm reach (hand distance from its shoulder) is interpolated on its own, so a hand travelling
     # between two far-apart positions sweeps an arc at full arm length instead of cutting a straight
     # line past the shoulder (which made the elbow fold up mid-swing).
@@ -791,6 +794,41 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
             tt = np.array(new_t)
             channels[(g, "out")] = interpolate_channel(tt, arr[:, 0] + shoulder_out, samples, loop)
             channels[(g, "up")] = interpolate_channel(tt, arr[:, 1], samples, loop)
+            channels[(g, "forward")] = interpolate_channel(tt, arr[:, 2], samples, loop)
+    # Leg swings: same idea as the arms - the foot travels on an arc around the hip (pendulum)
+    # instead of a straight line that could pass through the hip joint and collapse the leg.
+    hip_out = HIP_OFFSET[0] * UNIT_TO_M
+    for side in ("right", "left"):
+        g = f"{side}_foot"
+        hip_h = np.array([(-(HIP_OFFSET[1] - THIGH - SHIN) * UNIT_TO_M) + HIP_DROP_SCALE * min(0.0, k["pelvis"]["height"])
+                          for k in kfs])  # hip height above the floor at each key
+        vecs = [np.array([k[g]["out"] - hip_out, k[g]["lift"] - hh, k[g]["forward"]]) for k, hh in zip(kfs, hip_h)]
+        new_t, new_v, new_h = list(ts), list(vecs), list(hip_h)
+        for _ in range(4):
+            changed = False
+            out_t, out_v, out_h = [new_t[0]], [new_v[0]], [new_h[0]]
+            for i in range(1, len(new_t)):
+                a_v, b_v = new_v[i - 1], new_v[i]
+                la, lb = float(np.linalg.norm(a_v)), float(np.linalg.norm(b_v))
+                if la > 0.1 and lb > 0.1 and float(np.dot(a_v, b_v) / (la * lb)) < 0.3:
+                    mid = a_v / la + b_v / lb
+                    if np.linalg.norm(mid) < 0.3 or mid[1] > 0.0:
+                        mid = np.array([0.0, -1.0, 0.1])  # swing through underneath the hip
+                    mid = mid / np.linalg.norm(mid) * max(0.5 * (la + lb), 0.55)
+                    out_t.append(0.5 * (new_t[i - 1] + new_t[i]))
+                    out_v.append(mid)
+                    out_h.append(0.5 * (new_h[i - 1] + new_h[i]))
+                    changed = True
+                out_t.append(new_t[i])
+                out_v.append(b_v)
+                out_h.append(new_h[i])
+            new_t, new_v, new_h = out_t, out_v, out_h
+            if not changed:
+                break
+        if len(new_t) != len(ts):
+            tt, arr, hh = np.array(new_t), np.array(new_v), np.array(new_h)
+            channels[(g, "out")] = interpolate_channel(tt, arr[:, 0] + hip_out, samples, loop)
+            channels[(g, "lift")] = interpolate_channel(tt, arr[:, 1] + hh, samples, loop)
             channels[(g, "forward")] = interpolate_channel(tt, arr[:, 2], samples, loop)
     reach_channels: Dict[str, np.ndarray] = {}
     for side in ("right", "left"):
@@ -950,13 +988,17 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
             toe = math.radians(sign * foot["toe_out"])
             # Knee points where the foot points (toe_out); no extra outward bias, so kicks and
             # strides swing straight instead of bowing sideways.
-            # When the foot is raised in front (kicks, knee drives), the knee rotates to point UP in
-            # proportion - otherwise "forward" would be parallel to the leg and the knee would fall
-            # sideways.
+            # Knee direction = the anatomical front of the hip->foot line in the sagittal plane: foot
+            # below -> knee forward, foot in front -> knee up, foot behind -> knee down. This keeps the
+            # knee hinge well defined for every leg position (no sideways bowing), plus toe-out.
             rel_b = world["body"].T @ (target - pos[side + "_hip"])
-            fwd_amount = max(0.0, float(rel_b[2]) / max(1e-6, float(np.linalg.norm(rel_b))))
-            knee_dir = world["body"] @ np.array([math.sin(toe) * (1.0 - fwd_amount),
-                                                 -0.15 + 1.3 * fwd_amount, math.cos(toe)])
+            d = rel_b / max(1e-6, float(np.linalg.norm(rel_b)))
+            sag = np.array([0.0, d[2], -d[1]])
+            sag_len = float(np.linalg.norm(sag))
+            sag = sag / sag_len if sag_len > 1e-6 else np.array([0.0, 0.0, 1.0])
+            w_sag = min(1.0, sag_len / 0.5)
+            pole_b = sag * w_sag + np.array([0.0, 0.0, 1.0]) * (1.0 - w_sag) + np.array([math.sin(toe), 0.0, 0.0])
+            knee_dir = world["body"] @ pole_b
             upper, lower, res = two_bone_ik(pos[side + "_hip"], target, knee_dir,
                                             THIGH, SHIN, world["hip"], "leg", ik_memory, side + "_leg")
             local[side + "hip"], local[side + "knee"] = upper, lower
@@ -1102,22 +1144,34 @@ def despike_swivel(rot_track: List[Dict[str, np.ndarray]], track: List[Dict[str,
                 a_i, b_i = max(0, i - 4), min(n - 1, i + 3)
                 if not (np.any(sw[a_i]) and np.any(sw[b_i])):
                     continue
-                for j in range(a_i + 1, b_i):
-                    u = (j - a_i) / (b_i - a_i)
-                    pole = sw[a_i] * (1.0 - u) + sw[b_i] * u
-                    if np.linalg.norm(pole) < 0.2:  # opposite swivels: pass through the down/forward side
-                        pole = pole + np.array([0.0, -0.5, 0.3])
-                    local = {k: v.copy() for k, v in rot_track[j].items()}
-                    world = world_rotations(local)
-                    pos = forward_kinematics(world)
-                    upper, lower, _ = two_bone_ik(pos[root], track[j][end], pole, l1, l2, world[parent], chain)
-                    local[ub], local[lb] = upper, lower
-                    world2 = world_rotations(local)
-                    pos2 = forward_kinematics(world2)
-                    if chain == "arm":
-                        side = name.split("_")[0]
-                        if _arm_penetration(world2, pos2, side)[0] > _arm_penetration(world, pos, side)[0] + 0.5:
-                            continue
+                # Choose ONE route for the whole transition (straight blend, around the outside, or
+                # underneath) - the one that stays clearest of the body - then sweep along it.
+                local_a = world_rotations({k: v.copy() for k, v in rot_track[a_i].items()})
+                outward = local_a[parent][:, 0] * (1.0 if name.startswith("right") else -1.0)
+                routes = [np.zeros(3), outward, np.array([0.0, -1.0, 0.2])]
+                best_pen, best_frames = None, None
+                for bias in routes:
+                    trial, worst = [], 0.0
+                    for j in range(a_i + 1, b_i):
+                        u = (j - a_i) / (b_i - a_i)
+                        pole = sw[a_i] * (1.0 - u) + sw[b_i] * u + bias * math.sin(math.pi * u) * 1.2
+                        if np.linalg.norm(pole) < 0.15:
+                            pole = pole + np.array([0.0, -0.5, 0.3])
+                        local = {k: v.copy() for k, v in rot_track[j].items()}
+                        world = world_rotations(local)
+                        pos = forward_kinematics(world)
+                        upper, lower, _ = two_bone_ik(pos[root], track[j][end], pole, l1, l2, world[parent], chain)
+                        local[ub], local[lb] = upper, lower
+                        world2 = world_rotations(local)
+                        pos2 = forward_kinematics(world2)
+                        pen = _arm_penetration(world2, pos2, name.split("_")[0])[0] if chain == "arm" else 0.0
+                        worst = max(worst, pen)
+                        trial.append((j, local, pos2))
+                    if best_pen is None or worst < best_pen - 1e-6:
+                        best_pen, best_frames = worst, trial
+                if best_frames is None or best_pen > 2.0:
+                    continue
+                for j, local, pos2 in best_frames:
                     rot_track[j] = local
                     track[j] = {k: v.copy() for k, v in pos2.items()}
                     fixed += 1
@@ -1335,7 +1389,11 @@ def verify(plan: Dict[str, Any], frames: List[Dict[str, float]], track: List[Dic
     max_toe_out = max(max(k["right_foot"]["toe_out"], k["left_foot"]["toe_out"]) for k in plan["keyframes"])
     knee_bow = 0.0
     wing = int(stats.get("unintended_wing_samples", 0))
-    for t in track:
+    for fi, t in enumerate(track):
+        # Measure "sideways" relative to the body's own facing (not world x).
+        fr = frames[fi] if fi < len(frames) else {}
+        body_rot = euler_to_matrix(fr.get("positionx", 0.0), fr.get("positiony", 0.0), fr.get("positionz", 0.0))
+        side_axis = body_rot[:, 0]
         for sd in ("left", "right"):
             hip, knee, foot = t[sd + "_hip"], t[sd + "_knee"], t[sd + "_foot"]
             line = foot - hip
@@ -1343,7 +1401,7 @@ def verify(plan: Dict[str, Any], frames: List[Dict[str, float]], track: List[Dic
             if ll > 1e-6:
                 u = float(np.clip(np.dot(knee - hip, line) / ll, 0.0, 1.0))
                 off = knee - (hip + line * u)
-                knee_bow = max(knee_bow, abs(float(off[0])) * UNIT_TO_M)  # sideways only
+                knee_bow = max(knee_bow, abs(float(np.dot(off, side_axis))) * UNIT_TO_M)
     # True sideways bending comes from the plan (torso side bend + pelvis drop), not camera-like
     # projections of forward leans.
     side_lean = max(abs(k["torso"]["side_bend"]) + abs(k["pelvis"]["side"]) for k in plan["keyframes"])
@@ -1382,243 +1440,143 @@ def verify(plan: Dict[str, Any], frames: List[Dict[str, float]], track: List[Dic
 
 
 # -----------------------------------------------------------------------------
-# Language model: schema + prompt
+# Language model: enum-only movement grammar (no pre-programmed movements anywhere)
 # -----------------------------------------------------------------------------
+import motion_grammar as mg  # noqa: E402
+
+TEMPO = {"slow": 1.35, "normal": 1.0, "fast": 0.8}
+INTENSITY = {"low": 0.8, "medium": 1.0, "high": 1.15}
+VIEWS = ["front", "side", "three_quarter", "back"]
+
 
 def _obj(props: Dict[str, Any]) -> Dict[str, Any]:
     return {"type": "object", "properties": props, "required": list(props.keys()), "additionalProperties": False}
 
 
-NUM = {"type": "number"}
-KEYFRAME_SCHEMA = _obj({
-    "t": NUM,
-    "phase": {"type": "string"},
-    **{g: _obj({p: NUM for p in GROUP_PARAMS[g]}) for g in GROUP_ORDER},
-    "left_foot_planted": {"type": "boolean"},
-    "right_foot_planted": {"type": "boolean"},
+def _enum(values: List[str]) -> Dict[str, Any]:
+    return {"type": "string", "enum": list(values)}
+
+
+HAND_SCHEMA = _obj({
+    "height": _enum(mg.HAND_SPECIAL + list(mg.HAND_HEIGHTS)),
+    "direction": _enum(list(mg.HAND_DIRECTIONS)),
+    "reach": _enum(list(mg.HAND_REACH)),
+    "elbow": _enum(mg.ELBOWS),
+})
+FOOT_SCHEMA = _obj({
+    "position": _enum(mg.FOOT_SPECIAL + list(mg.FOOT_POSITIONS)),
+    "height": _enum(list(mg.FOOT_HEIGHTS)),
+})
+BEAT_SCHEMA = _obj({
+    "label": {"type": "string"},
+    "timing": _enum(list(mg.BEAT_TIME)),
+    "base": _enum(["keep"] + list(mg.BASES)),
+    "level": _enum(list(mg.LEVELS)),
+    "trunk": _enum(["keep"] + list(mg.TRUNKS)),
+    "facing": _enum(["keep"] + list(mg.FACINGS)),
+    "right_hand": HAND_SCHEMA,
+    "left_hand": HAND_SCHEMA,
+    "right_foot": FOOT_SCHEMA,
+    "left_foot": FOOT_SCHEMA,
     "hands_together": {"type": "boolean"},
-    "right_elbow_points": {"type": "string", "enum": ELBOW_CHOICES},
-    "left_elbow_points": {"type": "string", "enum": ELBOW_CHOICES},
 })
 PLAN_SCHEMA = _obj({
+    # Stage 1: understand and simplify (generated first, so it conditions the beats).
+    "canonical_name": {"type": "string"},
+    "simplified_description": {"type": "string"},
+    "key_details": {"type": "array", "items": {"type": "string"}},
+    "implement": _enum(["none", "racket", "club", "bat", "stick", "ball", "weights", "other"]),
+    "repeating_cycle": {"type": "boolean"},
+    "phases": {"type": "array", "items": {"type": "string"}},
     "title": {"type": "string"},
     "movement_summary": {"type": "string"},
-    "biomechanics_breakdown": {"type": "string"},
     "coaching_cues": {"type": "array", "items": {"type": "string"}},
+    "tempo": _enum(list(TEMPO)),
+    "intensity": _enum(list(INTENSITY)),
+    # Stage 2: encode the phases in the grammar.
+    "camera_view": _enum(VIEWS),
     "loop": {"type": "boolean"},
-    "duration_seconds": NUM,
-    "camera_view": {"type": "string", "enum": ["front", "side", "three_quarter", "back"]},
-    "keyframes": {"type": "array", "items": KEYFRAME_SCHEMA},
+    "beats": {"type": "array", "items": BEAT_SCHEMA},
 })
 
-PLANNER_INSTRUCTIONS = r"""
-You are an elite sports biomechanist and 3D animator. You turn a requested movement (any sport, drill,
-exercise, dance or everyday action, including drills you have never heard of) into precise KEYFRAMES
-for a humanoid avatar (1.75 m tall). You say WHERE the hands and feet are and how the trunk is
-oriented; a physics solver computes every joint angle (elbows, knees, shoulders, hips) for you.
+PLANNER_INSTRUCTIONS = """
+You are a sports biomechanist. You describe human movements (sport skills, exercises, drills,
+including brand-new drills invented by a coach) so that an animation engine can play them. The
+engine has NO built-in movements: it only knows the spatial vocabulary below. You decide where each
+body part is at each key moment; the engine computes every joint angle and handles physics.
 
-THE AVATAR
-- It performs in place: it cannot travel across the floor. Show runs, shuffles, steps and jumps in
-  place (like on a treadmill / with a camera following the athlete).
-- Always describe a RIGHT-HANDED athlete (the server mirrors for left-handers). "Right" = athlete's right.
+Work in two stages and fill the JSON fields in order.
 
-PARAMETERS. Every keyframe lists every field. Angles in degrees, distances in metres.
-body   whole avatar rotation: pitch + tips forward (90 = horizontal face-down: swimming, push-up,
-       plank; -90 face-up), turn + spins to its right (360 = full spin; ONLY for real spins or a
-       change of facing, keep 0 for swings/throws/kicks), roll + rolls to its right (cartwheel).
-pelvis height: metres the hips are LOWERED (negative) from standing tall: standing 0, athletic
-         stance -0.08, quarter squat -0.18, lunge -0.30, parallel squat -0.40, deep squat -0.50.
-         Keep it between 0 and -0.12 for most sport actions (swings, throws, kicks, punches).
-         POSITIVE height = the whole athlete is AIRBORNE that high (jump height; the legs keep
-         their shape, so a straight-legged jump is height +0.3 with feet lift 0).
-       twist: + hips turn to face the athlete's RIGHT (right hip goes back); - hips face LEFT.
-       tilt: + anterior tilt (small), side: + right hip drops (small).
-torso  lean: + bend forward at the waist (90 = chest horizontal), - arch back. It is RELATIVE to
-       body.pitch: in a plank/push-up (body pitch 80) torso lean is ~0 (straight body), not 80.
-       twist: + chest turns to face the athlete's RIGHT (right shoulder goes back = a right-hander's
-              backswing/coil/wind-up for forehand, golf, baseball, throw, cross-punch load);
-              - chest turns LEFT (right shoulder comes through = contact/release/follow-through).
-              Measured from the athlete's facing, NOT added to pelvis twist. Max about +-70.
-              X-factor = torso.twist - pelvis.twist (20-45 at the top of a backswing).
-       side_bend: + lean toward the right side.
-head   nod + look down / - look up, turn + look right, tilt + ear toward right shoulder.
+STAGE 1 - UNDERSTAND AND SIMPLIFY
+- canonical_name: the core movement in 2-6 words. Long or chatty requests: drop setting, story,
+  people, emotions and coaching chatter; keep only what changes the body's motion.
+- simplified_description: one plain sentence (max 25 words) of what the body does.
+- key_details: at most 3 details that change the motion (side, stance, tempo, repetitions).
+- phases: the movement broken into its real phases, in order. For EACH phase write one line that
+  says where the hands, the feet and the trunk are and what they are doing (e.g. "contact: kicking
+  leg nearly straight with the foot low in front, trunk over the ball, left arm out for balance").
+  This is where you think - be biomechanically precise.
+- repeating_cycle: true for continuous cyclic actions (running, swimming, skipping, shuffling...).
+- coaching_cues: 3-5 short practical cues. Assume a RIGHT-handed / right-footed athlete.
 
-right_hand / left_hand: where each hand is, in the CHEST frame (moves and turns with the torso).
-  Origin = INSIDE the chest, midway between the shoulder joints (the chest's front surface is at
-  forward +0.11, the back at -0.11). Hands touching the chest/holding a ball at the chest: forward 0.2.
-  forward: + in front of the chest, - behind the back
-  up     : + above shoulder height, - below (belt level about -0.5 when standing straight)
-  out    : + OUTWARD toward that hand's own side, - ACROSS the body to the other side, 0 = centre
-           line. Same rule for both hands, so a symmetric pose has IDENTICAL numbers for both
-           hands (a left hand hanging at the left hip is out +0.33, never negative).
-  Each shoulder joint is at (out +0.30, up 0, forward 0) for its own hand. Arm length 0.66 m: a hand
-  is at most 0.66 m from its own shoulder (= straight arm).
-  Examples: hanging relaxed = (out 0.33, up -0.6, fwd 0.05). Straight forward at shoulder height =
-  (out 0.25, up 0, fwd 0.64). Straight overhead = (out 0.3, up 0.65, fwd 0.05). T-pose = (out 0.95,
-  up 0, fwd 0). Boxing guard = (out 0.12, up 0.06, fwd 0.28). Across to the other hip = (out -0.3,
-  up -0.5, fwd 0.25). Hands clasped in front of belly = (out 0, up -0.4, fwd 0.3).
-right_elbow_points / left_elbow_points: which way the bent elbow points: "down" (default: punches,
-  curls, push-ups), "out" (to the side: hands on hips, breaststroke, chicken wing), "back" (rowing
-  pull, sprint back-swing), "up" (hands behind head, throwing/serving cock, overhead), "forward".
-hands_together: true while both hands hold one implement (bat, club, racket two-handed, stick, oar,
-  ball in a two-handed pass/shot). The left hand is then attached to the right hand automatically;
-  only the right hand position matters (copy it to the left).
+STAGE 2 - ENCODE EACH PHASE AS A BEAT
+Each beat says what the body looks like at the END of that beat. The engine moves smoothly between
+beats. Use 4-12 beats for one repetition or one cycle. Set "keep" for anything that does not change.
 
-right_foot / left_foot: where each foot (ankle) is, in the BODY frame (does NOT turn with
-  pelvis/torso twist). forward/out are measured on the floor from the point under the pelvis.
-  forward: + in front, - behind.  out: + outward to that foot's own side, - across (same rule for
-  both feet). lift: how far the foot is raised from where a straight standing leg would put it,
-  i.e. sole height above the floor (0 = on the floor). Lift bends the knee: use it for knee raises,
-  kicks, tucks, a foot leaving the floor, NOT for the whole body jumping (use pelvis height > 0).
-  toe_out: degrees the foot/knee turns outward (10 natural, 30-45 for squats/sumo, 0 for sprint).
-  Standing: both (forward 0, out 0.12, lift 0). Hip width ~0.13 m from centre; leg length 0.72 m
-  (a foot can be at most ~0.72 m from its hip joint, which sits 0.78 m above the floor minus the
-  hip drop). With pelvis.height -0.4 a foot can only be ~0.65 m in front/behind while on the floor.
-left_foot_planted / right_foot_planted: true while that foot is on the floor bearing weight
-  (its lift must then be 0). The solver locks planted feet in place, so you can twist hips and
-  torso freely. A lifting, swinging, kicking or airborne foot must be false.
+Body
+- base: the support and body orientation. standing, athletic (feet wide, knees soft), wide, narrow,
+  split_left_forward / split_right_forward (staggered feet), kneeling, half_kneeling_*_forward,
+  face_down_horizontal (swimming, lying face down), face_down_on_hands (plank / push-up position),
+  face_up_horizontal (lying on the back, backstroke), face_up_on_hands (crab position), seated,
+  lying_on_left_side / lying_on_right_side, airborne (whole body in the air).
+- level: hip height: tall, normal, slightly_bent, half_squat, deep_squat.
+- trunk: upright, lean_forward, hinge, deep_hinge, lean_back, turn_left/turn_right (chest rotated
+  ~45), full_turn_left/full_turn_right (~70, e.g. full backswing), side_bend_left/right.
+  "turn_right" = chest faces the athlete's RIGHT (a right-hander's wind-up/backswing).
+- facing: the whole athlete's facing relative to the start (for real turns/pivots only).
+- timing: how long the move INTO this beat takes: instant (explosive, ~0.15 s), quick, normal,
+  slow, hold (stay in the previous pose for a pause).
 
-CALIBRATED REFERENCE POSES (anchor on these, then adapt)
-- Athletic ready stance: pelvis height -0.12, torso lean 20; feet out 0.25 fwd 0; hands
-  (out 0.25 up -0.35 fwd 0.35).
-- Squat (parallel): pelvis height -0.42, torso lean 40, feet out 0.22 toe_out 25; arms straight
-  forward for balance (out 0.25 up 0 fwd 0.6).
-- Forward lunge (right leg front): pelvis height -0.32, right foot fwd 0.45 out 0.12, left foot
-  fwd -0.5 out 0.12 lift 0.03; torso upright.
-- Boxing orthodox stance: left foot fwd 0.25 out 0.12, right foot fwd -0.2 out 0.18, pelvis height
-  -0.06, pelvis twist +20, torso twist +25; both hands in guard. Jab: left hand (out 0.05 up 0.03
-  fwd 0.64). Cross: torso twist -35, pelvis twist -15, right hand (out 0.0 up 0.03 fwd 0.64), right
-  heel pivots (foot stays planted).
-- Sprint (in place): drive leg foot fwd 0.2 lift 0.45 (knee high); push-off leg foot fwd -0.45
-  lift 0.05..0.25; arms (elbows ~90): front hand (out 0.2 up -0.15 fwd 0.35, elbow down), back hand
-  (out 0.3 up -0.45 fwd -0.3, elbow back). Torso lean 10, body pitch 5. Both feet mostly unplanted.
-- Jump: load with pelvis height -0.25 and arms back (fwd -0.3); airborne pelvis height +0.3 with
-  feet lift 0..0.08 and planted false (tuck jump: feet lift 0.4 fwd 0.1); land pelvis height -0.2.
-- Jumping jack: feet out 0.12 -> 0.45 (lift 0.03 while airborne, pelvis height +0.1), hands from
-  the sides (out 0.33 up -0.6) to overhead (out 0.25 up 0.62); one cycle, loop=true.
-- Throw/serve cocked arm: right hand (out 0.45 up 0.25 fwd -0.15) elbow "up", torso twist +45,
-  pelvis twist +25. Release: right hand (out 0.15 up 0.35 fwd 0.55). Follow-through across the body:
-  right hand (out -0.35 up -0.3 fwd 0.35), torso twist -55, pelvis twist -40.
-- Tennis forehand: backswing right hand (out 0.55 up 0.05 fwd -0.15), torso twist +55, pelvis +30;
-  contact right hand (out 0.45 up -0.25 fwd 0.45), torso twist -5; finish right hand over left
-  shoulder (out -0.35 up 0.1 fwd 0.3), torso twist -60. Left hand points at the ball in the backswing
-  (out 0.0 up 0.0 fwd 0.5).
-- Golf (hands_together=true, right hand = grip): address (out 0 up -0.55 fwd 0.3), pelvis height
-  -0.06, torso lean 35, feet out 0.22; top of backswing (out 0.35 up 0.3 fwd 0.2) torso twist +80
-  pelvis twist +40; impact (out 0.05 up -0.55 fwd 0.3) torso twist -10 pelvis twist -35; finish
-  (out -0.35 up 0.25 fwd 0.2) torso twist -85 pelvis twist -45, torso lean 5, right foot lift 0.03.
-- Instep kick (right leg): plant left foot (fwd 0.1 out 0.2); backswing right foot (fwd -0.35 out
-  0.1 lift 0.4); contact right foot (fwd 0.3 out 0.05 lift 0.12); follow-through (fwd 0.6 lift 0.55);
-  arms out for balance; right_foot_planted false during the swing.
-- Push-up/plank: body pitch 78, feet neutral (fwd 0, out 0.12, lift 0); straight arms: hands (out
-  0.32 up -0.6 fwd 0); bottom: hands (out 0.4 up -0.3 fwd 0.05), elbows "back". Feet planted false
-  (the solver's floor is vertical for a pitched body).
-- Freestyle swimming: body pitch 85; hand entry overhead (out 0.25 up 0.62 fwd 0.2), pull under the
-  chest (out 0.05 up -0.1 fwd 0.45), push to the hip (out 0.3 up -0.6 fwd -0.05), recovery above
-  the back (out 0.4 up 0.05 fwd -0.3, elbow "up"); flutter kick: feet lift alternate 0..0.15.
+Hands (right_hand / left_hand) - described like a coach points at a spot:
+- height: floor, shin, knee, hip, waist, chest, shoulder, chin, head, overhead.
+  Special: "auto" (engine picks a natural arm: counter-swing, balance, ready hands, floor support),
+  "at_side" (arm hanging relaxed), "keep".
+- direction: from the chest: front, front_out (45 deg to that hand's side), side, back_out, back,
+  across (in front of the body toward the other side), center (in front of the body's centre line).
+  Directions follow the chest when the trunk turns.
+- reach: tucked (hand close to the body), bent (elbow ~90), extended (arm nearly straight).
+- elbow: auto, down, out, back, up, forward (which way the bent elbow points).
+- For a horizontal body the same words apply relative to the body as if standing: "overhead" is
+  beyond the head (e.g. a swimmer's streamline), "front" points toward the floor/pool bottom,
+  "back" points over the back toward the sky, "hip" is beside the hips.
+- hands_together: both hands holding one ball/bat/club/stick (give the right hand's position).
 
-ANIMATION CRAFT (this is what makes it look professional)
-1. Break the action into its real phases (ready -> load/backswing -> acceleration -> contact/peak
-   -> follow-through -> recovery). Use 6-10 keyframes; add keys where motion changes direction fast.
-2. Timing: t runs 0..1 and must reflect real rhythm: preparation slower, the power phase FAST (often
-   10-15% of the time), follow-through decelerating. Do NOT space keys evenly.
-3. Kinetic chain: legs and hips start the power, then torso, then arm (pelvis twist leads torso twist
-   by one key). Counter-balance with the non-dominant arm. Sports stances keep knees soft
-   (pelvis height -0.05 to -0.15).
-4. Anticipation and follow-through: small opposite move before a big action; overshoot after it;
-   weight shifts (one foot lighter/lifting) where real athletes do it.
-5. Repeating actions (running, jumping jacks, skipping, swimming, dribbling, jump rope, shuffles...):
-   loop=true and describe exactly ONE cycle; the cycle closes automatically, so do NOT repeat the
-   first keyframe at the end. Alternate left/right limbs half a cycle apart.
-   One-shot actions (swing, throw, jump, lift): loop=false, start and end in a natural ready pose.
-6. Every limb does something purposeful in every phase; avoid identical copies between keys.
-   Floor positions (plank, push-up, burpee bottom, crawling, mountain climbers) need body pitch
-   70-85 so the body is near horizontal; lying on the back needs body pitch -80..-90.
-   Lateral shuffles/slides: in place, show the steps with the feet alternating wide (out 0.4) and
-   narrow (out 0.15), the hips low, a lean toward the travel direction and active hands.
-7. Anatomy: hands within 0.66 m of their shoulder, feet within 0.72 m of their hip; a hand passing
-   across the body goes in front of it (forward >= 0.2), never through the torso.
-8. duration_seconds: realistic real-time length of the action or one cycle (tennis forehand 1.6,
-   golf swing 2.2, running cycle 0.7, jumping jack 1.0, squat 2.5, push-up 2.0). Range 0.6-6.
-9. camera_view: best viewpoint (side for running/squats/push-ups/sagittal moves, front for jumping
-   jacks/lateral moves, three_quarter for rotational swings/throws/kicks).
-10. biomechanics_breakdown: BRIEF notes (max ~120 words) on each phase, written before the numbers.
-11. coaching_cues: 3-5 short, practical cues a coach would say for this movement.
+Feet (right_foot / left_foot):
+- position: under_hip, front, far_front, back, far_back, side, wide, front_side, back_side,
+  cross_front, cross_back; "base" (back to the base position); "keep".
+- height: floor (planted, bearing weight), ankle, shin, knee, hip, high.
+  A foot at "floor" stays fixed on the ground while the body moves over it. A raised foot bends the
+  knee automatically (foot "back" at "knee" height = heel kicked up behind; foot "front" at "hip"
+  height = leg swung up in front). Both feet off the floor = the athlete is in the air.
+
+What the engine does for you (do NOT try to fake these):
+- If a hand must reach low (knee, shin, floor) it hinges and bends the knees as much as needed.
+- A hand reaching across rotates the chest toward it; a hand wound back high rotates the chest away.
+- A leg lifted in front leans the trunk back slightly for balance (behind: leans forward).
+- Arms set to "auto" swing in opposition to the legs, balance during kicks, or support on the floor.
+- Planted feet never slide; the hips can rotate over them.
+
+Craft
+1. Real phases in order: preparation / load, the action, follow-through, recovery.
+2. Timing matters: the power phase is fast (instant/quick); preparation and recovery slower; use
+   "hold" for pauses, stuck landings and held positions.
+3. Kinetic chain: hips and trunk rotate before the arm strikes. Wind-ups turn away first.
+4. Follow-through continues in the direction of the action before recovering.
+5. Repeating cycles: describe ONE cycle (do not repeat the first beat at the end), loop=true.
+   One-off actions: loop=false and finish in a balanced position.
+6. camera_view: side for forward/back and horizontal motion, front for lateral motion,
+   three_quarter for rotation.
 """.strip()
-
-
-def build_user_prompt(movement: str, extra: str, duration: Optional[float]) -> str:
-    parts = [f"Movement to animate: {movement.strip()}"]
-    if duration:
-        parts.append(f"Requested duration: about {duration:.1f} s (use it unless clearly wrong for the action).")
-    if extra.strip():
-        parts.append(f"Extra notes from the user: {extra.strip()}")
-    parts.append("Return the full JSON plan.")
-    return "\n".join(parts)
-
-
-REVIEW_INSTRUCTIONS = r"""
-You are reviewing and correcting an animation plan for a sports-coaching avatar. The parameter
-conventions are given below. Return the COMPLETE corrected plan in the same JSON schema.
-
-Check, keyframe by keyframe:
-- Every item in "SOLVER FINDINGS" (objective geometry problems found by the physics solver). Fix each.
-- Signs: right-hander's backswing/coil = torso/pelvis twist POSITIVE; contact/follow-through = NEGATIVE.
-  hand out + = outward to that hand's own side, - = across the body (same rule for both hands). hand forward - = behind the back.
-- Each hand within 0.66 m of its shoulder (right shoulder side +0.30, left -0.30, both up 0 fwd 0).
-- Hands never inside the torso; crossing hands pass in front (forward >= 0.2).
-- Real phases present, realistic timing (fast power phase, not evenly spaced), anticipation and
-  follow-through, kinetic chain (hips lead shoulders), non-dominant arm doing something useful.
-- Feet: planted only when truly on the ground; loop cycles do not repeat the first key at the end.
-Keep everything that is already correct. Do not shorten the plan.
-""".strip()
-
-
-def diagnose_plan(plan: Dict[str, Any]) -> List[str]:
-    """Objective per-keyframe problems the planner can fix (reachability, hands in torso, grips...)."""
-    findings: List[str] = []
-    reach = (UPPER_ARM + FOREARM) * UNIT_TO_M
-    for i, kf in enumerate(plan["keyframes"]):
-        tag = f"keyframe {i} (t={kf['t']:.2f}, {kf['phase']})"
-        hands = {}
-        for side, sign in (("right", 1.0), ("left", -1.0)):
-            h = kf[f"{side}_hand"]
-            p = np.array([sign * h["out"], h["up"], h["forward"]])
-            hands[side] = p
-            shoulder = np.array([sign * SHOULDER_OFFSET[0] * UNIT_TO_M, 0.0, 0.0])
-            d = float(np.linalg.norm(p - shoulder))
-            if d > reach + 0.06 and not (side == "left" and kf["hands_together"]):
-                findings.append(f"{tag}: {side} hand is {d:.2f} m from its shoulder (max {reach:.2f}); "
-                                f"the arm cannot reach it. Bring it closer.")
-            moved = float(np.linalg.norm(keep_hand_outside_torso(p, sign) - p))
-            if side == "left" and kf["hands_together"]:
-                continue
-            if moved > 0.06:
-                findings.append(f"(minor) {tag}: {side} hand target is inside the torso; put it in front "
-                                f"(forward >= 0.2) or clearly to the side.")
-        leg_len = (THIGH + SHIN) * UNIT_TO_M
-        for side, sign in (("right", 1.0), ("left", -1.0)):
-            f = kf[f"{side}_foot"]
-            hip = np.array([sign * HIP_OFFSET[0] * UNIT_TO_M, HIP_OFFSET[1] * UNIT_TO_M, 0.0])
-            ankle = np.array([sign * f["out"], (HIP_OFFSET[1] - THIGH - SHIN) * UNIT_TO_M
-                              - min(0.0, kf["pelvis"]["height"]) * HIP_DROP_SCALE + f["lift"], f["forward"]])
-            d = float(np.linalg.norm(ankle - hip))
-            if d > leg_len + 0.05:
-                findings.append(f"{tag}: {side} foot is {d:.2f} m from its hip (leg length {leg_len:.2f}); "
-                                f"bring it closer or lower the hips less.")
-        lf, rf = kf["left_foot"], kf["right_foot"]
-        if lf["out"] + rf["out"] < 0.08 and abs(lf["forward"] - rf["forward"]) < 0.12 and abs(lf["lift"] - rf["lift"]) < 0.15:
-            findings.append(f"{tag}: the feet overlap/cross; separate them (out >= 0.08 each or stagger forward).")
-    if plan.get("loop") and len(plan["keyframes"]) >= 3:
-        first, last = plan["keyframes"][0], plan["keyframes"][-1]
-        same = all(abs(first[g][p] - last[g][p]) < 3 for g, p in PARAM_PATHS)
-        if same:
-            findings.append("(minor) loop=true but the last keyframe repeats the first; remove the duplicate.")
-    ts = [k["t"] for k in plan["keyframes"]]
-    if len(ts) >= 5 and np.std(np.diff(ts)) < 0.01 and not plan.get("loop"):
-        findings.append("Keyframes are evenly spaced in time; make the power phase faster and the "
-                        "preparation/follow-through slower.")
-    return findings[:20]
 
 
 def _openai_client():
@@ -1629,8 +1587,11 @@ def _openai_client():
     return OpenAI(max_retries=2, timeout=120)
 
 
-def _call_model(instructions: str, user_input: str, effort: str, schema: Optional[Dict[str, Any]] = None,
-                name: str = "motion_plan", max_tokens: int = 16000) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+PLANNER_EFFORT = os.getenv("MOTION_PLANNER_EFFORT", "low")
+
+
+def _call_model(instructions: str, user_input: str, effort: str, schema: Dict[str, Any],
+                name: str = "movement_plan", max_tokens: int = 12000) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     client = _openai_client()
     t0 = time.time()
     resp = client.responses.create(
@@ -1639,541 +1600,173 @@ def _call_model(instructions: str, user_input: str, effort: str, schema: Optiona
         input=user_input,
         reasoning={"effort": effort},
         store=False,
-        text={"format": {"type": "json_schema", "name": name, "strict": True, "schema": schema or PLAN_SCHEMA}},
+        text={"format": {"type": "json_schema", "name": name, "strict": True, "schema": schema}},
         max_output_tokens=max_tokens,
     )
     if getattr(resp, "status", None) == "incomplete":
         raise ValueError(f"Model output incomplete: {getattr(resp, 'incomplete_details', None)}")
     text = (getattr(resp, "output_text", "") or "").strip()
     usage = getattr(resp, "usage", None)
-    meta = {
-        "seconds": round(time.time() - t0, 1),
-        "input_tokens": getattr(usage, "input_tokens", None),
-        "output_tokens": getattr(usage, "output_tokens", None),
-    }
+    meta = {"seconds": round(time.time() - t0, 1), "input_tokens": getattr(usage, "input_tokens", None),
+            "output_tokens": getattr(usage, "output_tokens", None)}
     return json.loads(text), meta
 
 
-def plan_freeform(movement: str, extra: str = "", duration: Optional[float] = None,
-                  refine: bool = False) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-    """Last-resort planner (free-form keyframes). fast: one planning call (+ one repair call only if the solver finds objective problems).
-    high: planning call + a review call that fixes solver findings and technique."""
-    calls: List[Dict[str, Any]] = []
-    raw, meta = _call_model(PLANNER_INSTRUCTIONS, build_user_prompt(movement, extra, duration), REASONING_EFFORT)
-    raw["source"] = "freeform"
-    calls.append({"stage": "plan", **meta})
-    plan = sanitize_plan(raw)
-    plan["biomechanics_breakdown"] = str(raw.get("biomechanics_breakdown", ""))[:3000]
-    findings = diagnose_plan(plan)
-    calls[-1]["findings"] = findings
-    major = [f for f in findings if not f.startswith("(minor)")]
-    if refine or len(major) >= 2:
-        review_input = (
-            "PARAMETER CONVENTIONS:\n" + PLANNER_INSTRUCTIONS +
-            "\n\nREQUESTED MOVEMENT: " + movement +
-            ("\nEXTRA NOTES: " + extra if extra.strip() else "") +
-            "\n\nSOLVER FINDINGS:\n" + ("\n".join("- " + f for f in findings) if findings else "- none") +
-            "\n\nPLAN TO REVIEW:\n" + json.dumps(raw)
-        )
-        try:
-            raw2, meta2 = _call_model(REVIEW_INSTRUCTIONS, review_input, REASONING_EFFORT)
-            raw2["source"] = "freeform"
-            plan2 = sanitize_plan(raw2)
-            plan2["biomechanics_breakdown"] = str(raw2.get("biomechanics_breakdown", ""))[:3000]
-            findings2 = diagnose_plan(plan2)
-            calls.append({"stage": "review", **meta2, "findings": findings2})
-            major2 = [f for f in findings2 if not f.startswith("(minor)")]
-            if len(major2) <= len(major) + 1:
-                plan = plan2
-        except Exception as exc:  # the review is best-effort; keep the first plan
-            calls.append({"stage": "review", "error": str(exc)})
-    return plan, calls
-
-
-# -----------------------------------------------------------------------------
-# Library pipeline: the model only interprets and selects; code builds every number
-# -----------------------------------------------------------------------------
-import motion_library as ml  # noqa: E402
-
-TEMPO = {"slow": 1.35, "normal": 1.0, "fast": 0.8}
-INTENSITY = {"low": 0.8, "medium": 1.0, "high": 1.15}
-VIEWS = ["front", "side", "three_quarter", "back"]
-
-LIBRARY_CHOICES = [f"{t}:{v}" for t, v in ml.all_choices()]
-
-NORMALIZE_SCHEMA = _obj({
-    "canonical_name": {"type": "string"},
-    "simplified_description": {"type": "string"},
-    "key_details": {"type": "array", "items": {"type": "string"}},
-    "library_match": {"type": "string", "enum": LIBRARY_CHOICES + ["none"]},
-    "match_quality": {"type": "string", "enum": ["exact", "close", "none"]},
-    "title": {"type": "string"},
-    "movement_summary": {"type": "string"},
-    "sport_or_context": {"type": "string"},
-    "implement": {"type": "string", "enum": ["none", "racket", "club", "bat", "stick", "ball", "weights", "other"]},
-    "body_orientation": {"type": "string", "enum": ["upright", "face_down", "face_up", "changes"]},
-    "repeating_cycle": {"type": "boolean"},
-    "phases": {"type": "array", "items": {"type": "string"}},
-    "closest_standard_movements": {"type": "array", "items": {"type": "string"}},
-    "tempo": {"type": "string", "enum": list(TEMPO)},
-    "intensity": {"type": "string", "enum": list(INTENSITY)},
-    "coaching_cues": {"type": "array", "items": {"type": "string"}},
-})
-
-NORMALIZE_INSTRUCTIONS = """
-You are a sports biomechanics coach preparing a request for an animation system that can only show
-ONE clear movement at a time. Users often write long, chatty or over-detailed requests; your job is
-to SIMPLIFY them into the single core movement, so the animation stays clean and consistent.
-
-- canonical_name: the standard name of the core movement, 2-6 words (e.g. "soccer instep shot",
-  "butterfly swim stroke", "single-leg Romanian deadlift"). Drop setting, story, equipment brands,
-  emotions and coaching chatter. If several movements are requested, name the main sequence briefly.
-- simplified_description: one plain sentence (max 25 words) of what the body does.
-- key_details: at most 3 details that change the BODY MOTION (side, tempo, stance, repetitions).
-  Ignore everything else.
-- library_match: the library entry that IS this movement ("template:variant"), or "none".
-  match_quality: "exact" when the request is that standard movement. Details about HOW it is
-  performed (good form, power, tempo, half/short/full swing, slice/topspin, hold the finish, a
-  coaching focus) do NOT break exactness. Use "close" when the drill ADDS other elements
-  (cones, touches, reactions, turns, extra steps or moves, combinations) or CHANGES what a body
-  part does compared with the standard movement (e.g. "hands in a high guard" while shuffling,
-  "arms overhead" during a squat, "hold a ball at the chest" while lunging). "exact" only if that entry is the same movement (synonyms count: "soccer shot",
-  "striking a football" -> kick:soccer_instep; "fly stroke" -> swim:butterfly); "close" if similar
-  but not the same; "none" otherwise. Prefer an exact library entry whenever one fits, and
-  when the request adds a distinctive element (rotation, jump, two hands, a specific shot) choose the
-  variant that contains it (e.g. "walking lunge with a torso twist" -> strength:lunge_with_twist).
-- phases: 2-8 short ordered steps naming body parts and actions (for movements not in the library).
-- closest_standard_movements: 1-4 well-known movements that look most like it.
-- repeating_cycle: true for continuous cyclic actions (running, swimming, shuffling, skipping...).
-- coaching_cues: 3-5 short practical cues. Assume a right-handed athlete.
-""".strip()
-
-COMPOSE_SCHEMA = _obj({
-    "segments": {"type": "array", "items": _obj({
-        "template": {"type": "string", "enum": list(ml.TEMPLATES)},
-        "variant": {"type": "string"},
-        "reps": {"type": "integer"},
-        "tempo": {"type": "string", "enum": list(TEMPO)},
-        "intensity": {"type": "string", "enum": list(INTENSITY)},
-    })},
-    "camera_view": {"type": "string", "enum": VIEWS},
-})
-
-COMPOSE_INSTRUCTIONS = """
-You build an animation from a FIXED LIBRARY of professionally animated movement templates.
-You cannot invent motion data: you only choose library entries, in order, as "segments".
-
-Rules:
-1. If one template variant matches the movement, use exactly that one segment.
-2. Combine several segments in order for combos and multi-part drills (e.g. a sprint into a jump,
-   a squat followed by an overhead press). ALWAYS use a real template for every part that has one
-   (high knees -> run:high_knees, squat jump -> jump:squat_jump, push-up -> floor:push_up); "poses"
-   is only for the parts no template covers. Example: "3 high knees then squat and jump" ->
-   [run high_knees reps 2] + [jump squat_jump reps 1].
-3. For movements that no template covers (stretches, holds, novel coach drills, reaching patterns),
-   use template "poses" with variant = pose names joined by ">", e.g.
-   "athletic_stance>reach_right_hand_to_left_foot>low_crouch_hands_down>reach_left_hand_to_right_foot".
-   For a REPEATING drill give exactly ONE cycle (it loops automatically); for a one-off sequence start
-   and end in a neutral pose. Pick only poses the drill really contains. Examples:
-   - zigzag spider drill: "low_crouch_hands_down>reach_right_hand_to_left_foot>low_crouch_hands_down>reach_left_hand_to_right_foot"
-   - toe touch to overhead reach: "standing>toe_touch>overhead_reach>standing"
-   - cone touch to the front-right: "athletic_stance>reach_low_right>athletic_stance"
-   - sun salutation: "standing>overhead_reach>toe_touch>lunge_right_forward>plank>push_up_bottom>lean_back_arch>plank>toe_touch>overhead_reach>standing"
-   You may mix "poses" segments with other templates.
-4. variant must be copied EXACTLY from the catalog list for that template (punch: shots joined
-   with "-", written out in order including repeats, e.g. "double jab, uppercut" = "jab-jab-uppercut",
-   reps 1; poses: pose names joined with ">").
-7. Only use poses that are genuinely part of the movement's sport (never a boxing guard in
-   basketball, never lying down in a standing drill). If no template or fitting pose exists for a
-   part, leave that part out rather than inventing it.
-5. reps: 1-4 (cycles for repeating templates; repetitions for one-shot actions). Use 1 unless the
-   drill asks for repetitions or a combination needs it.
-6. camera_view: side for running/squats/push-ups/swimming/sagittal motion, front for lateral or
-   symmetric motion (jumping jacks, shuffles, golf), three_quarter for rotational swings and throws.
-
-LIBRARY CATALOG:
-""".strip() + "\n" + ml.catalog_text()
-
-
-def _compose_input(movement: str, extra: str, brief: Dict[str, Any], errors: Optional[List[str]] = None,
-                   previous: Optional[Dict[str, Any]] = None) -> str:
-    # The raw (possibly long, chatty) request is deliberately NOT passed on: only the simplified
-    # brief, which keeps the composition consistent.
-    _ = (movement, extra)
-    parts = [f"MOVEMENT: {brief.get('canonical_name') or movement[:80]}",
-             f"WHAT THE BODY DOES: {brief.get('simplified_description', '')}"]
-    if brief.get("key_details"):
-        parts.append("KEY DETAILS: " + "; ".join(str(x) for x in brief["key_details"][:3]))
-    parts.append("COACH BRIEF:\n" + json.dumps({k: brief.get(k) for k in (
-        "sport_or_context", "implement", "body_orientation", "repeating_cycle", "phases",
-        "closest_standard_movements", "library_match", "tempo", "intensity")}, ensure_ascii=False))
-    if errors:
-        parts.append("YOUR PREVIOUS ANSWER:\n" + json.dumps(previous))
-        parts.append("PROBLEMS FOUND BY THE VALIDATOR (fix them):\n" + "\n".join("- " + e for e in errors))
-    return "\n\n".join(parts)
-
-
-def validate_segments(segments: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[str], List[str]]:
-    """Map model choices onto the library. Returns (resolved, errors, notes)."""
-    resolved, errors, notes = [], [], []
-    if not segments:
-        errors.append("No segments were given.")
-    for i, seg in enumerate(segments[:8]):
-        try:
-            t, v, n = ml.resolve(str(seg.get("template", "")), str(seg.get("variant", "")))
-            if t == "poses":
-                names = [x.strip() for x in v.split(">") if x.strip()]
-                bad = [x for x in names if not difflib.get_close_matches(
-                    x.lower().replace(" ", "_").replace("-", "_"), list(ml.POSES), 1, 0.45)]
-                if bad or not names:
-                    raise KeyError(f"unknown pose name(s) {bad or v!r}; choose from the pose list")
-            notes += [f"segment {i}: {x}" for x in n]
-            resolved.append({
-                "template": t, "variant": v,
-                "reps": int(max(1, min(4, int(seg.get("reps", 1) or 1)))),
-                "tempo": seg.get("tempo", "normal") if seg.get("tempo") in TEMPO else "normal",
-                "intensity": seg.get("intensity", "medium") if seg.get("intensity") in INTENSITY else "medium",
-            })
-        except Exception as exc:
-            errors.append(f"segment {i} ({seg.get('template')}/{seg.get('variant')}): {exc}")
-    return resolved, errors, notes
-
-
-def compose_plan(segments: List[Dict[str, Any]], brief: Dict[str, Any], view: Optional[str],
-                 duration: Optional[float]) -> Dict[str, Any]:
-    """Glue library segments into one keyframe plan (absolute timing, transitions, repetitions)."""
-    # Consecutive boxing segments are one fluid combination, not separate clips.
-    merged: List[Dict[str, Any]] = []
-    for seg in segments:
-        if merged and seg["template"] == "punch" and merged[-1]["template"] == "punch":
-            merged[-1] = dict(merged[-1], variant=merged[-1]["variant"] + "-" + seg["variant"])
-        else:
-            merged.append(dict(seg))
-    segments = merged
-    built = []
-    for seg in segments:
-        out = ml.build_segment(seg["template"], seg["variant"], INTENSITY[seg["intensity"]])
-        out["duration"] *= TEMPO[seg["tempo"]]
-        built.append((seg, out))
-    # A single pose sequence describing a repeating drill becomes a seamless loop.
-    if len(built) == 1 and built[0][0]["template"] == "poses" and brief.get("repeating_cycle"):
-        seg0 = built[0][0]
-        names = [x.strip() for x in seg0["variant"].split(">") if x.strip()]
-        if names and names[-1] != names[0]:
-            names.append(names[0])  # close the cycle with a real transition back to the start
-        out = ml.build_segment("poses", ">".join(names), INTENSITY[seg0["intensity"]])
-        out["duration"] *= TEMPO[seg0["tempo"]]
-        out["keys"].pop()  # the final key equals the first; the solver closes the loop
-        out["loop"] = True
-        built[0] = (seg0, out)
-    # Keep the whole clip under ~8 s by trimming repetitions.
-    def total_len() -> float:
-        return sum((s["reps"] if not o["loop"] or len(built) > 1 else 1) * o["duration"] for s, o in built)
-    while total_len() > 8.0 and any(s["reps"] > 1 for s, _ in built):
-        max(built, key=lambda b: b[0]["reps"] * b[1]["duration"])[0]["reps"] -= 1
-    single_loop = len(built) == 1 and built[0][1]["loop"]
-    keys_abs: List[Tuple[float, Dict[str, Any]]] = []
-    clock = 0.0
-    if single_loop:
-        seg, out = built[0]
-        for k in out["keys"]:
-            keys_abs.append((k["t"] * out["duration"], copy.deepcopy(k)))
-        clock = out["duration"]
-    else:
-        for si, (seg, out) in enumerate(built):
-            reps = seg["reps"] if not out["loop"] else max(2, seg["reps"])
-            if keys_abs:
-                clock += 0.3  # transition between segments
-            for r in range(reps):
-                cycle = [copy.deepcopy(k) for k in out["keys"]]
-                if out["loop"]:
-                    close = copy.deepcopy(out["keys"][0]); close["t"] = 1.0
-                    cycle.append(close)
-                for j, k in enumerate(cycle):
-                    if (r > 0 or keys_abs) and j == 0 and keys_abs and abs(clock - keys_abs[-1][0]) < 1e-6:
-                        continue  # identical boundary key between repetitions
-                    keys_abs.append((clock + k["t"] * out["duration"], k))
-                clock += out["duration"]
-    total = max(clock, 1e-3)
-    keyframes = []
-    for t_abs, k in keys_abs:
-        k["t"] = t_abs / total
-        keyframes.append(k)
-    # Enforce strictly increasing times.
-    keyframes.sort(key=lambda k: k["t"])
-    first_view = built[0][1]["view"] if built else "three_quarter"
+def plan_from_beats(raw: Dict[str, Any], duration: Optional[float] = None) -> Dict[str, Any]:
+    """Deterministically build an engine plan from a grammar description (no model involved)."""
+    speed = INTENSITY.get(raw.get("intensity", "medium"), 1.0) / TEMPO.get(raw.get("tempo", "normal"), 1.0)
+    built = mg.build_beats(raw.get("beats") or [], bool(raw.get("loop")), speed)
     plan = sanitize_plan({
-        "title": brief.get("title", ""),
-        "movement_summary": brief.get("movement_summary", ""),
-        "coaching_cues": brief.get("coaching_cues", []),
-        "loop": single_loop,
-        "duration_seconds": min(8.0, total) if not duration else duration,
-        "camera_view": view if view in VIEWS else first_view,
-        "keyframes": keyframes,
-    })
-    if any(abs(k["body"]["pitch"]) > 65 for k in plan["keyframes"]):
-        plan["camera_view"] = "side"  # horizontal bodies read best from the side
-    plan["segments"] = segments
-    plan["brief"] = {k: brief.get(k) for k in ("sport_or_context", "phases", "closest_standard_movements")}
-    return plan
-
-
-# ---- Choreography: any drill as a beat timeline over enum-only body-part actions ----------------
-def _enum(values: List[str]) -> Dict[str, Any]:
-    return {"type": "string", "enum": values}
-
-
-BEAT_SCHEMA = _obj({
-    "label": {"type": "string"},
-    "timing": _enum(list(ml.BEAT_TIME)),
-    "stance": _enum(["keep"] + list(ml.STANCES)),
-    "level": _enum(list(ml.LEVELS)),
-    "trunk": _enum(["keep"] + list(ml.TRUNKS)),
-    "facing": _enum(["keep"] + list(ml.FACINGS)),
-    "right_arm": _enum(list(ml.ARM_ACTIONS)),
-    "left_arm": _enum(list(ml.ARM_ACTIONS)),
-    "right_leg": _enum(list(ml.LEG_ACTIONS)),
-    "left_leg": _enum(list(ml.LEG_ACTIONS)),
-    "hands_together": {"type": "boolean"},
-    "macro": _enum(["none"] + LIBRARY_CHOICES),
-})
-CHOREO_SCHEMA = _obj({
-    "loop": {"type": "boolean"},
-    "camera_view": _enum(VIEWS),
-    "beats": {"type": "array", "items": BEAT_SCHEMA},
-})
-
-CHOREO_INSTRUCTIONS = """
-You choreograph sports drills for an animated athlete. ANY drill can be built - including drills
-nobody has seen before - by describing it as an ordered list of BEATS. Each beat says what the body
-looks like at the END of that beat; the engine animates smoothly between beats and handles all the
-biomechanics (it automatically hinges the trunk when a hand touches the floor, rotates the hips on
-punches/throws, counter-swings unspecified arms against the legs, pivots the feet on turns).
-
-Beat fields (all chosen from fixed menus):
-- timing: how long the move INTO this beat takes: instant / quick / normal / slow; "hold" = stay
-  in the previous pose (a pause).
-- stance: the foot base and body orientation. "keep" = unchanged. Floor positions (plank,
-  push_up_bottom, bear_position, lying_face_up/down, seated) put the body on the floor.
-  single_leg_left = standing on the LEFT leg. airborne = in the air. reverse_tabletop = crab
-  position (face up, hands and feet on the floor). dive_left / dive_right = goalkeeper-style dive
-  onto that side. half_kneeling_*_forward = one knee down.
-- Lateral travel (shuffles, bounds, slides) does NOT change facing: the chest keeps facing front.
-- level: hip height (half_squat, deep_squat, tall, normal, keep).
-- trunk: keep / upright / lean_forward / hinge / deep_hinge / lean_back / turn_left / turn_right /
-  coil_right / coil_left / side_bend_left / side_bend_right.
-- facing: which way the whole athlete faces (relative to the start). Use it for direction changes,
-  cuts and turns. "keep" = unchanged.
-- right_arm / left_arm: "auto" lets the engine choose a natural arm (counter-swing, ready hands).
-  Name a specific action whenever the drill says what the hands do.
-- right_leg / left_leg: "planted" = foot on the floor in the stance position; other actions move
-  that leg (knee_drive, kick_front, heel_to_butt, kick_side, swing_back, step_forward, step_back,
-  step_out_side, cross_in_front, cross_behind, lift_small). Both legs off the floor = a hop/jump.
-- hands_together: both hands on one ball/implement.
-- macro: ALWAYS use a macro for racket/club/bat/stick strokes and throws when one fits (the
-  arm menus cannot express a proper stroke). "none" otherwise. If part of the drill IS a standard library movement (e.g. a jump shot,
-  a sprint, a tennis forehand, a jab-cross), set macro to it and the engine plays that professional
-  animation for this beat (other fields are ignored for that beat).
-
-How to write good beats:
-1. Break the drill into its real body positions, in order. 4-12 beats for one rep/cycle.
-2. Change only what the drill changes; use "keep" for the rest - that keeps the motion clean.
-3. Alternating drills: write one full left+right cycle and set loop=true.
-4. Use quick/instant for explosive moves, slow for controlled ones, hold for pauses/sticks.
-5. Prefer simple, readable positions over many tiny ones. Never contradict the drill.
-6. camera_view: side for forward/back and floor motion, front for lateral motion, three_quarter
-   for rotation.
-
-Example - "touch the cone to your right, then the cone to your left, staying low":
- beats: [ {stance athletic, level half_squat, label "low ready"},
-          {timing quick, stance lateral_lunge_right, right_arm touch_floor_front, label "touch right cone"},
-          {timing quick, stance athletic, label "back to center"},
-          {timing quick, stance lateral_lunge_left, left_arm touch_floor_front, label "touch left cone"},
-          {timing quick, stance athletic, label "back to center"} ], loop true, camera front
-Example - "3 quick high knees, sprawl to the floor, pop up and jump":
- beats: [ {timing quick, right_leg knee_drive}, {timing quick, left_leg knee_drive},
-          {timing quick, right_leg knee_drive}, {timing quick, stance plank, label "sprawl"},
-          {timing quick, stance athletic, level deep_squat, label "pop up"},
-          {timing quick, stance airborne, right_arm overhead, left_arm overhead, label "jump"},
-          {timing normal, stance athletic, label "land"} ], loop false, camera side
-""".strip()
-
-
-def _choreo_input(brief: Dict[str, Any], movement: str, errors: Optional[List[str]] = None,
-                  previous: Optional[Dict[str, Any]] = None) -> str:
-    parts = [f"DRILL: {brief.get('canonical_name') or movement[:100]}",
-             f"WHAT THE BODY DOES: {brief.get('simplified_description', '')}"]
-    if brief.get("phases"):
-        parts.append("PHASES:\n" + "\n".join(f"- {p}" for p in brief["phases"][:10]))
-    if brief.get("key_details"):
-        parts.append("KEY DETAILS: " + "; ".join(str(x) for x in brief["key_details"][:3]))
-    parts.append(f"REPEATING: {bool(brief.get('repeating_cycle'))}; TEMPO: {brief.get('tempo', 'normal')}")
-    if errors:
-        parts.append("YOUR PREVIOUS ANSWER:\n" + json.dumps(previous))
-        parts.append("PROBLEMS TO FIX:\n" + "\n".join("- " + e for e in errors))
-    return "\n\n".join(parts)
-
-
-def check_beats(raw: Dict[str, Any]) -> List[str]:
-    """Cheap structural checks on a choreography (the enums already guarantee validity)."""
-    beats = raw.get("beats") or []
-    errors = []
-    if len(beats) < 2:
-        errors.append("Give at least 2 beats (positions) for the drill.")
-    if len(beats) > 20:
-        errors.append("Too many beats; use at most 14 for one rep/cycle.")
-    moving = [b for b in beats if b.get("macro", "none") != "none" or any(
-        b.get(k, "keep") not in ("keep", "auto", "planted", "normal")
-        for k in ("stance", "level", "trunk", "facing", "right_arm", "left_arm", "right_leg", "left_leg"))]
-    if len(moving) < 2:
-        errors.append("The beats barely change the body; describe the drill's actual positions.")
-    return errors
-
-
-def plan_from_beats(raw: Dict[str, Any], brief: Dict[str, Any], duration: Optional[float]) -> Dict[str, Any]:
-    tempo = TEMPO.get(brief.get("tempo", "normal"), 1.0)
-    built = ml.build_beats(raw.get("beats", []), bool(raw.get("loop")), INTENSITY.get(brief.get("intensity", "medium"), 1.0))
-    plan = sanitize_plan({
-        "title": brief.get("title", ""),
-        "movement_summary": brief.get("movement_summary", ""),
-        "coaching_cues": brief.get("coaching_cues", []),
+        "title": raw.get("title", ""),
+        "movement_summary": raw.get("movement_summary", ""),
+        "coaching_cues": raw.get("coaching_cues", []),
         "loop": built["loop"],
-        "duration_seconds": duration or min(8.0, built["duration"] * tempo),
+        "duration_seconds": duration or min(8.0, built["duration"]),
         "camera_view": raw.get("camera_view") if raw.get("camera_view") in VIEWS else "three_quarter",
         "keyframes": built["keys"],
     })
     if any(abs(k["body"]["roll"]) > 45 for k in plan["keyframes"]):
-        plan["camera_view"] = "front"  # sideways dives/rolls read best face-on
+        plan["camera_view"] = "front"
     elif any(abs(k["body"]["pitch"]) > 65 for k in plan["keyframes"]):
         plan["camera_view"] = "side"
+    plan["description"] = {k: raw.get(k) for k in ("canonical_name", "simplified_description", "phases",
+                                                   "repeating_cycle", "tempo", "intensity", "implement",
+                                                   "loop", "camera_view", "title", "movement_summary",
+                                                   "coaching_cues")}
     plan["beats"] = raw.get("beats")
-    plan["brief"] = {k: brief.get(k) for k in ("canonical_name", "phases")}
+    plan["grammar_notes"] = built["notes"]
     return plan
 
 
-# One-shot planner: simplification (normalize fields) THEN beats, in a single structured call.
-# Structured output is generated in schema order, so the model still simplifies the request before
-# it choreographs - but we only wait for the model once.
-ONESHOT_SCHEMA = _obj({
-    **{k: v for k, v in NORMALIZE_SCHEMA["properties"].items()},
-    "loop": {"type": "boolean"},
-    "camera_view": _enum(VIEWS),
-    "beats": {"type": "array", "items": BEAT_SCHEMA},
-})
-ONESHOT_INSTRUCTIONS = (
-    "Work in two stages and fill the JSON fields in order.\n\nSTAGE 1 - UNDERSTAND AND SIMPLIFY\n"
-    + NORMALIZE_INSTRUCTIONS
-    + "\n\nSTAGE 2 - CHOREOGRAPH (based ONLY on your simplified description and phases)\n"
-    + "If match_quality is \"exact\", return beats as an empty list [] (the library animation is used).\n"
-    + CHOREO_INSTRUCTIONS
-)
-PLANNER_EFFORT = os.getenv("MOTION_PLANNER_EFFORT", "low")
+CONSISTENCY_RULES = [
+    # (words in the model's own beat label, test on the encoded beat, feedback)
+    (("kick", "knee drive", "knee up", "knee raise", "high knee"),
+     lambda b: any((b.get(k) or {}).get("height", "floor") in ("shin", "knee", "hip", "high") for k in ("right_foot", "left_foot")),
+     "is labelled as a kick/knee drive but no foot is raised to shin height or above"),
+    (("touch the floor", "touch floor", "hands to floor", "hand to floor", "touch the ground", "touch ground",
+      "touch the cone", "touch cone", "hands down"),
+     lambda b: any((b.get(k) or {}).get("height") in ("floor", "shin") for k in ("right_hand", "left_hand"))
+     or b.get("base") in ("face_down_on_hands", "face_up_on_hands"),
+     "is labelled as touching the floor/cone but no hand goes to floor or shin height"),
+    (("punch", "jab", "cross", "throw", "release", "strike", "reach"),
+     lambda b: any((b.get(k) or {}).get("reach") == "extended" and (b.get(k) or {}).get("height") not in ("keep", "auto", "at_side")
+                   for k in ("right_hand", "left_hand")),
+     "is labelled as a punch/throw/reach but no hand is extended"),
+]
 
 
-FOREHAND_VARIANTS = {"tennis_forehand", "padel_forehand", "squash_forehand", "badminton_forehand",
-                     "table_tennis_forehand"}
-BACKHAND_VARIANTS = {"tennis_backhand", "tennis_backhand_one_handed", "badminton_backhand"}
+def consistency_problems(beats: List[Dict[str, Any]]) -> List[str]:
+    """Check that each beat's encoding matches the model's own description of it."""
+    out = []
+
+    def airborne(b: Dict[str, Any]) -> bool:
+        return b.get("base") == "airborne" or all((b.get(k) or {}).get("height", "floor") != "floor"
+                                                   for k in ("right_foot", "left_foot"))
+    jump_words = ("jump", "hop", "leap", "bound", "airborne", "explode up")
+    transition_words = ("feet", "foot", "land", "back to", "into", "to plank", "to squat")
+    body_jumps = [i for i, b in enumerate(beats)
+                  if any(w in str(b.get("label", "")).lower().replace("_", " ") for w in jump_words)
+                  and not any(w in str(b.get("label", "")).lower().replace("_", " ") for w in transition_words)]
+    if body_jumps and not any(airborne(b) for b in beats):
+        i = body_jumps[0]
+        out.append(f"Beat {i + 1} ('{beats[i].get('label', '')}') describes a jump but no beat leaves the ground: "
+                   "lift both feet (base airborne) at the top of the jump, then land.")
+    for i, b in enumerate(beats):
+        label = str(b.get("label", "")).lower().replace("_", " ").replace("-", " ")
+        if b.get("timing") == "hold":
+            continue
+        for words, test, msg in CONSISTENCY_RULES:
+            if any(w in label for w in words) and not test(b):
+                out.append(f"Beat {i + 1} ('{b.get('label', '')}') {msg}.")
+                break
+    return out[:6]
 
 
-def fix_stroke_side(match: str, text: str) -> str:
-    """The model sometimes maps 'backhand' requests to a forehand stroke (or vice versa): fix it."""
-    if ":" not in match:
-        return match
-    template, variant = match.split(":", 1)
-    t = text.lower()
-    wants_back = "backhand" in t
-    wants_fore = "forehand" in t and not wants_back
-    two = any(w in t for w in ("two hand", "two-hand", "two handed", "two-handed", "double hand", "two hander"))
-    if wants_back and variant in FOREHAND_VARIANTS | BACKHAND_VARIANTS:
-        if "badminton" in t:
-            return "swing:badminton_backhand"
-        return "swing:tennis_backhand" if two else (
-            "swing:tennis_backhand_one_handed" if variant in FOREHAND_VARIANTS or "one" in t or "slice" in t
-            or "squash" in t or "padel" in t else match)
-    if wants_fore and variant in BACKHAND_VARIANTS:
-        return "swing:table_tennis_forehand" if ("table tennis" in t or "ping pong" in t) else "swing:tennis_forehand"
-    return match
+def critique_plan(raw: Dict[str, Any], plan: Dict[str, Any], report: Dict[str, Any]) -> List[str]:
+    """Objective feedback from the rigid mechanism back to the model (drives one repair call)."""
+    beats = raw.get("beats") or []
+    problems: List[str] = []
+    if len(beats) < 3:
+        problems.append("Too few beats: describe each real phase (4-12 beats).")
+    changing = 0
+    for b in beats:
+        if any(b.get(k, "keep") not in ("keep",) for k in ("base", "trunk", "facing")) or b.get("level") not in ("keep", None):
+            changing += 1
+            continue
+        if any((b.get(k) or {}).get("height") not in ("keep", None) for k in ("right_hand", "left_hand")):
+            changing += 1
+            continue
+        if any((b.get(k) or {}).get("position") not in ("keep", None) or (b.get(k) or {}).get("height") != "floor"
+               for k in ("right_foot", "left_foot")):
+            changing += 1
+    if changing < 2:
+        problems.append("The beats barely change the body: describe the actual positions of each phase.")
+    if raw.get("repeating_cycle") and not raw.get("loop"):
+        problems.append("The movement is a repeating cycle but loop=false: describe one cycle and set loop=true.")
+    airborne_run = 0
+    for b in beats:
+        up = all((b.get(k) or {}).get("height", "floor") != "floor" for k in ("right_foot", "left_foot"))
+        airborne_run = airborne_run + 1 if up and b.get("base") not in ("face_down_horizontal", "face_up_horizontal") else 0
+        if airborne_run >= 3:
+            problems.append("Both feet stay off the floor for 3+ beats in a row: is the athlete really in the air?")
+            break
+    problems += consistency_problems(beats)
+    if beats and not raw.get("loop"):
+        last = beats[-1]
+        feet_down = any((last.get(k) or {}).get("height", "floor") == "floor" for k in ("right_foot", "left_foot"))
+        if last.get("base") == "airborne" or not feet_down:
+            problems.append("The movement ends in the air: add a landing/recovery beat that finishes balanced on the feet.")
+    for i, b in enumerate(beats):
+        if b.get("base") in ("face_down_horizontal", "face_up_horizontal", "seated", "face_up_on_hands"):
+            continue
+        high = [k for k in ("right_foot", "left_foot") if (b.get(k) or {}).get("height") in ("hip", "high")]
+        if len(high) == 2:
+            problems.append(f"Beat {i + 1} ({b.get('label', '')}): both feet at hip height or higher (a straddle/pike "
+                            "in the air). Keep this only if the movement really is a straddle/pike jump; a normal "
+                            "jump keeps the feet below the knees.")
+    for issue in report.get("issues", []):
+        if "little visible motion" in issue:
+            problems.append("The motion is almost static: make each phase's positions clearly different.")
+        elif "chicken wing" in issue:
+            problems.append("An elbow sits high while its hand is low: use elbow 'down' or raise the hand.")
+        elif "sideways" in issue:
+            problems.append("The trunk bends too far sideways: reduce side bends.")
+    return problems
 
 
-STROKE_ARM_ACTIONS = {"throw_cock", "throw_release", "follow_through_across", "swing_back"}
-
-
-def substitute_improvised_strokes(beats: List[Dict[str, Any]], brief: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], str]:
-    """Racket/club/bat/stick strokes need hand-built technique the generic arm menus can't express.
-
-    If the model improvised a stroke out of throwing/swinging arm actions (instead of using a library
-    macro), replace that run of beats with the closest library stroke, keeping surrounding footwork.
-    """
-    match = brief.get("library_match", "none")
-    if brief.get("implement") not in ("racket", "club", "bat", "stick") or ":" not in match:
-        return beats, ""
-    if not match.startswith(("swing:", "overhead:")):
-        return beats, ""
-    if any(b.get("macro", "none") != "none" for b in beats):
-        return beats, ""
-    is_stroke = [b.get("right_arm") in STROKE_ARM_ACTIONS or b.get("left_arm") in STROKE_ARM_ACTIONS for b in beats]
-    if not any(is_stroke):
-        return beats, ""
-    first = is_stroke.index(True)
-    last = len(is_stroke) - 1 - is_stroke[::-1].index(True)
-    macro_beat = dict(beats[first], macro=match, label=f"{match.split(':', 1)[1].replace('_', ' ')}")
-    return beats[:first] + [macro_beat] + beats[last + 1:], match
-
-
-def _exact_template_plan(brief: Dict[str, Any], duration: Optional[float]) -> Optional[Dict[str, Any]]:
-    match = brief.get("library_match", "none")
-    if match == "none" or brief.get("match_quality") != "exact" or ":" not in match:
-        return None
-    template, variant = match.split(":", 1)
-    seg = {"template": template, "variant": variant, "reps": 1,
-           "tempo": brief.get("tempo", "normal") if brief.get("tempo") in TEMPO else "normal",
-           "intensity": brief.get("intensity", "medium") if brief.get("intensity") in INTENSITY else "medium"}
-    segments, errors, _ = validate_segments([seg])
-    if segments and not errors:
-        return compose_plan(segments, brief, None, duration)
-    return None
+def _repair_input(movement: str, raw: Dict[str, Any], problems: List[str]) -> str:
+    return ("MOVEMENT REQUEST: " + movement.strip() + "\n\nYOUR PREVIOUS ANSWER:\n" + json.dumps(raw) +
+            "\n\nPROBLEMS FOUND BY THE ENGINE (fix them, keep everything else):\n" +
+            "\n".join("- " + p for p in problems))
 
 
 def plan_movement(movement: str, extra: str = "", duration: Optional[float] = None,
                   refine: bool = False) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-    """Pipeline (usually ONE model call):
-
-    1. one-shot call: simplify the request (canonical name, description, phases, exact library
-       match) and, unless it is an exact standard skill, choreograph it as enum-only beats.
-    2. exact match -> hand-built template.  otherwise -> beats -> code builds all the motion.
-    3. only if the beats fail the structural check: one repair call (choreograph from the brief).
-    """
+    """Text -> grammar description (one model call) -> deterministic build -> engine checks ->
+    (only if the engine finds problems) one repair call with its exact findings."""
     calls: List[Dict[str, Any]] = []
     request = f"Movement request: {movement.strip()}"
     if extra.strip():
         request += f"\nNotes: {extra.strip()}"
-    out, meta = _call_model(ONESHOT_INSTRUCTIONS, request, "medium" if refine else PLANNER_EFFORT,
-                            ONESHOT_SCHEMA, "drill_plan", 10000)
-    calls.append({"stage": "plan", **meta, "canonical_name": out.get("canonical_name"),
-                  "library_match": out.get("library_match"), "match_quality": out.get("match_quality"),
-                  "beats": len(out.get("beats") or [])})
-    side_text = f"{movement} {out.get('canonical_name', '')}"
-    fixed = fix_stroke_side(out.get("library_match", "none"), side_text)
-    if fixed != out.get("library_match"):
-        calls[-1]["stroke_side_fixed"] = f"{out.get('library_match')} -> {fixed}"
-        out["library_match"] = fixed
-    if not refine:
-        plan = _exact_template_plan(out, duration)
-        if plan is not None:
-            return plan, calls
-    raw = {"loop": out.get("loop"), "camera_view": out.get("camera_view"), "beats": out.get("beats") or []}
-    raw["beats"], swapped = substitute_improvised_strokes(raw["beats"], out)
-    if swapped:
-        calls[-1]["stroke_substituted"] = swapped
-    errors = check_beats(raw)
-    if errors:
-        raw2, meta2 = _call_model(CHOREO_INSTRUCTIONS, _choreo_input(out, movement, errors, raw), "medium",
-                                  CHOREO_SCHEMA, "choreography", 8000)
-        errors2 = check_beats(raw2)
-        calls.append({"stage": "repair", **meta2, "errors": errors2})
-        if len(errors2) <= len(errors):
-            raw = raw2
-    return plan_from_beats(raw, out, duration), calls
+    raw, meta = _call_model(PLANNER_INSTRUCTIONS, request, "medium" if refine else PLANNER_EFFORT, PLAN_SCHEMA)
+    plan = plan_from_beats(raw, duration)
+    _, report = compile_motion(plan, None, DEFAULT_FPS, return_to_start=False)
+    problems = critique_plan(raw, plan, report)
+    calls.append({"stage": "describe", **meta, "canonical_name": raw.get("canonical_name"),
+                  "beats": len(raw.get("beats") or []), "problems": problems})
+    if problems:
+        try:
+            raw2, meta2 = _call_model(PLANNER_INSTRUCTIONS, _repair_input(movement, raw, problems), PLANNER_EFFORT,
+                                      PLAN_SCHEMA)
+            plan2 = plan_from_beats(raw2, duration)
+            _, report2 = compile_motion(plan2, None, DEFAULT_FPS, return_to_start=False)
+            problems2 = critique_plan(raw2, plan2, report2)
+            calls.append({"stage": "repair", **meta2, "problems": problems2})
+            if len(problems2) <= len(problems):
+                plan = plan2
+        except Exception as exc:  # repair is best effort
+            calls.append({"stage": "repair", "error": str(exc)})
+    return plan, calls
 
 
 # -----------------------------------------------------------------------------
@@ -2317,7 +1910,7 @@ def _build_response(plan: Dict[str, Any], duration: Optional[float], fps: int, s
 
 @app.post("/generate")
 def generate(req: GenerateRequest) -> Dict[str, Any]:
-    key = _cache_key("v12", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
+    key = _cache_key("v13-grammar", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
                      req.quality, MODEL)
     plan = cache_get(key) if req.use_cache else None
     calls: List[Dict[str, Any]] = []
@@ -2351,40 +1944,48 @@ def compile_endpoint(req: CompileRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Could not compile supplied plan: {exc}") from exc
 
 
-SELFTEST_PLAN: Dict[str, Any] = {
-    "title": "Jumping jack (built-in self-test)",
-    "loop": True,
-    "duration_seconds": 1.0,
-    "camera_view": "front",
-    "keyframes": [
-        {"t": 0.0, "phase": "closed", "pelvis": {"height": -0.04},
-         "right_hand": {"forward": 0.05, "up": -0.6, "out": 0.33}, "left_hand": {"forward": 0.05, "up": -0.6, "out": 0.33},
-         "right_foot": {"out": 0.12}, "left_foot": {"out": 0.12}},
-        {"t": 0.25, "phase": "takeoff", "pelvis": {"height": 0.08},
-         "right_hand": {"forward": 0.05, "up": -0.1, "out": 0.8}, "left_hand": {"forward": 0.05, "up": -0.1, "out": 0.8},
-         "right_foot": {"out": 0.3, "lift": 0.03}, "left_foot": {"out": 0.3, "lift": 0.03},
-         "left_foot_planted": False, "right_foot_planted": False},
-        {"t": 0.5, "phase": "open", "pelvis": {"height": -0.06},
-         "right_hand": {"forward": 0.05, "up": 0.62, "out": 0.25}, "left_hand": {"forward": 0.05, "up": 0.62, "out": 0.25},
-         "right_foot": {"out": 0.45}, "left_foot": {"out": 0.45}},
-        {"t": 0.75, "phase": "return", "pelvis": {"height": 0.08},
-         "right_hand": {"forward": 0.05, "up": -0.1, "out": 0.8}, "left_hand": {"forward": 0.05, "up": -0.1, "out": 0.8},
-         "right_foot": {"out": 0.3, "lift": 0.03}, "left_foot": {"out": 0.3, "lift": 0.03},
-         "left_foot_planted": False, "right_foot_planted": False},
+def _hand(height: str, direction: str = "front", reach: str = "bent", elbow: str = "auto") -> Dict[str, str]:
+    return {"height": height, "direction": direction, "reach": reach, "elbow": elbow}
+
+
+def _foot(position: str = "keep", height: str = "floor") -> Dict[str, str]:
+    return {"position": position, "height": height}
+
+
+# Offline test description written in the grammar (a test fixture, not a library movement).
+SELFTEST_DESCRIPTION: Dict[str, Any] = {
+    "title": "Grammar self-test", "loop": True, "tempo": "normal", "intensity": "medium", "camera_view": "front",
+    "beats": [
+        {"label": "feet together, arms down", "timing": "normal", "base": "narrow", "level": "normal", "trunk": "upright",
+         "facing": "keep", "right_hand": _hand("at_side"), "left_hand": _hand("at_side"),
+         "right_foot": _foot(), "left_foot": _foot(), "hands_together": False},
+        {"label": "hop out, arms up", "timing": "quick", "base": "keep", "level": "keep", "trunk": "keep",
+         "facing": "keep", "right_hand": _hand("overhead", "side", "extended"),
+         "left_hand": _hand("overhead", "side", "extended"),
+         "right_foot": _foot("wide", "ankle"), "left_foot": _foot("wide", "ankle"), "hands_together": False},
+        {"label": "land wide", "timing": "quick", "base": "keep", "level": "slightly_bent", "trunk": "keep",
+         "facing": "keep", "right_hand": _hand("keep"), "left_hand": _hand("keep"),
+         "right_foot": _foot("wide", "floor"), "left_foot": _foot("wide", "floor"), "hands_together": False},
+        {"label": "touch the floor (reach inference)", "timing": "normal", "base": "keep", "level": "keep",
+         "trunk": "keep", "facing": "keep", "right_hand": _hand("floor", "front", "extended"),
+         "left_hand": _hand("auto"), "right_foot": _foot(), "left_foot": _foot(), "hands_together": False},
     ],
 }
 
 
 def selftest() -> int:
-    """Offline check of the solver (no API key needed): python motion_engine.py --selftest"""
-    plan = sanitize_plan(SELFTEST_PLAN)
-    ok = True
+    """Offline check of grammar + solver (no API key needed): python motion_engine.py --selftest"""
+    ok = (abs(mg.SHOULDER_X - SHOULDER_OFFSET[0] * UNIT_TO_M) < 1e-9 and abs(mg.SHOULDER_Y - SHOULDER_OFFSET[1] * UNIT_TO_M) < 1e-9
+          and abs(mg.HIP_DROP_SCALE - HIP_DROP_SCALE) < 1e-9 and abs(mg.UNIT_TO_M - UNIT_TO_M) < 1e-12)
+    print("grammar/engine geometry consistent:", ok)
+    plan = plan_from_beats(SELFTEST_DESCRIPTION)
     for side in ("right", "left"):
         solved = mirror_plan(plan) if side == "left" else plan
-        frames, report = compile_motion(solved, None, DEFAULT_FPS)
-        print(f"[{side}-handed] frames={len(frames)} issues={report['issues']} "
-              f"travel={report['end_effector_travel_m']}")
-        ok = ok and len(frames) == 24 and not report["issues"]
+        frames, report = compile_motion(solved, None, DEFAULT_FPS, return_to_start=False)
+        print(f"[{side}-handed] frames={len(frames)} issues={report['issues']} notes={plan['grammar_notes'][:2]}")
+        ok = ok and len(frames) > 10 and not report["issues"]
+    touch = [k for k in plan["keyframes"] if "touch the floor" in k["phase"]][0]
+    ok = ok and touch["torso"]["lean"] >= 50  # reach inference must have hinged the trunk
     print("SELFTEST", "PASSED" if ok else "FAILED")
     return 0 if ok else 1
 

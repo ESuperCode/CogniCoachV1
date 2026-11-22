@@ -38,18 +38,10 @@ All objects are arranged in this hierarchy in the unity game. All joints are not
 ## Motion engine contract
 
 `motion_engine.py` uses these proportions (measured against the Unity WebGL build) for its
-forward/inverse kinematics; `GET /rig` returns them.
-
-The language model never writes joint angles or Unity Euler values. Each keyframe describes:
-
-- `right_hand` / `left_hand`: `forward`, `up`, `out` in metres, chest frame (`out` = outward toward
-  that hand's own side), plus `right_elbow_points` / `left_elbow_points`
-- `right_foot` / `left_foot`: `forward`, `out`, `lift` in metres (body frame) and `toe_out` degrees
-- `pelvis` (`height` drop/jump in metres, `twist`, `tilt`, `side`), `torso` (`lean`, `twist`,
-  `side_bend`), `head`, and whole-`body` `pitch` / `turn` / `roll`
-- `left_foot_planted`, `right_foot_planted`, `hands_together`
-
-The compiler interpolates the keyframes, solves arm and leg IK on the measured rig, locks planted
-feet, keeps hands out of the torso, and emits local Unity Euler angles (Z-X-Y) per joint in the
-sparse frame format consumed by `RagdollTest_AI.html`. `positionx/y/z` carry whole-body rotation
-(not translation) and `rooty` carries the vertical root offset in metres.
+kinematics; `GET /rig` returns them. The language model never writes joint angles, coordinates or
+movement data, and the engine has no pre-programmed movements: the model describes each beat of a
+movement with enum-only spatial descriptors (see `motion_grammar.py`) - hand height x direction x
+reach x elbow, foot position x height, support base, hip level, trunk, facing and timing - and the
+engine computes the targets, infers supporting biomechanics, solves the joints and emits local
+Unity Euler angles (Z-X-Y) per joint in the sparse frame format consumed by `RagdollTest_AI.html`.
+`positionx/y/z` carry whole-body rotation and `rooty` the vertical root offset in metres.
