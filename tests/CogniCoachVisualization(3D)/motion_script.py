@@ -78,6 +78,10 @@ GROUPS = {
     "lower": ["pelvis", "right_leg", "left_leg"],
     "all": PARTS,
 }
+# Base postures that only say "stand / be ready": a specific motion on the same line replaces them.
+GENERIC_POSES = {"stand", "stance", "ready_arms", "arms_hang", "fighting_stance", "wide_defensive_stance",
+                 "hands_on_hips", "arms_out", "guard"}
+MAX_HOLD = 3.0
 GENERIC_PARAMS = {"side", "speed", "times", "hold", "delay", "start", "end"}
 KIND_RANK = {"action": 3, "cycle": 2, "pose": 1}
 
@@ -253,6 +257,11 @@ class Track:
 def _spline(ts: np.ndarray, ys: np.ndarray, period: Optional[float], q_seam: Optional[np.ndarray] = None):
     """Monotone cubic (PCHIP) through the keys: no overshoot, eases into reversals. Cycles get
     periodic tangents so the loop seam is as smooth as any other key."""
+    if period and len(ts) > 1 and ts[-1] >= period - 1e-4:
+        # a key AT the cycle length is the same instant as the first key: drop it (two keys at one
+        # time made the periodic spline divide by zero -> NaN frames)
+        ts, ys = ts[:-1], ys[:-1]
+        q_seam = q_seam[:-1] if q_seam is not None else None
     if len(ts) == 1:
         return ("const", float(ys[0]))
     if period:
@@ -314,6 +323,13 @@ def _value(text: str) -> Any:
 def parse(script: str) -> Tuple[List[Dict[str, Any]], bool, List[str]]:
     """Script text -> (lines, loop, errors). Each line: {'items': [(name, args)], 'repeat': n, 'no': i}."""
     lines, errors, loop = [], [], False
+    # " / " and ";" outside parentheses also start a new line (compact one-line notation)
+    flat, depth = [], 0
+    for ch in script:
+        depth += ch == "("
+        depth -= ch == ")"
+        flat.append("\n" if ch in "/;" and depth <= 0 else ch)
+    script = "".join(flat)
     for no, raw in enumerate(script.splitlines(), start=1):
         text = raw.split("#", 1)[0].strip()
         if not text:
@@ -401,6 +417,9 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
     Every repair is listed in report.warnings. strict=True turns them into errors."""
     lines, loop, errors = parse(script)
     warnings: List[str] = []
+    if not strict and errors:
+        warnings += [e + " - skipped" for e in errors if e != "the script has no motions"]
+        errors = [e for e in errors if e == "the script has no motions"]
     built = []
     for line in lines:
         sublines: List[List[Track]] = [[]]
@@ -436,6 +455,9 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
                     continue
                 warnings += [e + " - ignored" for e in errs]
                 args = {k: v for k, v in args.items() if not _check_args(db[name], {k: v}, where)}
+            if isinstance(args.get("hold"), (int, float)) and args["hold"] > MAX_HOLD:
+                warnings.append(f"{where}: hold={args['hold']} shortened to {MAX_HOLD:.0f} s")
+                args = {**args, "hold": MAX_HOLD}
             tr = Track(db[name], args)
             target = sublines[-1]
             clash = [o for o in target if {p for p, h in o.owned() if h} & {p for p, h in tr.owned() if h}]
@@ -445,6 +467,22 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
                         parts = sorted({p for p, h in o.owned() if h} & {p for p, h in tr.owned() if h})
                         errors.append(f"line {line['no']}: '{tr.name}' and '{o.name}' both drive {', '.join(parts)}; "
                                       "put them on different lines or pick motions that use different body parts")
+                    continue
+                # A held pose only describes where the body is while the other motion plays: the
+                # moving motion wins and the pose is dropped (it must not play afterwards - e.g.
+                # "start_dive + stand" must not stand up). Two real motions play one after another.
+                generic_new = tr.name in GENERIC_POSES
+                generic_old = [o for o in clash if o.name in GENERIC_POSES]
+                if generic_new:
+                    warnings.append(f"line {line['no']}: '{tr.name}' dropped - '{clash[0].name}' already drives those parts")
+                    continue
+                poses = generic_old
+                if len(poses) == len(clash):
+                    for o in poses:
+                        target.remove(o)
+                    warnings.append(f"line {line['no']}: '{', '.join(o.name for o in poses)}' dropped - "
+                                    f"'{tr.name}' drives those parts")
+                    target.append(tr)
                     continue
                 warnings.append(f"line {line['no']}: '{tr.name}' and '{clash[0].name}' drive the same body parts - "
                                 f"'{tr.name}' plays right after it")
@@ -610,6 +648,9 @@ def body_penetration(world: Dict[str, np.ndarray], pos: Dict[str, np.ndarray], s
 def _check(frames: List[Dict[str, float]]) -> Dict[str, Any]:
     """Objective checks on the result: arm/body penetration and joint pops."""
     worst_pen, pops, prev, prev2 = 0.0, 0.0, None, None
+    bad = sum(1 for f in frames if not all(math.isfinite(v) for v in f.values()))
+    if bad:
+        return {"max_arm_penetration_m": 0.0, "max_joint_step_m": 0.0, "issues": [f"{bad} frames are not finite (NaN)"]}
     for f in frames:
         local = {j: me.frame_rotation(f, j) for j in me.JOINT_NAMES}
         local["body"] = np.eye(3)

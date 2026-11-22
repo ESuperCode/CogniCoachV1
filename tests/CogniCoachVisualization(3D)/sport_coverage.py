@@ -99,7 +99,7 @@ COVERAGE = {
         "streamline stretch": "stand + arms_overhead(hold=2)",
     },
     "Cricket": {
-        "bowling": "run(times=2)\nstraight_arm_bowl", "forward defense": "forward_defense", "drive": "stance(width=wide, depth=0.3) + vertical_two_hand_swing",
+        "bowling": "run(times=2)\nstraight_arm_bowl", "forward defense": "forward_defense", "drive": "vertical_two_hand_swing",
         "pull shot": "stance(width=wide, depth=0.3) + level_two_hand_swing", "wicket keeping": "catcher_crouch(hold=1.5)",
         "field and throw": "low_scoop\nstride_step + overhand_throw(delay=0.2)", "catch high": "stance(depth=0.2) + two_hand_catch_high",
         "diving catch": "side_dive", "run between wickets": "run(pace=sprint, times=3)",

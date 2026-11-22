@@ -2110,6 +2110,10 @@ THE MOTION LANGUAGE
   arms, run pumps the arms, jump swings the arms, stance leans the trunk. Do NOT add an arm motion on
   top of a kick, run or jump unless the request needs a specific arm action (guard, dribble, shoot,
   carrying, hands high). Never add arms_out / arms_overhead just for balance.
+- Many actions contain their own starting position (start_dive begins crouched on the block,
+  sprint_start begins in the blocks, three_point_stance, catcher_crouch ...). Do not put a separate
+  setup or "stand" line before or with them, and never put a pose on the same line as a motion that
+  drives the same body parts.
 - Start straight into the movement (a short ready stance is fine before a sport skill). Never insert
   a pose from a different activity (no plank before swimming, no stance before a swim stroke).
 - Use the fewest motions that show the request; usually 1-5 lines and under 8 seconds. For a drill
@@ -2122,7 +2126,20 @@ run(pace=sprint, times=2)
 
 CATALOG (name(params) [kind; parts it drives; soft parts] description):
 {mdb.catalog_text()}
+
+RECIPES - proven scripts for common sport movements (one line each, " / " = new line). Reuse and
+combine them; adapt for drills that are not listed:
+{recipes_text()}
 """.strip()
+
+
+def recipes_text() -> str:
+    try:
+        import sport_coverage as cov
+    except ImportError:
+        return ""
+    return "\n".join(f"{sport.split(' ')[0].lower()} {phrase}: {script.replace(chr(10), ' / ')}"
+                     for sport, phrase, script in cov.all_entries())
 
 
 def _compile_script(script: str, side: str) -> Dict[str, Any]:
@@ -2145,6 +2162,28 @@ def local_script(movement: str) -> Optional[Dict[str, Any]]:
     import motion_database as mdb
     text = " ".join(_words(movement))
     alias = mdb.ALIASES.get(text) or mdb.ALIASES.get(text.rstrip("s"))
+    if not alias:
+        # A known movement plus a sport name / one filler word ("soccer penalty kick", "cricket straight
+        # drive", "a proper golf putt"): use the proven script for the longest phrase it contains.
+        words = text.split()
+        sports = {"basketball", "soccer", "football", "tennis", "baseball", "softball", "volleyball", "swimming",
+                  "swim", "cricket", "rugby", "golf", "hockey", "track", "a", "the", "proper", "basic", "simple"}
+        best_key, any_key = None, None
+        for key in mdb.ALIASES:
+            kw = key.split()
+            if len(kw) < 2 or len(kw) > len(words):
+                continue
+            for i in range(len(words) - len(kw) + 1):
+                if words[i:i + len(kw)] == kw:
+                    if any_key is None or len(kw) > len(any_key.split()):
+                        any_key = key
+                    extra = [w for j, w in enumerate(words) if not i <= j < i + len(kw)]
+                    if len([w for w in extra if w not in sports]) <= 1 and (best_key is None or len(kw) > len(best_key.split())):
+                        best_key = key
+        alias = mdb.ALIASES.get(best_key) if best_key else None
+        if not alias and any_key:   # fallback only (model unavailable): the best known phrase inside the request
+            return {"canonical_name": any_key, "steps": [], "title": movement.strip()[:60], "coaching_cues": [],
+                    "camera_view": "three_quarter", "script": mdb.ALIASES[any_key], "exact": False}
     if alias:
         return {"canonical_name": text, "steps": [], "title": text.title(), "coaching_cues": [],
                 "camera_view": "three_quarter", "script": alias, "exact": True}
@@ -2186,14 +2225,22 @@ def plan_script(movement: str, extra: str = "") -> Tuple[Dict[str, Any], List[Di
     if local and local.get("exact") and not extra.strip():
         return local, [{"stage": "local", "seconds": round(time.time() - t0, 2), "script": local["script"]}]
     request = f"Request: {movement.strip()}" + (f"\nNotes: {extra.strip()}" if extra.strip() else "")
-    try:
-        raw, meta = _call_model(script_instructions(), request, SCRIPT_EFFORT, SCRIPT_SCHEMA, name="motion_script",
-                                max_tokens=3000, timeout=SCRIPT_TIMEOUT)
-        _compile_script(raw.get("script", ""), "right")   # lenient: only fails if nothing usable is left
-        return raw, [{"stage": "script", **meta, "script": raw.get("script")}]
-    except HTTPException:
-        raise
-    except Exception as exc:
+    last_exc: Optional[Exception] = None
+    for attempt in range(2):
+        budget = SCRIPT_TIMEOUT - (time.time() - t0)
+        if attempt and budget < 4.0:
+            break   # not enough time left for a second try: answer locally
+        try:
+            raw, meta = _call_model(script_instructions(), request, SCRIPT_EFFORT, SCRIPT_SCHEMA, name="motion_script",
+                                    max_tokens=3000, timeout=budget)
+            _compile_script(raw.get("script", ""), "right")   # lenient: only fails if nothing usable is left
+            return raw, [{"stage": "script" if not attempt else "script-retry", **meta, "script": raw.get("script")}]
+        except HTTPException:
+            raise
+        except Exception as exc:  # transient API error / timeout / unusable script
+            last_exc = exc
+    if True:
+        exc = last_exc
         fallback = local or {"canonical_name": "stance", "steps": [], "title": movement.strip()[:60], "coaching_cues": [],
                              "camera_view": "three_quarter", "script": "stance(depth=0.3) + ready_arms"}
         return fallback, [{"stage": "local-fallback", "seconds": round(time.time() - t0, 1),
@@ -2388,9 +2435,15 @@ def selftest() -> int:
         script_ok = False  # both drive the legs: strict mode must refuse
     except ms.ScriptError:
         pass
-    split = ms.compile_script("stance + run", mdb.DB)     # lenient: plays one after the other
-    script_ok = script_ok and len(split["lines"]) == 2
-    print("motion script:", script_ok, f"({len(mdb.DB)} motions in the database)")
+    split = ms.compile_script("lunge + jump", mdb.DB)     # lenient: two actions play one after the other
+    dropped = ms.compile_script("stance + run", mdb.DB)   # a generic pose gives way to the motion
+    script_ok = script_ok and len(split["lines"]) == 2 and len(dropped["lines"]) == 1
+    for m in mdb.DB.values():
+        m["build"]()
+    baked = not mdb._SOLVED_DIRTY[0]
+    print("motion script:", script_ok, f"({len(mdb.DB)} motions in the database)",
+          "| all poses pre-solved:", baked, "" if baked else "-> run: python motion_database.py --bake")
+    script_ok = script_ok and baked
     ok = ok and script_ok
     print("SELFTEST", "PASSED" if ok else "FAILED")
     return 0 if ok else 1

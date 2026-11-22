@@ -144,7 +144,7 @@ Each phrase is also an instant request (no model call). Regenerate: `python spor
 | flutter kick | `flutter_kick(times=4)` | 2.4 |
 | dolphin kick | `dolphin_kick(times=4)` | 2.8 |
 | flip turn | `front_crawl / flip_turn` | 3.0 |
-| start dive | `start_dive` | 1.77 |
+| start dive | `start_dive` | 2.47 |
 | treading water | `tread_water(times=3)` | 3.4 |
 | streamline stretch | `stand + arms_overhead(hold=2)` | 2.4 |
 
@@ -154,7 +154,7 @@ Each phrase is also an instant request (no model call). Regenerate: `python spor
 |---|---|---|
 | bowling | `run(times=2) / straight_arm_bowl` | 3.03 |
 | forward defense | `forward_defense` | 1.4 |
-| drive | `stance(width=wide, depth=0.3) + vertical_two_hand_swing` | 1.9 |
+| drive | `vertical_two_hand_swing` | 2.0 |
 | pull shot | `stance(width=wide, depth=0.3) + level_two_hand_swing` | 2.0 |
 | wicket keeping | `catcher_crouch(hold=1.5)` | 1.9 |
 | field and throw | `low_scoop / stride_step + overhand_throw(delay=0.2)` | 3.4 |
