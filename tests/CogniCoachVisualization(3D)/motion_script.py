@@ -32,6 +32,7 @@ Generic parameters accepted by every motion:
     times=N           repeat (actions and cycles)
     hold=seconds      hold the end pose
     delay=seconds     start later than the other motions on the line (kinetic chain)
+    start=0..1, end=0..1   play only part of an action (e.g. lunge(end=0.5) stays down in the lunge)
 """
 
 from __future__ import annotations
@@ -77,7 +78,7 @@ GROUPS = {
     "lower": ["pelvis", "right_leg", "left_leg"],
     "all": PARTS,
 }
-GENERIC_PARAMS = {"side", "speed", "times", "hold", "delay"}
+GENERIC_PARAMS = {"side", "speed", "times", "hold", "delay", "start", "end"}
 KIND_RANK = {"action": 3, "cycle": 2, "pose": 1}
 
 
@@ -149,6 +150,8 @@ class Track:
         self.hold = float(args.get("hold", 0.0))
         self.delay = float(args.get("delay", 0.0))
         self.mirror = args.get("side", "right") == "left"
+        self.start = min(0.95, max(0.0, float(args.get("start", 0.0))))
+        self.end = max(self.start + 0.05, min(1.0, float(args.get("end", 1.0))))
         own = {k: v for k, v in args.items() if k not in GENERIC_PARAMS}
         keys = motion["build"](**own) if callable(motion.get("build")) else motion["keys"]
         period = None
@@ -210,7 +213,8 @@ class Track:
         if self.kind == "pose":
             return self.delay + self.hold
         reps = self.times
-        return self.delay + reps * self.period / self.speed + self.hold
+        span = self.period * (self.end - self.start) if self.kind == "action" else self.period
+        return self.delay + reps * span / self.speed + self.hold
 
     def sample(self, t_line: float, line_len: float) -> Dict[str, Dict[str, float]]:
         vals = self.curves
@@ -220,13 +224,14 @@ class Track:
         elif self.kind == "pose" and self.period > 0 and self.motion.get("loop_pose"):
             u = tau % self.period
         else:
-            span = self.period
+            span = self.period * (self.end - self.start)    # start=/end= play part of an action
             if self.times > 1 and span > 0:
                 total = span * self.times
                 tau = min(max(tau, 0.0), total)
                 u = span if tau >= total else tau % span
             else:
                 u = min(max(tau, 0.0), span)
+            u += self.period * self.start
         out = {}
         for p, pv in vals.items():
             if "q" in pv:
@@ -334,6 +339,10 @@ def parse(script: str) -> Tuple[List[Dict[str, Any]], bool, List[str]]:
         parts.append(cur)
         items = []
         for part in parts:
+            stray = re.fullmatch(r"\s*([a-z_]+)\s*=\s*([^\s,()]+)\s*", part)
+            if stray and items and stray.group(1) not in ("x",):
+                items[-1][1][stray.group(1)] = _value(stray.group(2))   # "+ hold=0.5" belongs to the motion before
+                continue
             mm = ITEM_RE.match(part)
             if not mm:
                 errors.append(f"line {no}: cannot read '{part.strip()}' (use name or name(key=value, ...))")
@@ -381,15 +390,35 @@ def _check_args(motion: Dict[str, Any], args: Dict[str, Any], where: str) -> Lis
     return errs
 
 
+MAX_SECONDS = 12.0
+
+
 def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: str = "right",
-                   fps: int = FPS) -> Dict[str, Any]:
+                   fps: int = FPS, strict: bool = False) -> Dict[str, Any]:
+    """Compile a script. Lenient (default): problems are repaired on the spot instead of failing -
+    near-miss names are corrected, unknown motions and bad parameters are dropped, two motions that
+    drive the same body part on one line play one after the other, and over-long clips are trimmed.
+    Every repair is listed in report.warnings. strict=True turns them into errors."""
     lines, loop, errors = parse(script)
     warnings: List[str] = []
-    built: List[Tuple[List[Track], int, int]] = []
+    built = []
     for line in lines:
-        tracks = []
+        sublines: List[List[Track]] = [[]]
         for name, args in line["items"]:
             where = f"line {line['no']} '{name}'"
+            if name not in db:
+                try:
+                    from motion_database import NAME_ALIASES
+                except ImportError:
+                    NAME_ALIASES = {}
+                if name in NAME_ALIASES:
+                    am = ITEM_RE.match(NAME_ALIASES[name])
+                    alias_args = {}
+                    for a in filter(None, (x.strip() for x in (am.group(2) or "").split(","))):
+                        kk, vv = a.split("=", 1)
+                        alias_args[kk.strip()] = _value(vv)
+                    warnings.append(f"{where}: read as '{NAME_ALIASES[name]}'")
+                    name, args = am.group(1), {**alias_args, **args}
             if name not in db:
                 guess = difflib.get_close_matches(name, list(db), n=1, cutoff=0.75)
                 if guess:
@@ -397,32 +426,68 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
                     name = guess[0]
             if name not in db:
                 close = difflib.get_close_matches(name, list(db), n=5, cutoff=0.45)
-                errors.append(f"{where}: unknown motion" + (f" (similar: {', '.join(close)})" if close else ""))
+                msg = f"{where}: unknown motion" + (f" (similar: {', '.join(close)})" if close else "")
+                (errors if strict else warnings).append(msg + ("" if strict else " - skipped"))
                 continue
             errs = _check_args(db[name], args, where)
             if errs:
-                errors += errs
-                continue
-            tracks.append(Track(db[name], args))
-        # ownership
-        owners: Dict[str, Tuple[Track, bool]] = {}
-        for tr in tracks:
-            for part, hard in tr.owned():
-                if part not in owners:
-                    owners[part] = (tr, hard)
+                if strict:
+                    errors += errs
                     continue
-                cur, cur_hard = owners[part]
-                if hard and cur_hard:
-                    errors.append(f"line {line['no']}: '{tr.name}' and '{cur.name}' both drive {part}; "
-                                  "put them on different lines or pick motions that use different body parts")
-                elif hard and not cur_hard:
-                    owners[part] = (tr, hard)
-                elif hard == cur_hard and KIND_RANK[tr.kind] > KIND_RANK[cur.kind]:
-                    owners[part] = (tr, hard)
-        if tracks:
+                warnings += [e + " - ignored" for e in errs]
+                args = {k: v for k, v in args.items() if not _check_args(db[name], {k: v}, where)}
+            tr = Track(db[name], args)
+            target = sublines[-1]
+            clash = [o for o in target if {p for p, h in o.owned() if h} & {p for p, h in tr.owned() if h}]
+            if clash:
+                if strict:
+                    for o in clash:
+                        parts = sorted({p for p, h in o.owned() if h} & {p for p, h in tr.owned() if h})
+                        errors.append(f"line {line['no']}: '{tr.name}' and '{o.name}' both drive {', '.join(parts)}; "
+                                      "put them on different lines or pick motions that use different body parts")
+                    continue
+                warnings.append(f"line {line['no']}: '{tr.name}' and '{clash[0].name}' drive the same body parts - "
+                                f"'{tr.name}' plays right after it")
+                sublines.append([tr])
+            else:
+                target.append(tr)
+        for tracks in sublines:
+            if not tracks:
+                continue
+            owners: Dict[str, Tuple[Track, bool]] = {}
+            for tr in tracks:
+                for part, hard in tr.owned():
+                    if part not in owners:
+                        owners[part] = (tr, hard)
+                        continue
+                    cur, cur_hard = owners[part]
+                    if hard and not cur_hard:
+                        owners[part] = (tr, hard)
+                    elif hard == cur_hard and KIND_RANK[tr.kind] > KIND_RANK[cur.kind]:
+                        owners[part] = (tr, hard)
             built.append((tracks, line["repeat"], line["no"], owners))
     if errors:
         raise ScriptError("\n".join(errors))
+    if not built:
+        raise ScriptError("the script has no usable motions")
+    # Keep the clip short: trim repetitions (largest first) until it fits.
+    def total() -> float:
+        return sum(_line_length(t) * r for t, r, _, _ in built)
+    trimmed = False
+    while total() > MAX_SECONDS:
+        cands = [(tr.times, tr) for t, r, _, _ in built for tr in t if tr.times > 1]
+        reps = [(r, i) for i, (t, r, _, _) in enumerate(built) if r > 1]
+        if reps and (not cands or max(reps)[0] >= max(c[0] for c in cands)):
+            i = max(reps)[1]
+            t, r, n, o = built[i]
+            built[i] = (t, r - 1, n, o)
+        elif cands:
+            max(cands, key=lambda c: c[0])[1].times -= 1
+        else:
+            break
+        trimmed = True
+    if trimmed:
+        warnings.append(f"repetitions trimmed so the clip stays under {MAX_SECONDS:.0f} s")
 
     # timeline
     pose = {p: dict(v) for p, v in NEUTRAL.items()}
@@ -431,11 +496,7 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
     line_info = []
     first = True
     for tracks, repeat, no, owners in built:
-        acts = [tr.length for tr in tracks if tr.kind == "action"]
-        cyc = [tr.length for tr in tracks if tr.kind == "cycle"]
-        poses = [tr.length for tr in tracks if tr.kind == "pose"]
-        L = max(acts) if acts else max(cyc) if cyc else max([0.6] + poses)
-        L = max(L, max(poses) if poses else 0.0)
+        L = _line_length(tracks)
         for _ in range(repeat):
             start_pose = {p: dict(v) for p, v in pose.items()}
             n = max(1, int(round(L * fps)))
@@ -467,6 +528,14 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
     report["warnings"] = warnings
     return {"frames": frames, "fps": fps, "loop": loop, "lines": line_info, "report": report, "ground": ground,
             "duration_seconds": round(len(frames) / fps, 2)}
+
+
+def _line_length(tracks: List["Track"]) -> float:
+    acts = [tr.length for tr in tracks if tr.kind == "action"]
+    cyc = [tr.length for tr in tracks if tr.kind == "cycle"]
+    poses = [tr.length for tr in tracks if tr.kind == "pose"]
+    L = max(acts) if acts else max(cyc) if cyc else max([0.6] + poses)
+    return max(L, max(poses) if poses else 0.0)
 
 
 def _smooth(u: float) -> float:

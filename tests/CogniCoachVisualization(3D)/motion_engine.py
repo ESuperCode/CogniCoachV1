@@ -79,7 +79,7 @@ def _load_dotenv(path: Path) -> None:
 _load_dotenv(Path(__file__).with_name(".env"))
 
 # Bump on every engine change. The viewer page checks this and warns when the running server is stale.
-ENGINE_VERSION = "16-motion-script"
+ENGINE_VERSION = "17-fast-script"
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 HOST = os.getenv("MOTION_HOST", "127.0.0.1")
 PORT = int(os.getenv("MOTION_PORT", "8000"))
@@ -1629,8 +1629,11 @@ PLANNER_EFFORT = os.getenv("MOTION_PLANNER_EFFORT", "low")
 
 
 def _call_model(instructions: str, user_input: str, effort: str, schema: Dict[str, Any],
-                name: str = "movement_plan", max_tokens: int = 12000) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+                name: str = "movement_plan", max_tokens: int = 12000,
+                timeout: Optional[float] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     client = _openai_client()
+    if timeout:
+        client = client.with_options(timeout=timeout, max_retries=0)
     t0 = time.time()
     resp = client.responses.create(
         model=MODEL,
@@ -2087,7 +2090,8 @@ Fill the fields in order:
 4. script: the steps written in the motion language below.
 
 THE MOTION LANGUAGE
-- Each line lists motions from the CATALOG: name or name(param=value, ...).
+- Each line lists motions from the CATALOG: name or name(param=value, ...). Use ONLY exact catalog
+  names. A FULL BODY motion needs nothing else on its line.
 - Motions joined with + on ONE line play at the SAME time. The next line starts when the line before
   it ends (the engine blends between lines).
 - Each motion drives only some body parts (listed in the catalog). Build a full-body skill by putting
@@ -2127,30 +2131,73 @@ def _compile_script(script: str, side: str) -> Dict[str, Any]:
     return ms.compile_script(script, mdb.DB, dominant_side=side)
 
 
-MAX_SCRIPT_SECONDS = 12.0
+SCRIPT_EFFORT = os.getenv("MOTION_SCRIPT_EFFORT", "minimal")   # minimal: ~3-5 s per request
+SCRIPT_TIMEOUT = float(os.getenv("MOTION_SCRIPT_TIMEOUT", "9"))  # seconds before the local fallback
+
+
+def _words(text: str) -> List[str]:
+    return [w for w in re.findall(r"[a-z]+", text.lower()) if len(w) > 2]
+
+
+def local_script(movement: str) -> Optional[Dict[str, Any]]:
+    """Instant script without the model: the request names a motion (or a known alias), or - as a
+    fallback - the motion whose name, aliases and description best match the request's words."""
+    import motion_database as mdb
+    text = " ".join(_words(movement))
+    alias = mdb.ALIASES.get(text) or mdb.ALIASES.get(text.rstrip("s"))
+    if alias:
+        return {"canonical_name": text, "steps": [], "title": text.title(), "coaching_cues": [],
+                "camera_view": "three_quarter", "script": alias, "exact": True}
+    best, score = None, 0.0
+    for name, m in mdb.DB.items():
+        names = [name.replace("_", " ")] + list(m.get("aliases", []))
+        if text in names:
+            best, score = name, 99.0
+            break
+        sc = 0.0
+        for nm in names:
+            nw = nm.split()
+            sc = max(sc, 3.0 * sum(w in text.split() or w.rstrip("s") in text for w in nw) / len(nw))
+        sc += 0.5 * len(set(_words(m["comment"])) & set(text.split())) / max(3, len(text.split()))
+        if sc > score:
+            best, score = name, sc
+    if best is None or score < 1.5:
+        return None
+    m = mdb.DB[best]
+    lower = {"right_leg", "left_leg", "body"} & set(m["parts"])
+    item = best + ("(times=2)" if m["kind"] == "cycle" else "")
+    if lower:
+        script = item
+    elif {"right_arm", "left_arm"} & set(m["parts"]) and best in ("jab", "cross", "hook", "uppercut"):
+        script = f"fighting_stance + guard\nfighting_stance + guard + {item}"
+    else:
+        script = f"stance(depth=0.3) + ready_arms\nstance(depth=0.3) + {item}"
+    return {"canonical_name": best.replace("_", " "), "steps": [m["comment"]], "title": best.replace("_", " ").title(),
+            "coaching_cues": [], "camera_view": "side" if m["parts"] and "body" in m["parts"] and best in
+            ("freestyle", "breaststroke", "butterfly", "backstroke", "push_up", "plank", "mountain_climbers") else
+            "three_quarter", "script": script, "exact": score >= 99.0}
 
 
 def plan_script(movement: str, extra: str = "") -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-    """Text -> motion script (one model call) -> compile; compile errors go back for one repair."""
-    import motion_script as ms
+    """Text -> motion script in ONE fast model call. The compiler repairs problems itself (no repair
+    round trip); if the model is slow or fails, a local database match answers instead."""
+    t0 = time.time()
+    local = local_script(movement)
+    if local and local.get("exact") and not extra.strip():
+        return local, [{"stage": "local", "seconds": round(time.time() - t0, 2), "script": local["script"]}]
     request = f"Request: {movement.strip()}" + (f"\nNotes: {extra.strip()}" if extra.strip() else "")
-    instructions = script_instructions()
-    raw, meta = _call_model(instructions, request, PLANNER_EFFORT, SCRIPT_SCHEMA, name="motion_script", max_tokens=6000)
-    calls = [{"stage": "script", **meta, "script": raw.get("script")}]
     try:
-        compiled = _compile_script(raw.get("script", ""), "right")
-        if compiled["duration_seconds"] > MAX_SCRIPT_SECONDS:
-            raise ms.ScriptError(f"the animation lasts {compiled['duration_seconds']:.0f} s; keep it under 8 s "
-                                 "(fewer repetitions with times= / xN)")
-        return raw, calls
-    except ms.ScriptError as err:
-        calls[-1]["errors"] = str(err)
-        fix = (request + "\n\nYOUR PREVIOUS SCRIPT:\n" + raw.get("script", "") +
-               "\n\nTHE COMPILER REPORTED (fix exactly these, keep the rest):\n" + str(err))
-        raw2, meta2 = _call_model(instructions, fix, PLANNER_EFFORT, SCRIPT_SCHEMA, name="motion_script", max_tokens=6000)
-        calls.append({"stage": "repair", **meta2, "script": raw2.get("script")})
-        _compile_script(raw2.get("script", ""), "right")  # raises if still broken
-        return raw2, calls
+        raw, meta = _call_model(script_instructions(), request, SCRIPT_EFFORT, SCRIPT_SCHEMA, name="motion_script",
+                                max_tokens=3000, timeout=SCRIPT_TIMEOUT)
+        _compile_script(raw.get("script", ""), "right")   # lenient: only fails if nothing usable is left
+        return raw, [{"stage": "script", **meta, "script": raw.get("script")}]
+    except HTTPException:
+        raise
+    except Exception as exc:
+        fallback = local or {"canonical_name": "stance", "steps": [], "title": movement.strip()[:60], "coaching_cues": [],
+                             "camera_view": "three_quarter", "script": "stance(depth=0.3) + ready_arms"}
+        return fallback, [{"stage": "local-fallback", "seconds": round(time.time() - t0, 1),
+                           "reason": f"{type(exc).__name__}: {str(exc)[:120]}", "script": fallback["script"]}]
 
 
 def script_response(raw: Dict[str, Any], side: str, calls: List[Dict[str, Any]], cached: bool) -> Dict[str, Any]:
@@ -2190,7 +2237,10 @@ def list_motions() -> Dict[str, Any]:
 def run_script(req: ScriptRequest) -> Dict[str, Any]:
     import motion_script as ms
     try:
-        return script_response({"script": req.script, "title": req.title or "Motion script"}, req.dominant_side, [], False)
+        t0 = time.time()
+        resp = script_response({"script": req.script, "title": req.title or "Motion script"}, req.dominant_side, [], False)
+        print(f"[motion] script: {time.time() - t0:.2f} s compile -> {resp['duration_seconds']} s clip", flush=True)
+        return resp
     except ms.ScriptError as err:
         raise HTTPException(status_code=400, detail=str(err)) from err
 
@@ -2199,6 +2249,7 @@ def run_script(req: ScriptRequest) -> Dict[str, Any]:
 def generate(req: GenerateRequest) -> Dict[str, Any]:
     if req.engine == "script":
         import motion_script as ms
+        t_start = time.time()
         key = _cache_key("script", ENGINE_VERSION, req.movement.strip().lower(), req.extra_instructions.strip(), MODEL)
         raw = cache_get(key) if req.use_cache else None
         cached, calls = raw is not None, []
@@ -2213,7 +2264,21 @@ def generate(req: GenerateRequest) -> Dict[str, Any]:
                 traceback.print_exc()
                 raise HTTPException(status_code=502, detail=f"Motion planning failed: {exc}") from exc
             cache_put(key, raw)
-        return script_response(raw, req.dominant_side, calls, cached)
+        t_model = time.time() - t_start
+        resp = script_response(raw, req.dominant_side, calls, cached)
+        import motion_database as mdb
+        mdb.save_solved()   # keep any newly solved pose for next time
+        total = time.time() - t_start
+        source = "cache" if cached else (calls[0]["stage"] if calls else "?")
+        resp["timing"] = {"total_seconds": round(total, 2), "planning_seconds": round(t_model, 2),
+                          "compile_seconds": round(total - t_model, 2), "source": source}
+        print(f"[motion] {req.movement.strip()[:50]!r}: {total:.1f} s total (planning {t_model:.1f} s via {source}, "
+              f"compile {total - t_model:.2f} s) -> {resp['duration_seconds']} s clip", flush=True)
+        if calls and calls[0].get("reason"):
+            print(f"[motion]   model not used: {calls[0]['reason']}", flush=True)
+        for w in resp["report"].get("warnings", []):
+            print(f"[motion]   fixed: {w}", flush=True)
+        return resp
     key = _cache_key(ENGINE_VERSION, req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
                      req.quality, MODEL)
     plan = cache_get(key) if req.use_cache else None
@@ -2319,10 +2384,12 @@ def selftest() -> int:
     rl = ms.compile_script("stance(width=wide, depth=0.5) + forehand", mdb.DB, dominant_side="left")
     script_ok = len(r["frames"]) > 30 and not r["report"]["issues"] and len(rl["frames"]) > 30
     try:
-        ms.compile_script("stance + run", mdb.DB)
-        script_ok = False  # both drive the legs: must be refused
+        ms.compile_script("stance + run", mdb.DB, strict=True)
+        script_ok = False  # both drive the legs: strict mode must refuse
     except ms.ScriptError:
         pass
+    split = ms.compile_script("stance + run", mdb.DB)     # lenient: plays one after the other
+    script_ok = script_ok and len(split["lines"]) == 2
     print("motion script:", script_ok, f"({len(mdb.DB)} motions in the database)")
     ok = ok and script_ok
     print("SELFTEST", "PASSED" if ok else "FAILED")
@@ -2334,6 +2401,12 @@ if __name__ == "__main__":
     if "--selftest" in sys.argv:
         raise SystemExit(selftest())
     import uvicorn
+    import motion_database as _mdb
+    _t = time.time()
+    for _m in _mdb.DB.values():   # warm every stored motion (pre-solved; well under a second)
+        _m["build"]()
+    _mdb.save_solved()
+    print(f"Motion database: {len(_mdb.DB)} motions ready in {time.time() - _t:.1f} s")
     print(f"CogniCoach Motion Engine v{ENGINE_VERSION} on http://{HOST}:{PORT}  (model: {MODEL})")
     print(f"Running file: {Path(__file__).resolve()}")
     print("Restart this server (Ctrl+C, then run again) after every git pull - a running server keeps old code.")
