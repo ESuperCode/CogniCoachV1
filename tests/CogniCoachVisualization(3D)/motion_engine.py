@@ -79,7 +79,7 @@ def _load_dotenv(path: Path) -> None:
 _load_dotenv(Path(__file__).with_name(".env"))
 
 # Bump on every engine change. The viewer page checks this and warns when the running server is stale.
-ENGINE_VERSION = "14-leg-shapes"
+ENGINE_VERSION = "15-anatomy-physics"
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 HOST = os.getenv("MOTION_HOST", "127.0.0.1")
 PORT = int(os.getenv("MOTION_PORT", "8000"))
@@ -110,6 +110,7 @@ SHIN = 17.0
 LIMB_RADIUS = 3.75
 TORSO_HALF = (10.0, 15.0, 5.0)        # torso box half extents, centre at (0,15,0) in spine frame
 PELVIS_HALF = (10.0, 5.0, 5.0)        # pelvis box, centre at origin of hip frame
+HEAD_HALF = (6.0, 8.0, 7.5)           # head box (12,16,15), centre 8 above the neck joint
 SOLE_DROP = 3.0                       # ankle pivot to sole
 
 ANGLE_KEYS = [
@@ -590,8 +591,16 @@ def _segment_box_penetration(a: np.ndarray, b: np.ndarray, frame_rot: np.ndarray
 
 def _arm_penetration(world: Dict[str, np.ndarray], pos: Dict[str, np.ndarray], side: str):
     """Deepest penetration of this arm (upper arm or forearm) into the torso or pelvis boxes."""
+    sh_y = SHOULDER_OFFSET[1]
+    top_y = 2 * TORSO_HALF[1]
     boxes = [
-        (world["spine"], world["spine"] @ np.array([0.0, TORSO_HALF[1], 0.0]), TORSO_HALF),
+        # Chest up to the shoulder line (full width) ...
+        (world["spine"], world["spine"] @ np.array([0.0, sh_y / 2, 0.0]), (TORSO_HALF[0], sh_y / 2, TORSO_HALF[2])),
+        # ... then the narrower shoulder-top / neck block (the capsule is rounded there, so arms
+        # raised overhead beside the head - a streamline, a block, a two-hand overhead reach - are legal).
+        (world["spine"], world["spine"] @ np.array([0.0, (sh_y + top_y) / 2, 0.0]),
+         (HEAD_HALF[0], (top_y - sh_y) / 2, TORSO_HALF[2])),
+        (world["neck"], world["neck"] @ np.array([0.0, HEAD_HALF[1], 0.0]), HEAD_HALF),
         (world["hip"], np.zeros(3), PELVIS_HALF),
     ]
     best = (0.0, np.zeros(3), "none")
@@ -1551,7 +1560,8 @@ Body
 
 Hands (right_hand / left_hand) - described like a coach points at a spot. Hands that are not in
 skill_limbs are animated by the engine (you may write "auto" for them):
-- height: floor, shin, knee, hip, waist, chest, shoulder, chin, head, overhead.
+- height: floor, shin, knee, hip, waist, chest, shoulder, chin, head, overhead - always measured on
+  the athlete's OWN body (a punch or throw aimed at someone's head travels at shoulder/chin height).
   Special: "auto" (engine picks a natural arm: counter-swing, balance, ready hands, floor support),
   "at_side" (arm hanging relaxed), "keep".
 - direction: from the chest: front, front_out (45 deg to that hand's side), side, back_out, back,
@@ -1578,6 +1588,11 @@ Feet (right_foot / left_foot):
   a tucked foot under the hip at knee height is a knee drive.
 - A foot at "floor" stays fixed on the ground while the body moves over it. Both feet off the floor
   = the athlete is in the air.
+- Horizontal bodies (swimming, lying, planks): feet are described relative to the body as if it
+  were standing. Legs extended in line with the body = height floor. "front" = toward the belly
+  side, "back" = toward the back side, height = how far the foot is drawn up toward the hips.
+  Heels folded up behind with the thighs near the body line = position back, leg tucked; thighs
+  bent forward toward the belly side = position under_hip or front.
 
 What the engine does for you (do NOT try to fake these):
 - If a hand must reach low (knee, shin, floor) it hinges and bends the knees as much as needed.
@@ -1686,24 +1701,31 @@ def _raised(b: Dict[str, Any], min_height: Tuple[str, ...] = ("shin", "knee", "h
     return [b.get(k) or {} for k in ("right_foot", "left_foot") if (b.get(k) or {}).get("height", "floor") in min_height]
 
 
+PREP_OR_RECOVERY = ("load", "chamber", "wind", "cock", "back swing", "backswing", "prep", "ready", "set",
+                    "guard", "return", "retract", "recover", "reset", "finish", "land", "together", "glide",
+                    "to plank", "kickback", "kick back", "back to")
+HORIZONTAL_BASES = ("face_down_horizontal", "face_down_on_hands", "face_up_horizontal", "face_up_on_hands",
+                    "seated", "lying_on_left_side", "lying_on_right_side")
+KICK_CONTEXT = ("kick", "shot", "shoot", "punt", "volley", "strike the ball")
+
+# (words in the model's own beat label, words that exempt it, needs kick context, limb kind, test, feedback)
 CONSISTENCY_RULES = [
-    # (words in the model's own beat label, words that exempt it, test on the encoded beat, feedback)
-    (("kick", "knee drive", "knee up", "knee raise", "high knee"), (),
-     lambda b: any((b.get(k) or {}).get("height", "floor") in ("shin", "knee", "hip", "high") for k in ("right_foot", "left_foot")),
+    (("kick", "knee drive", "knee up", "knee raise", "high knee"), PREP_OR_RECOVERY, False, "foot",
+     lambda b: bool(_raised(b)),
      "is labelled as a kick/knee drive but no foot is raised to shin height or above"),
-    (("kick", "contact", "strike", "impact", "follow", "shot", "shoot", "swing"), ("knee", "load", "back", "cock"),
+    (("kick", "contact", "strike", "impact", "follow", "shot", "shoot"), ("knee",) + PREP_OR_RECOVERY, True, "foot",
      lambda b: not any(f.get("leg") == "tucked" for f in _raised(b)),
      "is a kick/strike/follow-through but the raised leg is 'tucked' (that is a knee lift): use leg "
      "'straight' for contact and follow-through"),
-    (("knee drive", "high knee", "knee up", "knee raise", "knee lift", "march"), (),
+    (("knee drive", "high knee", "knee up", "knee raise", "knee lift", "march"), (), False, "foot",
      lambda b: any(f.get("leg") in ("tucked", "bent") for f in _raised(b, ("knee", "hip", "high"))),
      "is a knee drive but no raised leg is 'tucked' or 'bent' (a straight leg is a leg swing, not a knee drive)"),
     (("touch the floor", "touch floor", "hands to floor", "hand to floor", "touch the ground", "touch ground",
-      "touch the cone", "touch cone", "hands down"), (),
+      "touch the cone", "touch cone", "hands down"), (), False, "hand",
      lambda b: any((b.get(k) or {}).get("height") in ("floor", "shin") for k in ("right_hand", "left_hand"))
      or b.get("base") in ("face_down_on_hands", "face_up_on_hands"),
      "is labelled as touching the floor/cone but no hand goes to floor or shin height"),
-    (("punch", "jab", "cross", "throw", "release", "reach"), ("kick", "foot", "leg"),
+    (("punch", "jab", "cross", "throw", "release", "reach"), ("kick", "foot", "leg") + PREP_OR_RECOVERY, False, "hand",
      lambda b: any((b.get(k) or {}).get("reach") == "extended" and (b.get(k) or {}).get("height") not in ("keep", "auto", "at_side")
                    for k in ("right_hand", "left_hand")),
      "is labelled as a punch/throw/reach but no hand is extended (hands not listed in skill_limbs are "
@@ -1711,27 +1733,42 @@ CONSISTENCY_RULES = [
 ]
 
 
-def consistency_problems(beats: List[Dict[str, Any]]) -> List[str]:
+def consistency_problems(beats: List[Dict[str, Any]], context: str = "",
+                         skill_limbs: Optional[List[str]] = None) -> List[str]:
     """Check that each beat's encoding matches the model's own description of it."""
     out = []
+    context = context.lower()
+    kick_context = any(w in context for w in KICK_CONTEXT)
+    hands_act = not skill_limbs or any(l.endswith("hand") for l in skill_limbs)
 
     def airborne(b: Dict[str, Any]) -> bool:
         return b.get("base") == "airborne" or all((b.get(k) or {}).get("height", "floor") != "floor"
                                                    for k in ("right_foot", "left_foot"))
     jump_words = ("jump", "hop", "leap", "bound", "airborne", "explode up")
     transition_words = ("feet", "foot", "land", "back to", "into", "to plank", "to squat")
+    def has_word(text: str, words: Tuple[str, ...]) -> bool:
+        text = " " + re.sub(r"[^a-z]+", " ", text.lower()) + " "
+        return any(re.search(r"\b" + re.escape(w), text) for w in words)  # "hop" must not match "choppy"
     body_jumps = [i for i, b in enumerate(beats)
-                  if any(w in str(b.get("label", "")).lower().replace("_", " ") for w in jump_words)
-                  and not any(w in str(b.get("label", "")).lower().replace("_", " ") for w in transition_words)]
+                  if has_word(str(b.get("label", "")), jump_words)
+                  and not has_word(str(b.get("label", "")), transition_words)]
     if body_jumps and not any(airborne(b) for b in beats):
         i = body_jumps[0]
         out.append(f"Beat {i + 1} ('{beats[i].get('label', '')}') describes a jump but no beat leaves the ground: "
                    "lift both feet (base airborne) at the top of the jump, then land.")
+    base = "standing"
     for i, b in enumerate(beats):
         label = str(b.get("label", "")).lower().replace("_", " ").replace("-", " ")
+        base = b.get("base") if b.get("base") not in (None, "keep") else base
         if b.get("timing") == "hold":
             continue
-        for words, exempt, test, msg in CONSISTENCY_RULES:
+        for words, exempt, needs_kick, kind, test, msg in CONSISTENCY_RULES:
+            if kind == "foot" and base in HORIZONTAL_BASES:
+                continue  # swimming/lying "kicks" are small leg beats, not standing kicks
+            if needs_kick and not (kick_context or any(w in label for w in KICK_CONTEXT)):
+                continue
+            if kind == "hand" and not hands_act:
+                continue
             if any(w in label for w in words) and not any(w in label for w in exempt) and not test(b):
                 out.append(f"Beat {i + 1} ('{b.get('label', '')}') {msg}.")
                 break
@@ -1784,14 +1821,28 @@ def critique_plan(raw: Dict[str, Any], plan: Dict[str, Any], report: Dict[str, A
     if raw.get("repeating_cycle") and not raw.get("loop"):
         problems.append("The movement is a repeating cycle but loop=false: describe one cycle and set loop=true.")
     airborne_run = 0
-    for b in beats:
+    for b in ([] if raw.get("loop") else beats):  # running/skipping cycles chain several flight beats
         up = all((b.get(k) or {}).get("height", "floor") != "floor" for k in ("right_foot", "left_foot"))
         airborne_run = airborne_run + 1 if up and b.get("base") not in ("face_down_horizontal", "face_up_horizontal") else 0
         if airborne_run >= 3:
             problems.append("Both feet stay off the floor for 3+ beats in a row: is the athlete really in the air?")
             break
-    problems += consistency_problems(beats)
+    context = " ".join(str(raw.get(k) or "") for k in ("canonical_name", "simplified_description"))
+    problems += consistency_problems(beats, context, raw.get("skill_limbs"))
     problems += balance_problems(beats)
+    if any(w in context.lower() for w in ("single-leg", "single leg", "one-leg", "one leg", "single-legged")):
+        both_down = [i + 1 for i, b in enumerate(beats[1:-1], start=1)
+                     if all((b.get(k) or {}).get("height", "floor") == "floor" for k in ("right_foot", "left_foot"))]
+        if len(both_down) > max(1, (len(beats) - 2) // 2):
+            problems.append(f"This is a single-leg movement but beats {both_down} keep both feet on the floor: the free "
+                            "foot must stay off the floor (raised, e.g. reaching back as the trunk hinges forward).")
+    limbs = raw.get("skill_limbs") or []
+    words = " ".join([str(b.get("label", "")) for b in beats] + [str(x) for x in raw.get("phases") or []]).lower()
+    if limbs and "guard" in words:
+        loose = [h for h in ("right_hand", "left_hand") if h not in limbs]
+        if loose:
+            problems.append(f"The movement holds a guard but {' and '.join(loose)} is not in skill_limbs, so the engine "
+                            "would let it swing freely: list it in skill_limbs and give its guard position in every beat.")
     if beats and not raw.get("loop"):
         last = beats[-1]
         feet_down = any((last.get(k) or {}).get("height", "floor") == "floor" for k in ("right_foot", "left_foot"))
@@ -1801,7 +1852,8 @@ def critique_plan(raw: Dict[str, Any], plan: Dict[str, Any], report: Dict[str, A
         if b.get("base") in ("face_down_horizontal", "face_up_horizontal", "seated", "face_up_on_hands"):
             continue
         high = [k for k in ("right_foot", "left_foot") if (b.get(k) or {}).get("height") in ("hip", "high")]
-        if len(high) == 2:
+        tucked = all((b.get(k) or {}).get("leg") in ("tucked", "bent") for k in high)
+        if len(high) == 2 and not tucked:  # knees pulled up (tuck/box jump) is fine; straight legs = straddle/pike
             problems.append(f"Beat {i + 1} ({b.get('label', '')}): both feet at hip height or higher (a straddle/pike "
                             "in the air). Keep this only if the movement really is a straddle/pike jump; a normal "
                             "jump keeps the feet below the knees.")
@@ -2075,6 +2127,28 @@ def selftest() -> int:
         ok = ok and len(frames) > 10 and not report["issues"]
     touch = [k for k in plan["keyframes"] if "touch the floor" in k["phase"]][0]
     ok = ok and touch["torso"]["lean"] >= 50  # reach inference must have hinged the trunk
+    # Anatomical leg construction: a straight leg is straight, a bent leg behind keeps its knee
+    # behind the hip, a tucked leg in front is a knee drive (thigh forward).
+    leg = mg.LEG_LEN
+    f, o, l, kf_ = mg.leg_target(*mg.FOOT_POSITIONS["front"], mg.FOOT_HEIGHTS["hip"], "straight", 0.0)
+    straight_ok = math.hypot(f, leg - l) > 0.95 * leg
+    f, o, l, kb = mg.leg_target(*mg.FOOT_POSITIONS["back"], mg.FOOT_HEIGHTS["shin"], "bent", 0.0)
+    bent_ok = kb < 0.0 and f < -0.2
+    f, o, l, kd = mg.leg_target(*mg.FOOT_POSITIONS["under_hip"], mg.FOOT_HEIGHTS["knee"], "tucked", 0.0)
+    drive_ok = kd > 0.2
+    print(f"leg anatomy: straight={straight_ok} bent-behind={bent_ok} knee-drive={drive_ok}")
+    ok = ok and straight_ok and bent_ok and drive_ok
+    # Ballistic flight: a long flight rises more than a short one; a running stride barely rises.
+    keys = [(0.0, {"left_foot_planted": True, "right_foot_planted": True, "left_foot": {"lift": 0.0, "forward": 0.0},
+                   "right_foot": {"lift": 0.0, "forward": 0.0}, "body": {"pitch": 0, "roll": 0}, "pelvis": {"height": 0.0}})]
+    for t in (0.3, 0.6):
+        keys.append((t, {"left_foot_planted": False, "right_foot_planted": False, "left_foot": {"lift": 0.1, "forward": 0.0},
+                         "right_foot": {"lift": 0.1, "forward": 0.0}, "body": {"pitch": 0, "roll": 0}, "pelvis": {"height": 0.3}}))
+    keys.append((0.9, copy.deepcopy(keys[0][1])))
+    mg._ballistic_flight(keys, False, 0.9)
+    flight_ok = 0.25 < max(k["pelvis"]["height"] for _, k in keys) <= mg.FLIGHT_MAX_RISE
+    print("ballistic flight:", flight_ok)
+    ok = ok and flight_ok
     print("SELFTEST", "PASSED" if ok else "FAILED")
     return 0 if ok else 1
 

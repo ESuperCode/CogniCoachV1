@@ -79,6 +79,16 @@ FACINGS = {"front": 0, "left_45": -45, "right_45": 45, "left_90": -90, "right_90
 HAND_HEIGHTS = {"floor": None, "shin": -0.58, "knee": -0.37, "hip": -0.05, "waist": 0.12, "chest": 0.32,
                 "shoulder": 0.48, "chin": 0.64, "head": 0.8, "overhead": 1.08}
 HAND_SPECIAL = ["keep", "auto", "at_side"]
+# Low targets are things on or near the ground (a cone, a ball, the shins), so they are measured
+# from the FLOOR: when the hips drop, these targets get closer to the hands.
+LOW_HAND_ABOVE_FLOOR = {"floor": 0.05, "shin": 0.22, "knee": 0.43}
+
+
+def hand_height(height: str, drop: float) -> float:
+    """Body-frame height (metres above the pelvis) of a hand-height word at this hip drop."""
+    if height in LOW_HAND_ABOVE_FLOOR:
+        return floor_level(drop) + LOW_HAND_ABOVE_FLOOR[height]
+    return HAND_HEIGHTS.get(height, 0.32)
 # Directions around the chest (degrees from where the chest faces, + toward that hand's own side).
 HAND_DIRECTIONS = {"front": 0, "front_out": 45, "side": 90, "back_out": 135, "back": 180,
                    "across": -45, "center": None}
@@ -164,7 +174,7 @@ def hand_target(desc: Dict[str, str], side: str, lean: float, twist: float, bend
     height = desc.get("height", "chest")
     direction = desc.get("direction", "front")
     reach = HAND_REACH.get(desc.get("reach", "bent"), 0.46)
-    y = floor_level(drop) + 0.05 if height == "floor" else HAND_HEIGHTS.get(height, 0.32)
+    y = hand_height(height, drop)
     dy = y - sh[1]
     if abs(dy) >= reach * 0.97:
         dy = math.copysign(reach * 0.97, dy)
@@ -196,13 +206,13 @@ def lowest_reachable(lean: float, drop: float, reach: float = 0.63) -> float:
     return SHOULDER_Y * math.cos(math.radians(lean)) - reach
 
 
-def infer_reach_posture(target_y: float, lean: float, drop: float, can_lower: bool) -> Tuple[float, float]:
+def infer_reach_posture(height: str, lean: float, drop: float, can_lower: bool) -> Tuple[float, float]:
     """Hinge first (up to 70 degrees), then bend the knees, until a low target is reachable."""
     best = (lean, drop)
     for extra_drop in [0.0, 0.08, 0.16, 0.24, 0.32, 0.4] if can_lower else [0.0]:
         d = min(drop, -extra_drop) if extra_drop else drop
         for ln in range(int(lean), 91, 5):
-            ty = target_y if target_y is not None else floor_level(d) + 0.05
+            ty = hand_height(height, d)
             if lowest_reachable(ln, d) <= ty + 0.01:
                 return float(ln), float(d)
             best = (float(ln), float(d))
@@ -285,8 +295,17 @@ def _leg_foot(alpha: float, knee: float) -> Tuple[float, float]:
     return t * math.sin(a) + sh * math.sin(s), -(t * math.cos(a) + sh * math.cos(s))
 
 
+def side_tilt_needed(lift: float, level: float) -> float:
+    """Trunk tilt (deg, away from the leg) needed for a STRAIGHT leg raised sideways to this height:
+    the hip only abducts ~70 degrees, the rest comes from tilting the trunk/pelvis the other way."""
+    hip_h = LEG_LEN + HIP_DROP_SCALE * min(0.0, level)
+    radius = LEG_LEN * math.cos(math.radians(KNEE_FLEX["straight"] / 2))
+    c = max(-1.0, min(1.0, (hip_h - lift) / radius))
+    return max(0.0, min(35.0, math.degrees(math.acos(c)) - HIP_ABD_MAX))
+
+
 def leg_target(fwd: float, out: float, lift: float, shape: str, level: float,
-               lean: float = 5.0) -> Tuple[float, float, float]:
+               lean: float = 5.0, abd_bonus: float = 0.0) -> Tuple[float, float, float, float]:
     """Foot (forward, out, lift) for a raised leg built from joint angles inside the anatomical
     range: `shape` fixes the knee bend, (fwd, out) the direction the leg points, and the thigh
     angle is chosen so the foot is as close as possible to height `lift` above the floor."""
@@ -300,7 +319,7 @@ def leg_target(fwd: float, out: float, lift: float, shape: str, level: float,
     if backward:        # leg pointing back: thigh at or behind vertical (heel up behind / leg swung back)
         lo, hi, sign = (0.0 if shape == "straight" else 15.0), ext_max, -1.0  # "back" = thigh behind the body line
     elif abs(v[1]) > abs(v[0]) and shape == "straight":
-        lo, hi, sign = 0.0, HIP_ABD_MAX, 1.0   # straight leg out to the side
+        lo, hi, sign = 0.0, HIP_ABD_MAX + abd_bonus, 1.0   # straight leg out to the side
     else:               # forward / under the body: hip flexion (knee drive family for bent legs)
         lo, hi, sign = {"straight": 0.0, "bent": 30.0, "tucked": 45.0}[shape], HIP_FLEX_MAX, 1.0
     best = None
@@ -358,6 +377,7 @@ def _resolve_beat(beat: Dict[str, Any], prev: Dict[str, Any]) -> Tuple[Dict[str,
     horizontal = abs(st["pitch"]) > 45 or abs(st["roll"]) > 45
     st["straight_legs"] = {s for s in st.get("straight_legs", set()) if st["feet"][s][2] >= 0.05}
     lifted_front, lifted_back, lifted_side = {}, {}, {}
+    side_tilt: Dict[str, float] = {}
     for side in ("right", "left"):
         fd = beat.get(f"{side}_foot") or {}
         pos, hgt = fd.get("position", "keep"), fd.get("height", "floor")
@@ -371,10 +391,18 @@ def _resolve_beat(beat: Dict[str, Any], prev: Dict[str, Any]) -> Tuple[Dict[str,
             fwd, out = st["feet"][side][0], st["feet"][side][1]
         lift = FOOT_HEIGHTS.get(hgt, 0.0)
         toe = 20 if pos in ("side", "wide", "front_side", "back_side") else 0 if pos.startswith("cross") else 10
-        shape = leg_shape(fd, pos, hgt) if lift >= 0.05 and not horizontal else None
+        # Joint-angle construction works in the body's own frame, so it is equally valid for a
+        # swimmer or a plank (hip flexion = thigh toward the body's front, heels fold toward its back).
+        shape = leg_shape(fd, pos, hgt) if lift >= 0.05 else None
         if shape is not None:
-            fwd, out, lift, knee_fwd = leg_target(fwd, out, lift, shape,
-                                                  st["height"] if st["base"] != "airborne" else 0.0, st["lean"])
+            level = 0.0 if horizontal or st["base"] == "airborne" else st["height"]
+            v_out = out - HIP_OUT
+            tilt = side_tilt_needed(lift, level) if (shape == "straight" and not horizontal
+                                                     and abs(v_out) > abs(fwd) and v_out > 0) else 0.0
+            if tilt > 0:
+                side_tilt[side] = tilt
+            fwd, out, lift, knee_fwd = leg_target(fwd, out, lift, shape, level, 5.0 if horizontal else st["lean"],
+                                                  abd_bonus=tilt)
             if shape == "straight":
                 st["straight_legs"].add(side)
         else:
@@ -403,7 +431,11 @@ def _resolve_beat(beat: Dict[str, Any], prev: Dict[str, Any]) -> Tuple[Dict[str,
         if lifted_back and not lifted_front:
             lean = max(lean, 5.0 + 20.0 * max(lifted_back.values()) / 0.45)
         for side in lifted_side:
-            bend += (-1 if side == "right" else 1) * 10.0
+            if side not in side_tilt:
+                bend += (-1 if side == "right" else 1) * 10.0
+    for side, tilt in side_tilt.items():   # a high side leg needs the trunk tilted away (any trunk)
+        bend += (-1 if side == "right" else 1) * tilt
+        notes.append(f"{side} leg raised high to the side: trunk tilted {tilt:.0f} deg away")
     # Deeper knee bend keeps the chest over the feet.
     if not horizontal and trunk != "lean_back":
         lean = max(lean, 75.0 * max(0.0, -drop - 0.05))
@@ -429,8 +461,7 @@ def _resolve_beat(beat: Dict[str, Any], prev: Dict[str, Any]) -> Tuple[Dict[str,
     for side, d in descs.items():
         h = d.get("height", "auto")
         if h in ("floor", "shin", "knee") and not horizontal:
-            ty = None if h == "floor" else HAND_HEIGHTS[h]
-            new_lean, new_drop = infer_reach_posture(ty, lean, drop, can_lower=not airborne)
+            new_lean, new_drop = infer_reach_posture(h, lean, drop, can_lower=not airborne)
             if new_lean > lean + 1 or new_drop < drop - 0.01:
                 notes.append(f"{side} hand to {h}: trunk hinged to {new_lean:.0f} deg, hips {new_drop:+.2f} m")
             lean, drop = max(lean, new_lean), min(drop, new_drop)
@@ -475,10 +506,10 @@ def _resolve_beat(beat: Dict[str, Any], prev: Dict[str, Any]) -> Tuple[Dict[str,
                     {"height": "waist", "direction": "front", "reach": "bent"})
             hands[side], elbows[side] = hand_target(desc, side, lean, twist, bend, drop)
             elbows[side] = "down"
-        elif not horizontal and any(st["feet"][s_][2] >= 0.05 for s_ in ("right", "left")) \
+        elif not horizontal and any(st["feet"][s_][2] >= 0.2 for s_ in ("right", "left")) \
                 and abs(st["knee_fwd"][side] - st["knee_fwd"][other]) > 0.15:
-            # Gait synergy: in stepping, running and skipping the arm swings opposite to its own
-            # side's thigh (thigh forward -> arm back), in the sagittal plane.
+            # Gait synergy: in stepping, running and skipping (a foot really off the ground, not a
+            # heel pivot) the arm swings opposite to its own side's thigh, in the sagittal plane.
             if st["knee_fwd"][side] > st["knee_fwd"][other]:
                 hands[side] = hand_target({"height": "hip", "direction": "back", "reach": "extended"},
                                           side, lean, twist, bend, drop)[0]
@@ -509,6 +540,18 @@ def _resolve_beat(beat: Dict[str, Any], prev: Dict[str, Any]) -> Tuple[Dict[str,
             # freezes in the balance/counter-swing pose of an earlier phase).
             hands[side] = HANG_CHEST if horizontal else hang_hand(side, lean, twist, bend)
             elbows[side] = "down"
+    if beat.get("hands_together") and not horizontal:
+        # Two hands on one implement: the grip cannot pass behind the chest plane (both arms would
+        # have to reach behind the back); the trunk rotation carries it around the side instead.
+        # Both elbows point down along the shaft unless the grip is overhead.
+        for side in ("right", "left"):
+            f_, u_, o_ = hands[side]
+            if f_ < GRIP_MIN_FORWARD:
+                hands[side] = (GRIP_MIN_FORWARD, u_, o_)
+                if side == "right":
+                    notes.append("two-hand grip kept in front of the chest (moved round to the side)")
+            if u_ < 0.55:
+                elbows[side] = "down"
     st.update(hands=hands, elbows=elbows)
     if horizontal:
         lean = max(-15.0, min(15.0, lean))
@@ -557,8 +600,79 @@ def _ballistic_follow_through(before: Dict[str, Any], contact: Dict[str, Any], k
     return notes
 
 
+GRIP_MIN_FORWARD = 0.12   # m in front of the chest for a two-handed grip
+STEP_MIN = 0.08   # m: a planted foot asked to move further than this has to STEP there
+# The model's own beat label says whether a stance change is footwork. Without such a word, planted
+# feet stay locked (a golfer or a pitcher does not step just because a foot position was nudged).
+FOOTWORK_WORDS = ("step", "shuffle", "stride", "walk", "jog", "lunge", "plant", "approach", "skip", "slide",
+                  "stance", "spread", "widen", "split", "cross over", "crossover", "drop step", "back pedal",
+                  "backpedal", "carioca", "gather")
+
+
+def _blend_keys(a: Dict[str, Any], b: Dict[str, Any], u: float) -> Dict[str, Any]:
+    k = copy.deepcopy(b)
+    for g, vals in b.items():
+        if isinstance(vals, dict) and isinstance(a.get(g), dict):
+            for f, v in vals.items():
+                if isinstance(v, (int, float)) and isinstance(a[g].get(f), (int, float)):
+                    k[g][f] = a[g][f] + (v - a[g][f]) * u
+    return k
+
+
+def _insert_steps(keys_abs: List[Tuple[float, Dict[str, Any]]], loop: bool, cycle: float) -> List[str]:
+    """Feet relocate only by stepping: when a foot is planted at both ends of a transition but asked
+    to stand somewhere else, the engine lifts it, carries it there and re-plants it. Two moving feet
+    step one after the other (largest move first), so stance changes look like real footwork."""
+    notes: List[str] = []
+    n = len(keys_abs)
+    pairs = [(i - 1, i) for i in range(1, n)] + ([(n - 1, 0)] if loop and n > 1 else [])
+    inserts: List[Tuple[float, Dict[str, Any]]] = []
+    for ia, ib in pairs:
+        (ta, a), (tb, b) = keys_abs[ia], keys_abs[ib]
+        if ib == 0:
+            tb = cycle
+        if any(abs(k["body"]["pitch"]) > 45 or abs(k["body"]["roll"]) > 45 for k in (a, b)):
+            continue
+        label = str(b.get("phase", "")).lower().replace("_", " ").replace("-", " ")
+        if not any(w in label for w in FOOTWORK_WORDS):
+            continue
+        movers = []
+        for side in ("right", "left"):
+            g = f"{side}_foot"
+            if a[f"{side}_foot_planted"] and b[f"{side}_foot_planted"]:
+                d = math.hypot(b[g]["forward"] - a[g]["forward"], b[g]["out"] - a[g]["out"])
+                if d > STEP_MIN:
+                    movers.append((d, side))
+        if not movers:
+            continue
+        movers.sort(reverse=True)
+        m = len(movers)
+        for j, (d, side) in enumerate(movers):
+            u = (j + 0.5) / m
+            k = _blend_keys(a, b, u)
+            for jj, (_, other) in enumerate(movers):   # feet not yet stepped stay put; stepped ones arrived
+                if jj != j:
+                    src = b if jj < j else a
+                    k[f"{other}_foot"] = copy.deepcopy(src[f"{other}_foot"])
+                    k[f"{other}_foot_planted"] = True
+            g = f"{side}_foot"
+            k[g]["forward"] = 0.5 * (a[g]["forward"] + b[g]["forward"])
+            k[g]["out"] = 0.5 * (a[g]["out"] + b[g]["out"])
+            k[g]["lift"] = 0.06 + 0.12 * min(1.0, d / 0.5)
+            k[f"{side}_foot_planted"] = False
+            k["phase"] = f"{b['phase']} ({side} step)"
+            inserts.append((ta + (tb - ta) * u, k))
+        notes.append(f"'{b['phase']}': {' then '.join(sd for _, sd in movers)} foot step{'s' if m > 1 else ''} to the new stance")
+    if inserts:
+        keys_abs.extend(inserts)
+        keys_abs.sort(key=lambda tk: tk[0])
+    return notes
+
+
 def _airborne(k: Dict[str, Any]) -> bool:
+    # Both feet unplanted AND off the floor (feet released to pivot through a turn are not a flight).
     return (not k["left_foot_planted"] and not k["right_foot_planted"]
+            and k["left_foot"]["lift"] >= 0.02 and k["right_foot"]["lift"] >= 0.02
             and abs(k["body"]["pitch"]) < 45 and abs(k["body"]["roll"]) < 45)
 
 
@@ -680,6 +794,7 @@ def build_beats(beats: List[Dict[str, Any]], loop: bool, speed: float = 1.0) -> 
         end["phase"] = "finish (hold)"
         clock += 0.45
         keys_abs.append((clock, end))
+    notes += _insert_steps(keys_abs, loop, clock)
     notes += _ballistic_flight(keys_abs, loop, clock)
     if loop:
         notes += _steady_trunk(keys_abs)
