@@ -78,6 +78,8 @@ def _load_dotenv(path: Path) -> None:
 
 _load_dotenv(Path(__file__).with_name(".env"))
 
+# Bump on every engine change. The viewer page checks this and warns when the running server is stale.
+ENGINE_VERSION = "14-leg-shapes"
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 HOST = os.getenv("MOTION_HOST", "127.0.0.1")
 PORT = int(os.getenv("MOTION_PORT", "8000"))
@@ -1466,7 +1468,9 @@ HAND_SCHEMA = _obj({
 FOOT_SCHEMA = _obj({
     "position": _enum(mg.FOOT_SPECIAL + list(mg.FOOT_POSITIONS)),
     "height": _enum(list(mg.FOOT_HEIGHTS)),
+    "leg": _enum(list(mg.LEG_SHAPES)),
 })
+LIMBS = ["right_hand", "left_hand", "right_foot", "left_foot"]
 BEAT_SCHEMA = _obj({
     "label": {"type": "string"},
     "timing": _enum(list(mg.BEAT_TIME)),
@@ -1488,6 +1492,7 @@ PLAN_SCHEMA = _obj({
     "implement": _enum(["none", "racket", "club", "bat", "stick", "ball", "weights", "other"]),
     "repeating_cycle": {"type": "boolean"},
     "phases": {"type": "array", "items": {"type": "string"}},
+    "skill_limbs": {"type": "array", "items": _enum(LIMBS)},
     "title": {"type": "string"},
     "movement_summary": {"type": "string"},
     "coaching_cues": {"type": "array", "items": {"type": "string"}},
@@ -1516,6 +1521,10 @@ STAGE 1 - UNDERSTAND AND SIMPLIFY
   says where the hands, the feet and the trunk are and what they are doing (e.g. "contact: kicking
   leg nearly straight with the foot low in front, trunk over the ball, left arm out for balance").
   This is where you think - be biomechanically precise.
+- skill_limbs: the limbs that PERFORM the skill or are placed deliberately by the technique (the
+  striking hand, the kicking foot, both hands on a racket/ball, guard hands, arms held in a set
+  position). Leave out limbs that only swing, balance or follow along: the engine animates those
+  with natural counter-swing and balance, which looks better than hand-placing them.
 - repeating_cycle: true for continuous cyclic actions (running, swimming, skipping, shuffling...).
 - coaching_cues: 3-5 short practical cues. Assume a RIGHT-handed / right-footed athlete.
 
@@ -1530,14 +1539,18 @@ Body
   face_up_horizontal (lying on the back, backstroke), face_up_on_hands (crab position), seated,
   lying_on_left_side / lying_on_right_side, airborne (whole body in the air).
 - level: hip height: tall, normal, slightly_bent, half_squat, deep_squat.
-- trunk: upright, lean_forward, hinge, deep_hinge, lean_back, turn_left/turn_right (chest rotated
-  ~45), full_turn_left/full_turn_right (~70, e.g. full backswing), side_bend_left/right.
+- trunk: upright (~5 deg), lean_forward (~25 deg: running, leaning into a ball or a throw),
+  hinge (~55 deg: chest well forward, a bent-over / hip-hinge exercise), deep_hinge (~80 deg: chest
+  near horizontal, toe touch), lean_back (~-20 deg), turn_left/turn_right (chest rotated ~45),
+  full_turn_left/full_turn_right (~70, e.g. full backswing), side_bend_left/right.
+  Choose the SMALLEST lean that matches the phase; hinge/deep_hinge only for real bending.
   "turn_right" = chest faces the athlete's RIGHT (a right-hander's wind-up/backswing).
 - facing: the whole athlete's facing relative to the start (for real turns/pivots only).
 - timing: how long the move INTO this beat takes: instant (explosive, ~0.15 s), quick, normal,
   slow, hold (stay in the previous pose for a pause).
 
-Hands (right_hand / left_hand) - described like a coach points at a spot:
+Hands (right_hand / left_hand) - described like a coach points at a spot. Hands that are not in
+skill_limbs are animated by the engine (you may write "auto" for them):
 - height: floor, shin, knee, hip, waist, chest, shoulder, chin, head, overhead.
   Special: "auto" (engine picks a natural arm: counter-swing, balance, ready hands, floor support),
   "at_side" (arm hanging relaxed), "keep".
@@ -1552,18 +1565,26 @@ Hands (right_hand / left_hand) - described like a coach points at a spot:
 - hands_together: both hands holding one ball/bat/club/stick (give the right hand's position).
 
 Feet (right_foot / left_foot):
-- position: under_hip, front, far_front, back, far_back, side, wide, front_side, back_side,
-  cross_front, cross_back; "base" (back to the base position); "keep".
-- height: floor (planted, bearing weight), ankle, shin, knee, hip, high.
-  A foot at "floor" stays fixed on the ground while the body moves over it. A raised foot bends the
-  knee automatically (foot "back" at "knee" height = heel kicked up behind; foot "front" at "hip"
-  height = leg swung up in front). Both feet off the floor = the athlete is in the air.
+- height: how high the sole is ABOVE THE FLOOR: floor (planted, bearing weight), ankle (~10 cm),
+  shin (~25 cm), knee, hip, high. An object lying on the ground is touched/struck at ankle height.
+- position: on the floor, where the foot stands: under_hip, front, far_front, back, far_back, side,
+  wide, front_side, back_side, cross_front, cross_back; "base" (back to the base position); "keep".
+  For a RAISED foot, position is the direction the leg points from the hip.
+- leg (raised feet only; ignored on the floor):
+    straight = knee almost straight (leg swings, kicks at and after contact, leg raises),
+    bent     = knee about 90 deg (heel kicked up behind, a loaded leg before it swings),
+    tucked   = knee folded tight (knee drive, tuck, foot pulled to the buttock).
+  The engine guarantees this knee bend: a straight leg at hip height in front is a high leg swing;
+  a tucked foot under the hip at knee height is a knee drive.
+- A foot at "floor" stays fixed on the ground while the body moves over it. Both feet off the floor
+  = the athlete is in the air.
 
 What the engine does for you (do NOT try to fake these):
 - If a hand must reach low (knee, shin, floor) it hinges and bends the knees as much as needed.
 - A hand reaching across rotates the chest toward it; a hand wound back high rotates the chest away.
 - A leg lifted in front leans the trunk back slightly for balance (behind: leans forward).
-- Arms set to "auto" swing in opposition to the legs, balance during kicks, or support on the floor.
+- Arms not in skill_limbs (or set to "auto") swing in opposition to the legs, hold a balance arm out
+  while a straight leg swings, or support on the floor.
 - Planted feet never slide; the hips can rotate over them.
 
 Craft
@@ -1571,7 +1592,8 @@ Craft
 2. Timing matters: the power phase is fast (instant/quick); preparation and recovery slower; use
    "hold" for pauses, stuck landings and held positions.
 3. Kinetic chain: hips and trunk rotate before the arm strikes. Wind-ups turn away first.
-4. Follow-through continues in the direction of the action before recovering.
+4. Follow-through: the striking limb keeps travelling past the contact point in the same
+   direction (usually higher), then recovers. It does not stop at contact or veer sideways.
 5. Repeating cycles: describe ONE cycle (do not repeat the first beat at the end), loop=true.
    One-off actions: loop=false and finish in a balanced position.
 6. camera_view: side for forward/back and horizontal motion, front for lateral motion,
@@ -1612,9 +1634,31 @@ def _call_model(instructions: str, user_input: str, effort: str, schema: Dict[st
     return json.loads(text), meta
 
 
+TOUCH_HEIGHTS = ("floor", "shin", "knee")
+
+
+def apply_skill_limbs(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Hands that do not perform the skill are handed to the engine's synergy rules (counter-swing,
+    balance arm, floor support) instead of being hand-placed beat by beat by the model."""
+    limbs = raw.get("skill_limbs")
+    if not isinstance(limbs, list) or not limbs:
+        return raw  # older descriptions: use the beats as written
+    beats = []
+    for b in raw.get("beats") or []:
+        b = copy.deepcopy(b)
+        for hand in ("right_hand", "left_hand"):
+            d = b.get(hand) or {}
+            if hand in limbs or b.get("hands_together") or d.get("height") in TOUCH_HEIGHTS + ("at_side",):
+                continue
+            b[hand] = {**d, "height": "auto"}
+        beats.append(b)
+    return {**raw, "beats": beats}
+
+
 def plan_from_beats(raw: Dict[str, Any], duration: Optional[float] = None) -> Dict[str, Any]:
     """Deterministically build an engine plan from a grammar description (no model involved)."""
     speed = INTENSITY.get(raw.get("intensity", "medium"), 1.0) / TEMPO.get(raw.get("tempo", "normal"), 1.0)
+    raw = apply_skill_limbs(raw)
     built = mg.build_beats(raw.get("beats") or [], bool(raw.get("loop")), speed)
     plan = sanitize_plan({
         "title": raw.get("title", ""),
@@ -1632,26 +1676,38 @@ def plan_from_beats(raw: Dict[str, Any], duration: Optional[float] = None) -> Di
     plan["description"] = {k: raw.get(k) for k in ("canonical_name", "simplified_description", "phases",
                                                    "repeating_cycle", "tempo", "intensity", "implement",
                                                    "loop", "camera_view", "title", "movement_summary",
-                                                   "coaching_cues")}
+                                                   "coaching_cues", "skill_limbs")}
     plan["beats"] = raw.get("beats")
     plan["grammar_notes"] = built["notes"]
     return plan
 
 
+def _raised(b: Dict[str, Any], min_height: Tuple[str, ...] = ("shin", "knee", "hip", "high")) -> List[Dict[str, Any]]:
+    return [b.get(k) or {} for k in ("right_foot", "left_foot") if (b.get(k) or {}).get("height", "floor") in min_height]
+
+
 CONSISTENCY_RULES = [
-    # (words in the model's own beat label, test on the encoded beat, feedback)
-    (("kick", "knee drive", "knee up", "knee raise", "high knee"),
+    # (words in the model's own beat label, words that exempt it, test on the encoded beat, feedback)
+    (("kick", "knee drive", "knee up", "knee raise", "high knee"), (),
      lambda b: any((b.get(k) or {}).get("height", "floor") in ("shin", "knee", "hip", "high") for k in ("right_foot", "left_foot")),
      "is labelled as a kick/knee drive but no foot is raised to shin height or above"),
+    (("kick", "contact", "strike", "impact", "follow", "shot", "shoot", "swing"), ("knee", "load", "back", "cock"),
+     lambda b: not any(f.get("leg") == "tucked" for f in _raised(b)),
+     "is a kick/strike/follow-through but the raised leg is 'tucked' (that is a knee lift): use leg "
+     "'straight' for contact and follow-through"),
+    (("knee drive", "high knee", "knee up", "knee raise", "knee lift", "march"), (),
+     lambda b: any(f.get("leg") in ("tucked", "bent") for f in _raised(b, ("knee", "hip", "high"))),
+     "is a knee drive but no raised leg is 'tucked' or 'bent' (a straight leg is a leg swing, not a knee drive)"),
     (("touch the floor", "touch floor", "hands to floor", "hand to floor", "touch the ground", "touch ground",
-      "touch the cone", "touch cone", "hands down"),
+      "touch the cone", "touch cone", "hands down"), (),
      lambda b: any((b.get(k) or {}).get("height") in ("floor", "shin") for k in ("right_hand", "left_hand"))
      or b.get("base") in ("face_down_on_hands", "face_up_on_hands"),
      "is labelled as touching the floor/cone but no hand goes to floor or shin height"),
-    (("punch", "jab", "cross", "throw", "release", "strike", "reach"),
+    (("punch", "jab", "cross", "throw", "release", "reach"), ("kick", "foot", "leg"),
      lambda b: any((b.get(k) or {}).get("reach") == "extended" and (b.get(k) or {}).get("height") not in ("keep", "auto", "at_side")
                    for k in ("right_hand", "left_hand")),
-     "is labelled as a punch/throw/reach but no hand is extended"),
+     "is labelled as a punch/throw/reach but no hand is extended (hands not listed in skill_limbs are "
+     "animated automatically - list the hand in skill_limbs if it performs the action)"),
 ]
 
 
@@ -1675,15 +1731,39 @@ def consistency_problems(beats: List[Dict[str, Any]]) -> List[str]:
         label = str(b.get("label", "")).lower().replace("_", " ").replace("-", " ")
         if b.get("timing") == "hold":
             continue
-        for words, test, msg in CONSISTENCY_RULES:
-            if any(w in label for w in words) and not test(b):
+        for words, exempt, test, msg in CONSISTENCY_RULES:
+            if any(w in label for w in words) and not any(w in label for w in exempt) and not test(b):
                 out.append(f"Beat {i + 1} ('{b.get('label', '')}') {msg}.")
                 break
     return out[:6]
 
 
+def balance_problems(beats: List[Dict[str, Any]]) -> List[str]:
+    """Static-balance check in words the model understands: a big forward hinge while standing on
+    one leg with the free leg forward (or under the body) puts the centre of mass far outside the
+    support foot - only a free leg reaching BACK counterbalances it."""
+    out, trunk, base = [], "upright", "standing"
+    for i, b in enumerate(beats):
+        trunk = b.get("trunk") if b.get("trunk") not in (None, "keep") else trunk
+        base = b.get("base") if b.get("base") not in (None, "keep") else base
+        if base in ("face_down_horizontal", "face_down_on_hands", "face_up_horizontal", "face_up_on_hands",
+                    "seated", "lying_on_left_side", "lying_on_right_side", "airborne"):
+            continue
+        feet = [b.get(k) or {} for k in ("right_foot", "left_foot")]
+        down = [f for f in feet if f.get("height", "floor") == "floor"]
+        up = [f for f in feet if f.get("height", "floor") in ("shin", "knee", "hip", "high")]
+        hands_low = any((b.get(k) or {}).get("height") in TOUCH_HEIGHTS for k in ("right_hand", "left_hand"))
+        if trunk in ("hinge", "deep_hinge") and len(down) == 1 and len(up) == 1 and not hands_low \
+                and up[0].get("position") not in mg.BACK_POSITIONS:
+            out.append(f"Beat {i + 1} ('{b.get('label', '')}'): trunk '{trunk}' while balancing on one leg with the "
+                       "free leg forward/under the body is off-balance. Use upright or lean_forward (lean_back for "
+                       "a high leg in front).")
+    return out[:3]
+
+
 def critique_plan(raw: Dict[str, Any], plan: Dict[str, Any], report: Dict[str, Any]) -> List[str]:
     """Objective feedback from the rigid mechanism back to the model (drives one repair call)."""
+    raw = apply_skill_limbs(raw)
     beats = raw.get("beats") or []
     problems: List[str] = []
     if len(beats) < 3:
@@ -1711,6 +1791,7 @@ def critique_plan(raw: Dict[str, Any], plan: Dict[str, Any], report: Dict[str, A
             problems.append("Both feet stay off the floor for 3+ beats in a row: is the athlete really in the air?")
             break
     problems += consistency_problems(beats)
+    problems += balance_problems(beats)
     if beats and not raw.get("loop"):
         last = beats[-1]
         feet_down = any((last.get(k) or {}).get("height", "floor") == "floor" for k in ("right_foot", "left_foot"))
@@ -1843,9 +1924,13 @@ app.add_middleware(
 )
 
 
+STARTED_AT = time.strftime("%Y-%m-%d %H:%M:%S")
+
+
 @app.get("/health")
 def health() -> Dict[str, Any]:
-    return {"ok": True, "model": MODEL, "api_key_configured": bool(os.getenv("OPENAI_API_KEY"))}
+    return {"ok": True, "engine_version": ENGINE_VERSION, "engine_file": str(Path(__file__).resolve()),
+            "started_at": STARTED_AT, "model": MODEL, "api_key_configured": bool(os.getenv("OPENAI_API_KEY"))}
 
 
 @app.get("/rig")
@@ -1896,6 +1981,9 @@ def _build_response(plan: Dict[str, Any], duration: Optional[float], fps: int, s
         "duration_seconds": round(len(frames) / playback_fps, 2),
         "loop": plan["loop"],
         "camera_view": plan["camera_view"],
+        # Upright movements stand on a floor (the viewer draws a contact shadow); horizontal ones
+        # (swimming, lying, planks) pivot about the pelvis, so no floor is shown for them.
+        "ground": not any(abs(k["body"]["pitch"]) > 45 or abs(k["body"]["roll"]) > 45 for k in plan["keyframes"]),
         "dominant_side": side,
         "title": text(plan.get("title", "")),
         "movement_summary": text(plan.get("movement_summary", "")),
@@ -1905,12 +1993,13 @@ def _build_response(plan: Dict[str, Any], duration: Optional[float], fps: int, s
         "model": MODEL,
         "llm_calls": calls,
         "cached": cached,
+        "engine_version": ENGINE_VERSION,
     }
 
 
 @app.post("/generate")
 def generate(req: GenerateRequest) -> Dict[str, Any]:
-    key = _cache_key("v13-grammar", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
+    key = _cache_key(ENGINE_VERSION, req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
                      req.quality, MODEL)
     plan = cache_get(key) if req.use_cache else None
     calls: List[Dict[str, Any]] = []
@@ -1995,7 +2084,9 @@ if __name__ == "__main__":
     if "--selftest" in sys.argv:
         raise SystemExit(selftest())
     import uvicorn
-    print(f"CogniCoach Motion Engine on http://{HOST}:{PORT}  (model: {MODEL})")
+    print(f"CogniCoach Motion Engine v{ENGINE_VERSION} on http://{HOST}:{PORT}  (model: {MODEL})")
+    print(f"Running file: {Path(__file__).resolve()}")
+    print("Restart this server (Ctrl+C, then run again) after every git pull - a running server keeps old code.")
     if not os.getenv("OPENAI_API_KEY"):
         print("WARNING: OPENAI_API_KEY is not set; /generate will fail until it is.")
     uvicorn.run(app, host=HOST, port=PORT, log_level="info")

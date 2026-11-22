@@ -101,6 +101,13 @@
         linear-gradient(#ff7a2e, #ff761d);
     }
     #unity-canvas-frame canvas { display: block; will-change: transform; }
+    /* Fixed floor contact shadow: it stays put while the canvas (the body) rises, so jumps and
+       running flights read as airborne instead of kneeling (the scene itself has no floor). */
+    #ground-shadow {
+      position: absolute; left: 50.5%; top: 87.4%; width: 24%; height: 26px;
+      transform: translate(-50%, -50%); pointer-events: none; mix-blend-mode: multiply;
+      background: radial-gradient(ellipse at center, rgba(120, 40, 0, 0.55) 0%, rgba(120, 40, 0, 0.3) 38%, rgba(120, 40, 0, 0) 70%);
+    }
     .unity-mobile #unity-canvas-frame { width: 100%; height: 100%; }
     #motion-info { font-size: 12px; color: #333; margin: 4px 0; max-height: 120px; overflow: auto; }
     #motion-info b { display: block; margin-bottom: 2px; }
@@ -125,7 +132,7 @@
   </head>
   <body>
     <div id="unity-container" class="unity-desktop">
-      <div id="unity-canvas-frame"><canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas></div>
+      <div id="unity-canvas-frame"><canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas><div id="ground-shadow"></div></div>
       <div id="unity-loading-bar">
         <div id="unity-logo"></div>
         <div id="unity-progress-bar-empty">
@@ -457,6 +464,12 @@
         var pxPerMetre = 236 * ((canvas && canvas.clientHeight) || 600) / 600;
         var offset = Math.max(-0.9, Math.min(0.9, metres)) * pxPerMetre;
         canvas.style.transform = offset ? "translateY(" + (-offset).toFixed(1) + "px)" : "";
+        var shadow = document.querySelector("#ground-shadow");
+        if (shadow) {
+          var up = Math.max(0, Math.min(1, metres / 0.6));  // higher in the air: smaller, fainter shadow
+          shadow.style.opacity = (1 - 0.7 * up).toFixed(2);
+          shadow.style.transform = "translate(-50%, -50%) scale(" + (1 - 0.35 * up).toFixed(2) + ")";
+        }
       }
 
       function interpolateAngleDegrees(fromValue, toValue, amount) {
@@ -790,6 +803,8 @@
         controls.fpsInput.value = payload.playback_fps || 24;
         syncFramesTextarea();
         if (payload.camera_view) { bodyPosition.positiony = CAMERA_VIEWS[payload.camera_view] || 0; }
+        var groundShadow = document.querySelector("#ground-shadow");
+        if (groundShadow) { groundShadow.style.display = payload.ground === false ? "none" : ""; }
         if (controls.info) {
           var html = "";
           if (payload.title) { html += "<b>" + escapeHtml(payload.title) + "</b>"; }
