@@ -91,6 +91,7 @@
       padding: 7px;
     }
     #motion-duration { width: 64px; }
+    #motion-script { flex: 1; min-width: 260px; font: 12px/1.4 Consolas, monospace; }
     /* The rig cannot translate, so vertical root motion (squats, jumps) is shown by sliding the
        canvas inside this frame. The gradient matches the scene background at the edges. */
     #unity-canvas-frame {
@@ -165,6 +166,10 @@
         <label><input id="vertical-motion" type="checkbox" checked> Vertical motion</label>
       </div>
       <div id="motion-info"></div>
+      <div class="motion-row" id="script-row">
+        <textarea id="motion-script" spellcheck="false" rows="4" placeholder="Motion script, e.g.&#10;stance(width=wide, depth=0.5) + forehand&#10;run(pace=sprint, times=2)"></textarea>
+        <button id="run-script-button" type="button">Run Script</button>
+      </div>
       <div class="motion-row">
         <button id="load-frames-button" type="button">Load JSON Frames</button>
         <button id="play-motion-button" type="button">Play</button>
@@ -668,8 +673,33 @@
         return parsed;
       }
 
+      async function runMotionScript() {
+        var box = document.querySelector("#motion-script");
+        var button = document.querySelector("#run-script-button");
+        var script = (box && box.value || "").trim();
+        if (!script) { setMotionStatus("Write a motion script first.", true); return; }
+        var controls = getFrameInputElements();
+        button.disabled = true;
+        try {
+          var response = await fetch(MOTION_API_URL.replace(/\/$/, "") + "/script", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ script: script, dominant_side: controls.sideInput ? controls.sideInput.value : "right" })
+          });
+          var payload = JSON.parse(await response.text() || "{}");
+          if (!response.ok) { throw new Error(payload.detail || ("HTTP " + response.status)); }
+          playGeneratedMotion(payload);
+        } catch (error) {
+          setMotionStatus("Script error: " + error.message, true);
+        } finally {
+          button.disabled = false;
+        }
+      }
+
       function setupMotionControls() {
         var controls = getFrameInputElements();
+        var runScriptButton = document.querySelector("#run-script-button");
+        if (runScriptButton) { runScriptButton.onclick = runMotionScript; }
         if (!controls.textarea.value.trim()) {
           controls.textarea.value = JSON.stringify(motionFrames, null, 2);
         }
@@ -797,6 +827,8 @@
       // Load a /generate (or /compile) response and start playing it.
       function playGeneratedMotion(payload) {
         var controls = getFrameInputElements();
+        var scriptBox = document.querySelector("#motion-script");
+        if (scriptBox && payload.script) { scriptBox.value = payload.script; }
         stopMotionLoop();
         motionFrames = payload.frames;
         currentFrameIndex = 0;

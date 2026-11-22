@@ -79,7 +79,7 @@ def _load_dotenv(path: Path) -> None:
 _load_dotenv(Path(__file__).with_name(".env"))
 
 # Bump on every engine change. The viewer page checks this and warns when the running server is stale.
-ENGINE_VERSION = "15-anatomy-physics"
+ENGINE_VERSION = "16-motion-script"
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 HOST = os.getenv("MOTION_HOST", "127.0.0.1")
 PORT = int(os.getenv("MOTION_PORT", "8000"))
@@ -600,7 +600,8 @@ def _arm_penetration(world: Dict[str, np.ndarray], pos: Dict[str, np.ndarray], s
         # raised overhead beside the head - a streamline, a block, a two-hand overhead reach - are legal).
         (world["spine"], world["spine"] @ np.array([0.0, (sh_y + top_y) / 2, 0.0]),
          (HEAD_HALF[0], (top_y - sh_y) / 2, TORSO_HALF[2])),
-        (world["neck"], world["neck"] @ np.array([0.0, HEAD_HALF[1], 0.0]), HEAD_HALF),
+        (world["neck"], world["spine"] @ np.array(NECK_OFFSET) + world["neck"] @ np.array([0.0, HEAD_HALF[1], 0.0]),
+         HEAD_HALF),
         (world["hip"], np.zeros(3), PELVIS_HALF),
     ]
     best = (0.0, np.zeros(3), "none")
@@ -1956,6 +1957,15 @@ class GenerateRequest(BaseModel):
     speed: Literal["auto", "realtime"] = "auto"  # auto = playback FPS tuned for natural on-screen speed
     use_cache: bool = True
     repair_attempts: int = Field(default=0, ge=0, le=1)  # kept for backwards compatibility (ignored)
+    # "script": the model composes stored motions from motion_database.py in the motion language
+    # (motion_script.py). "grammar": the older beat-grammar pipeline.
+    engine: Literal["script", "grammar"] = "script"
+
+
+class ScriptRequest(BaseModel):
+    script: str = Field(min_length=2, max_length=4000)
+    dominant_side: Literal["left", "right"] = "right"
+    title: str = ""
 
 
 class CompileRequest(BaseModel):
@@ -2049,8 +2059,155 @@ def _build_response(plan: Dict[str, Any], duration: Optional[float], fps: int, s
     }
 
 
+# -----------------------------------------------------------------------------
+# Motion-script pipeline: the model composes stored motions; the compiler merges them.
+# -----------------------------------------------------------------------------
+SCRIPT_SCHEMA = _obj({
+    "canonical_name": {"type": "string"},
+    "steps": {"type": "array", "items": {"type": "string"}},
+    "title": {"type": "string"},
+    "coaching_cues": {"type": "array", "items": {"type": "string"}},
+    "camera_view": _enum(VIEWS),
+    "script": {"type": "string"},
+})
+
+
+def script_instructions() -> str:
+    import motion_database as mdb
+    return f"""
+You turn a coaching request into a short animation script for a 3D athlete, built from a database
+of stored, high-quality motions. You decide WHAT the athlete does; the motions already know HOW.
+
+Fill the fields in order:
+1. canonical_name: the core movement or drill in 2-6 words.
+2. steps: what the athlete does, in order, as 1-8 plain steps (e.g. "sprint forward", "touch the cone
+   with the right hand", "backpedal to the start"). Drop story, setting and chatter.
+3. title, coaching_cues (3-5 short cues for a right-handed athlete), camera_view (side for forward/back
+   motion and swimming, front for side-to-side motion, three_quarter otherwise).
+4. script: the steps written in the motion language below.
+
+THE MOTION LANGUAGE
+- Each line lists motions from the CATALOG: name or name(param=value, ...).
+- Motions joined with + on ONE line play at the SAME time. The next line starts when the line before
+  it ends (the engine blends between lines).
+- Each motion drives only some body parts (listed in the catalog). Build a full-body skill by putting
+  a lower-body motion (stance, fighting_stance, run, stride_step, jump ...) on the same line as an
+  upper-body motion (forehand, guard, jab, shoot ...). Two motions that both DRIVE the same part
+  cannot share a line; "soft" parts simply give way.
+- Parts that nothing drives on a line keep their previous pose, but it is clearer to repeat held
+  motions (e.g. fighting_stance + guard) on every line where they apply.
+- Every motion also accepts: side=left (mirror it: shuffle(side=left) moves left, jab is already the
+  left hand), speed=0.5..2, times=N (repeat), hold=seconds (hold the end), delay=seconds (start later
+  than the rest of its line - e.g. jump + shoot(delay=0.35)).
+- Add " x3" at the end of a line to repeat the whole line. A final line "loop" makes the clip loop
+  (continuous drills: running, swimming, skipping, shuffles).
+- The athlete is right-handed (the engine mirrors everything for left-handers).
+- Motions already contain their natural supporting action as SOFT parts: soccer_kick has calm balance
+  arms, run pumps the arms, jump swings the arms, stance leans the trunk. Do NOT add an arm motion on
+  top of a kick, run or jump unless the request needs a specific arm action (guard, dribble, shoot,
+  carrying, hands high). Never add arms_out / arms_overhead just for balance.
+- Start straight into the movement (a short ready stance is fine before a sport skill). Never insert
+  a pose from a different activity (no plank before swimming, no stance before a swim stroke).
+- Use the fewest motions that show the request; usually 1-5 lines and under 8 seconds. For a drill
+  that is not in the catalog, chain catalog motions that match its steps.
+
+Syntax examples:
+stance(width=wide, depth=0.5) + ready_arms
+stance(width=wide, depth=0.5) + forehand
+run(pace=sprint, times=2)
+
+CATALOG (name(params) [kind; parts it drives; soft parts] description):
+{mdb.catalog_text()}
+""".strip()
+
+
+def _compile_script(script: str, side: str) -> Dict[str, Any]:
+    import motion_database as mdb
+    import motion_script as ms
+    return ms.compile_script(script, mdb.DB, dominant_side=side)
+
+
+def plan_script(movement: str, extra: str = "") -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """Text -> motion script (one model call) -> compile; compile errors go back for one repair."""
+    import motion_script as ms
+    request = f"Request: {movement.strip()}" + (f"\nNotes: {extra.strip()}" if extra.strip() else "")
+    instructions = script_instructions()
+    raw, meta = _call_model(instructions, request, PLANNER_EFFORT, SCRIPT_SCHEMA, name="motion_script", max_tokens=6000)
+    calls = [{"stage": "script", **meta, "script": raw.get("script")}]
+    try:
+        _compile_script(raw.get("script", ""), "right")
+        return raw, calls
+    except ms.ScriptError as err:
+        calls[-1]["errors"] = str(err)
+        fix = (request + "\n\nYOUR PREVIOUS SCRIPT:\n" + raw.get("script", "") +
+               "\n\nTHE COMPILER REPORTED (fix exactly these, keep the rest):\n" + str(err))
+        raw2, meta2 = _call_model(instructions, fix, PLANNER_EFFORT, SCRIPT_SCHEMA, name="motion_script", max_tokens=6000)
+        calls.append({"stage": "repair", **meta2, "script": raw2.get("script")})
+        _compile_script(raw2.get("script", ""), "right")  # raises if still broken
+        return raw2, calls
+
+
+def script_response(raw: Dict[str, Any], side: str, calls: List[Dict[str, Any]], cached: bool) -> Dict[str, Any]:
+    compiled = _compile_script(raw.get("script", ""), side)
+    text = mirror_text if side == "left" else (lambda t: t)
+    return {
+        "frames": sparse(compiled["frames"]),
+        "playback_fps": compiled["fps"],
+        "duration_seconds": compiled["duration_seconds"],
+        "loop": compiled["loop"],
+        "camera_view": raw.get("camera_view") if raw.get("camera_view") in VIEWS else "three_quarter",
+        "ground": compiled["ground"],
+        "dominant_side": side,
+        "title": text(raw.get("title", "")),
+        "movement_summary": "; ".join(raw.get("steps") or []),
+        "coaching_cues": [text(c) for c in raw.get("coaching_cues", [])],
+        "script": raw.get("script", ""),
+        "plan": {"script": raw.get("script", ""), "steps": raw.get("steps"), "lines": compiled["lines"]},
+        "report": {**compiled["report"], "playback_time_scale": 1.0},
+        "model": MODEL,
+        "llm_calls": calls,
+        "cached": cached,
+        "engine_version": ENGINE_VERSION,
+    }
+
+
+@app.get("/motions")
+def list_motions() -> Dict[str, Any]:
+    import motion_database as mdb
+    return {"motions": [{"name": n, "comment": m["comment"], "kind": m["kind"], "parts": m["parts"],
+                         "soft_parts": m["soft_parts"], "params": {k: list(v[1]) if isinstance(v[1], tuple) else v[1]
+                                                                    for k, v in m["params"].items()}}
+                        for n, m in mdb.DB.items()]}
+
+
+@app.post("/script")
+def run_script(req: ScriptRequest) -> Dict[str, Any]:
+    import motion_script as ms
+    try:
+        return script_response({"script": req.script, "title": req.title or "Motion script"}, req.dominant_side, [], False)
+    except ms.ScriptError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+
+
 @app.post("/generate")
 def generate(req: GenerateRequest) -> Dict[str, Any]:
+    if req.engine == "script":
+        import motion_script as ms
+        key = _cache_key("script", ENGINE_VERSION, req.movement.strip().lower(), req.extra_instructions.strip(), MODEL)
+        raw = cache_get(key) if req.use_cache else None
+        cached, calls = raw is not None, []
+        if raw is None:
+            try:
+                raw, calls = plan_script(req.movement, req.extra_instructions)
+            except ms.ScriptError as err:
+                raise HTTPException(status_code=502, detail=f"The model wrote a script that does not compile: {err}") from err
+            except HTTPException:
+                raise
+            except Exception as exc:
+                traceback.print_exc()
+                raise HTTPException(status_code=502, detail=f"Motion planning failed: {exc}") from exc
+            cache_put(key, raw)
+        return script_response(raw, req.dominant_side, calls, cached)
     key = _cache_key(ENGINE_VERSION, req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
                      req.quality, MODEL)
     plan = cache_get(key) if req.use_cache else None
@@ -2149,6 +2306,19 @@ def selftest() -> int:
     flight_ok = 0.25 < max(k["pelvis"]["height"] for _, k in keys) <= mg.FLIGHT_MAX_RISE
     print("ballistic flight:", flight_ok)
     ok = ok and flight_ok
+    # Motion-script pipeline: scripts compile, conflicts are reported, mirroring works.
+    import motion_database as mdb
+    import motion_script as ms
+    r = ms.compile_script("stance(width=wide, depth=0.5) + forehand\nfighting_stance + guard + jab", mdb.DB)
+    rl = ms.compile_script("stance(width=wide, depth=0.5) + forehand", mdb.DB, dominant_side="left")
+    script_ok = len(r["frames"]) > 30 and not r["report"]["issues"] and len(rl["frames"]) > 30
+    try:
+        ms.compile_script("stance + run", mdb.DB)
+        script_ok = False  # both drive the legs: must be refused
+    except ms.ScriptError:
+        pass
+    print("motion script:", script_ok, f"({len(mdb.DB)} motions in the database)")
+    ok = ok and script_ok
     print("SELFTEST", "PASSED" if ok else "FAILED")
     return 0 if ok else 1
 
