@@ -610,34 +610,28 @@ def _resolve_arm_collisions(kf: Dict[str, Any], local: Dict[str, np.ndarray], wo
                             pos: Dict[str, np.ndarray], side: str, keep_hand: bool = False) -> int:
     """Hard constraint: an arm may never pass through the torso or hips.
 
-    Forearm/hand inside -> move the hand target out of the body (preferably to the front).
-    Upper arm/elbow inside -> keep the hand where it is and swing the elbow out instead.
+    Contact is cleared WITHOUT changing the arm's intended posture: the elbow keeps pointing the way
+    the motion asked for (down for guards/punches, etc.) and the hand eases forward away from the
+    body. Only an elbow trapped inside the body is steered - forward/down along its intended
+    direction, never flared sideways.
     """
     fixes = 0
+    hint = world["spine"] @ kf.get(f"{side}_elbow_pole", np.array([0.3, -1.0, -0.25]))
+    fwd = world["spine"][:, 2]
+    chest = world["spine"] @ np.array([0.0, TORSO_HALF[1], 0.0])
     for it in range(10):
         depth, push, part = _arm_penetration(world, pos, side)
         if depth < 0.05:
             break
-        if keep_hand:
-            part = "upper"  # a hand gripping an implement stays on it: only the elbow moves
-        elif part == "upper" and it >= 3:
-            part = "fore"  # elbow still trapped: move the hand out too (pulls the whole arm clear)
-        fwd = world["spine"][:, 2]
-        chest = world["spine"] @ np.array([0.0, TORSO_HALF[1], 0.0])
         hand_behind = float(np.dot(pos[side + "_hand"] - chest, fwd)) < -TORSO_HALF[2]
-        if np.dot(push, fwd) < -0.5:
-            direction = push if hand_behind else fwd  # only clear backwards if already behind
-        elif abs(np.dot(push, world["spine"][:, 0])) > 0.7:
-            direction = push
-        else:
-            direction = fwd
+        direction = push if (hand_behind and np.dot(push, fwd) < 0) else fwd
         root = pos[side + "_shoulder"]
-        if part == "upper":
-            # Elbow inside the body: re-aim the elbow outward/forward, hand target unchanged.
-            pole = direction + world["spine"][:, 0] * (1.0 if side == "right" else -1.0) * 0.5
+        if part == "upper" and (keep_hand or it < 3):
+            # Elbow inside the body: keep the intended elbow direction, biased forward.
+            pole = hint / max(1e-9, np.linalg.norm(hint)) + fwd * 0.6
             target = pos[side + "_hand"]
         else:
-            pole = _elbow_pole(world, side)
+            pole = hint
             target = pos[side + "_hand"] + direction * (depth + 0.3)
         upper, lower, _ = two_bone_ik(root, target, pole, UPPER_ARM, FOREARM, world["spine"], "arm")
         local[side + "shoulder"], local[side + "elbow"] = upper, lower
@@ -645,6 +639,39 @@ def _resolve_arm_collisions(kf: Dict[str, Any], local: Dict[str, np.ndarray], wo
         pos.update(forward_kinematics(world))
         fixes += 1
     return fixes
+
+
+def enforce_elbow_posture(kf: Dict[str, Any], local: Dict[str, np.ndarray], world: Dict[str, np.ndarray],
+                          pos: Dict[str, np.ndarray], side: str) -> bool:
+    """No 'chicken wings': when the hand is at or below shoulder height and the elbow is meant to
+    point down, the elbow may not rise to shoulder height or flare out. The correction is
+    proportional to how far the elbow strays (no on/off switching), and raised arms are untouched.
+    """
+    hint_local = kf.get(f"{side}_elbow_pole", np.array([0.3, -1.0, -0.25]))
+    hl = hint_local / max(1e-9, float(np.linalg.norm(hint_local)))
+    if hl[1] > 0.6 or abs(hl[0]) > 0.75:
+        return False  # elbows deliberately pointing up (throw cock) or out (hands on hips) are left alone
+    sh, el, ha = pos[side + "_shoulder"], pos[side + "_elbow"], pos[side + "_hand"]
+    up = np.array([0.0, 1.0, 0.0])  # world vertical: what the viewer sees
+    hand_h = float(np.dot(ha - sh, up))
+    if hand_h > 4.0:
+        return False  # hand raised (overhead, high catch): a high elbow is natural
+    elbow_h = float(np.dot(el - sh, up))
+    limit = -5.0  # elbow should hang at least ~10 cm below the shoulder
+    excess = elbow_h - limit
+    if excess <= 0.0:
+        return False
+    w = min(1.0, excess / 6.0)
+    sign = 1.0 if side == "right" else -1.0
+    down = np.array([0.0, -1.0, 0.0]) + world["spine"] @ np.array([0.15 * sign, 0.0, 0.1])
+    current = el - (sh + ha) * 0.5
+    current = current / max(1e-9, float(np.linalg.norm(current)))
+    pole = current * (1.0 - w) + down * w
+    upper, lower, _ = two_bone_ik(sh, ha, pole, UPPER_ARM, FOREARM, world["spine"], "arm")
+    local[side + "shoulder"], local[side + "elbow"] = upper, lower
+    world.update(world_rotations(local))
+    pos.update(forward_kinematics(world))
+    return True
 
 
 def keep_hand_outside_torso(p: np.ndarray, own_side: float = 0.0) -> np.ndarray:
@@ -808,6 +835,7 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
     # Foot locking: while a foot is planted it stays where it was at touchdown (world space; the
     # pelvis is the fixed origin because the rig cannot translate).
     locks: Dict[str, Optional[np.ndarray]] = {"left": None, "right": None}
+    lock_done: Dict[str, bool] = {"left": False, "right": False}
     if loop:
         # Seed locks from the end of the cycle so the loop seam does not pop.
         pass
@@ -818,6 +846,7 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
     body_track: List[Dict[str, float]] = []
     ik_memory: Dict[str, np.ndarray] = {}
     root_y: List[float] = []
+    wing_samples = 0
     dominant = "left" if plan.get("dominant_side") == "left" else "right"
     off = "right" if dominant == "left" else "left"
     recorded_offsets: List[Dict[str, np.ndarray]] = []
@@ -900,7 +929,14 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
         for side, sign in (("left", -1.0), ("right", 1.0)):
             target = world["body"] @ local_feet[side]
             planted, weight = kf["flags"][f"{side}_foot_planted"]
-            if planted and locks[side] is None:
+            landing = planted and not lock_done[side]
+            if weight >= 1.0 and planted:
+                lock_done[side] = True
+            if not planted:
+                lock_done[side] = False
+            if landing or (planted and locks[side] is None):
+                # Keep tracking the foot while it is still landing; lock only once it has arrived
+                # (lift-off then eases away from the frozen spot - no jump).
                 # Lock the foot's floor position WITHOUT the hips-back offset; the current offset is
                 # re-applied every frame, so squatting before a jump can't leave a stale lock.
                 locks[side] = target - sit_vec
@@ -914,7 +950,13 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
             toe = math.radians(sign * foot["toe_out"])
             # Knee points where the foot points (toe_out); no extra outward bias, so kicks and
             # strides swing straight instead of bowing sideways.
-            knee_dir = world["body"] @ np.array([math.sin(toe), -0.15, math.cos(toe)])
+            # When the foot is raised in front (kicks, knee drives), the knee rotates to point UP in
+            # proportion - otherwise "forward" would be parallel to the leg and the knee would fall
+            # sideways.
+            rel_b = world["body"].T @ (target - pos[side + "_hip"])
+            fwd_amount = max(0.0, float(rel_b[2]) / max(1e-6, float(np.linalg.norm(rel_b))))
+            knee_dir = world["body"] @ np.array([math.sin(toe) * (1.0 - fwd_amount),
+                                                 -0.15 + 1.3 * fwd_amount, math.cos(toe)])
             upper, lower, res = two_bone_ik(pos[side + "_hip"], target, knee_dir,
                                             THIGH, SHIN, world["hip"], "leg", ik_memory, side + "_leg")
             local[side + "hip"], local[side + "knee"] = upper, lower
@@ -927,6 +969,10 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
             before = pos[side + "_hand"].copy()
             gripping = side == off and kf["flags"]["hands_together"][1] > 0.5
             fixes = _resolve_arm_collisions(kf, local, world, pos, side, keep_hand=gripping)
+            if enforce_elbow_posture(kf, local, world, pos, side):
+                stats["elbow_posture_fixes"] = stats.get("elbow_posture_fixes", 0) + 1
+                # Re-check the body after lowering the elbow (hand stays put, so this rarely fires).
+                fixes += 1 + _resolve_arm_collisions(kf, local, world, pos, side, keep_hand=True)
             stats["collision_fixes"] += fixes
             depth_after = _arm_penetration(world, pos, side)[0]
             if gripping and depth_after > 1.0:
@@ -941,6 +987,14 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
             frame_offsets[side + "_pole_w"] = 1.0 if fixes else 0.0
         recorded_offsets.append(frame_offsets)
 
+        for sd in ("left", "right"):
+            hl = kf.get(f"{sd}_elbow_pole", np.array([0.3, -1.0, -0.25]))
+            hl = hl / max(1e-9, float(np.linalg.norm(hl)))
+            intended_high = hl[1] > 0.6 or abs(hl[0]) > 0.75
+            sh_, el_, ha_ = pos[sd + "_shoulder"], pos[sd + "_elbow"], pos[sd + "_hand"]
+            if (not intended_high and float(np.linalg.norm(ha_ - sh_)) < 0.65 * (UPPER_ARM + FOREARM)
+                    and ha_[1] - sh_[1] < 4.0 and el_[1] - sh_[1] > -1.0):
+                wing_samples += 1
         track.append({k: v.copy() for k, v in pos.items()})
         root_y.append(kf["pelvis"]["height"])
         rot_track.append({k: orthonormalize(v) for k, v in local.items()})
@@ -953,6 +1007,8 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
         new = smooth_collision_corrections(recorded_offsets, _collision_offsets, loop)
         return compile_motion(plan, duration_seconds, fps, return_to_start, new, _pass + 1)
 
+    stats["swivel_despikes"] = despike_swivel(rot_track, track, loop)
+    stats["unintended_wing_samples"] = wing_samples
     frames = frames_from_rotations(smooth_rotations(rot_track, loop), body_track)
 
     # Vertical root translation in metres (hip drop / jump height). Unity ignores it today; it is
@@ -965,6 +1021,107 @@ def compile_motion(plan: Dict[str, Any], duration_seconds: Optional[float] = Non
 
     report = verify(plan, frames, track, fps, stats, loop)
     return frames, report
+
+
+SWIVEL_CHAINS = [
+    # (name, root, middle, end, upper bone, lower bone, parent, l1, l2, chain type)
+    ("right_arm", "right_shoulder", "right_elbow", "right_hand", "rightshoulder", "rightelbow", "spine", UPPER_ARM, FOREARM, "arm"),
+    ("left_arm", "left_shoulder", "left_elbow", "left_hand", "leftshoulder", "leftelbow", "spine", UPPER_ARM, FOREARM, "arm"),
+    ("right_leg", "right_hip", "right_knee", "right_foot", "righthip", "rightknee", "hip", THIGH, SHIN, "leg"),
+    ("left_leg", "left_hip", "left_knee", "left_foot", "lefthip", "leftknee", "hip", THIGH, SHIN, "leg"),
+]
+
+
+def despike_swivel(rot_track: List[Dict[str, np.ndarray]], track: List[Dict[str, np.ndarray]], loop: bool) -> int:
+    """Final guarantee against one-frame elbow/knee flips.
+
+    For each limb, the swivel direction (elbow/knee offset from the root->end line) is compared with
+    its neighbours. A frame that deviates sharply from both neighbours while the neighbours agree is
+    re-solved with the neighbours' swivel, keeping the hand/foot exactly where it was. The result is
+    only kept if it does not push an arm into the body.
+    """
+    n = len(track)
+    if n < 3:
+        return 0
+    fixed = 0
+
+    def swivel(i: int, root: str, mid: str, end: str) -> np.ndarray:
+        r, m, e = track[i][root], track[i][mid], track[i][end]
+        axis = e - r
+        al = float(np.linalg.norm(axis))
+        if al < 1e-6:
+            return np.zeros(3)
+        axis /= al
+        off = (m - r) - np.dot(m - r, axis) * axis
+        ol = float(np.linalg.norm(off))
+        # A nearly straight limb has no meaningful swivel (and can't visibly flip): ignore it.
+        return off / ol if ol > 3.0 else np.zeros(3)
+
+    for name, root, mid, end, ub, lb, parent, l1, l2, chain in SWIVEL_CHAINS:
+        for _ in range(2):
+            changed = False
+            for i in range(n):
+                ia, ib = i - 1, i + 1
+                if not loop and (ia < 0 or ib >= n):
+                    continue
+                ia, ib = ia % n, ib % n
+                s0, sa, sb = swivel(i, root, mid, end), swivel(ia, root, mid, end), swivel(ib, root, mid, end)
+                if not (np.any(s0) and np.any(sa) and np.any(sb)):
+                    continue
+                neighbours_agree = float(np.dot(sa, sb)) > 0.7
+                spike = float(np.dot(s0, sa)) < 0.5 and float(np.dot(s0, sb)) < 0.5
+                if not (neighbours_agree and spike):
+                    continue
+                local = {k: v.copy() for k, v in rot_track[i].items()}
+                world = world_rotations(local)
+                pos = forward_kinematics(world)
+                pole = sa + sb
+                upper, lower, _ = two_bone_ik(pos[root], track[i][end], pole, l1, l2, world[parent], chain)
+                local[ub], local[lb] = upper, lower
+                world2 = world_rotations(local)
+                pos2 = forward_kinematics(world2)
+                if chain == "arm":
+                    side = name.split("_")[0]
+                    if _arm_penetration(world2, pos2, side)[0] > _arm_penetration(world, pos, side)[0] + 0.5:
+                        continue
+                rot_track[i] = local
+                track[i] = {k: v.copy() for k, v in pos2.items()}
+                fixed += 1
+                changed = True
+            if not changed:
+                break
+        # Steps: the swivel flips in one frame and stays flipped. Spread the change over the
+        # surrounding frames instead (hand/foot positions unchanged).
+        for _ in range(3):
+            sw = [swivel(i, root, mid, end) for i in range(n)]
+            steps = [i for i in range(1, n) if np.any(sw[i]) and np.any(sw[i - 1])
+                     and float(np.dot(sw[i], sw[i - 1])) < 0.64]
+            if not steps:
+                break
+            for i in steps:
+                a_i, b_i = max(0, i - 4), min(n - 1, i + 3)
+                if not (np.any(sw[a_i]) and np.any(sw[b_i])):
+                    continue
+                for j in range(a_i + 1, b_i):
+                    u = (j - a_i) / (b_i - a_i)
+                    pole = sw[a_i] * (1.0 - u) + sw[b_i] * u
+                    if np.linalg.norm(pole) < 0.2:  # opposite swivels: pass through the down/forward side
+                        pole = pole + np.array([0.0, -0.5, 0.3])
+                    local = {k: v.copy() for k, v in rot_track[j].items()}
+                    world = world_rotations(local)
+                    pos = forward_kinematics(world)
+                    upper, lower, _ = two_bone_ik(pos[root], track[j][end], pole, l1, l2, world[parent], chain)
+                    local[ub], local[lb] = upper, lower
+                    world2 = world_rotations(local)
+                    pos2 = forward_kinematics(world2)
+                    if chain == "arm":
+                        side = name.split("_")[0]
+                        if _arm_penetration(world2, pos2, side)[0] > _arm_penetration(world, pos, side)[0] + 0.5:
+                            continue
+                    rot_track[j] = local
+                    track[j] = {k: v.copy() for k, v in pos2.items()}
+                    fixed += 1
+    return fixed
 
 
 def smooth_collision_corrections(recorded: List[Dict[str, Any]], previous: Optional[List[Dict[str, Any]]],
@@ -1174,6 +1331,29 @@ def verify(plan: Dict[str, Any], frames: List[Dict[str, float]], track: List[Dic
                 leg_clash += 1
     if leg_clash:
         issues.append(f"Legs touch/overlap in {leg_clash} samples.")
+    # Posture checks (what looks "weird" to a coach even without pops or pass-through).
+    max_toe_out = max(max(k["right_foot"]["toe_out"], k["left_foot"]["toe_out"]) for k in plan["keyframes"])
+    knee_bow = 0.0
+    wing = int(stats.get("unintended_wing_samples", 0))
+    for t in track:
+        for sd in ("left", "right"):
+            hip, knee, foot = t[sd + "_hip"], t[sd + "_knee"], t[sd + "_foot"]
+            line = foot - hip
+            ll = float(np.dot(line, line))
+            if ll > 1e-6:
+                u = float(np.clip(np.dot(knee - hip, line) / ll, 0.0, 1.0))
+                off = knee - (hip + line * u)
+                knee_bow = max(knee_bow, abs(float(off[0])) * UNIT_TO_M)  # sideways only
+    # True sideways bending comes from the plan (torso side bend + pelvis drop), not camera-like
+    # projections of forward leans.
+    side_lean = max(abs(k["torso"]["side_bend"]) + abs(k["pelvis"]["side"]) for k in plan["keyframes"])
+    if wing > 2:
+        issues.append(f"Elbows raised while hands are low (chicken wing) in {wing} samples.")
+    if knee_bow > 0.12 and max_toe_out < 30:
+        issues.append(f"Knee bows sideways off the leg line by {knee_bow:.2f} m.")
+    if side_lean > 40:
+        issues.append(f"Trunk bends {side_lean:.0f} degrees sideways.")
+
     # Typical limb speed while actually moving (holds/pauses excluded), for playback-speed tuning.
     eff = ["left_hand", "right_hand", "left_foot", "right_foot", "head"]
     if n > 2:
@@ -1195,6 +1375,8 @@ def verify(plan: Dict[str, Any], frames: List[Dict[str, float]], track: List[Dic
         "end_effector_travel_m": {k: round(v, 3) for k, v in travel.items()},
         "max_joint_delta_deg_per_frame": round(max_delta, 2),
         "max_pop_m": round(pop, 3),
+        "posture": {"chicken_wing_samples": wing, "max_knee_bow_m": round(knee_bow, 3),
+                    "max_side_lean_deg": round(side_lean, 1)},
         **{k: (round(v, 3) if isinstance(v, float) else v) for k, v in stats.items()},
     }
 
@@ -1552,8 +1734,10 @@ to SIMPLIFY them into the single core movement, so the animation stays clean and
 - library_match: the library entry that IS this movement ("template:variant"), or "none".
   match_quality: "exact" when the request is that standard movement. Details about HOW it is
   performed (good form, power, tempo, half/short/full swing, slice/topspin, hold the finish, a
-  coaching focus) do NOT break exactness. Use "close" only when the drill ADDS other elements
-  (cones, touches, reactions, turns, extra steps or moves, combinations). "exact" only if that entry is the same movement (synonyms count: "soccer shot",
+  coaching focus) do NOT break exactness. Use "close" when the drill ADDS other elements
+  (cones, touches, reactions, turns, extra steps or moves, combinations) or CHANGES what a body
+  part does compared with the standard movement (e.g. "hands in a high guard" while shuffling,
+  "arms overhead" during a squat, "hold a ball at the chest" while lunging). "exact" only if that entry is the same movement (synonyms count: "soccer shot",
   "striking a football" -> kick:soccer_instep; "fly stroke" -> swim:butterfly); "close" if similar
   but not the same; "none" otherwise. Prefer an exact library entry whenever one fits, and
   when the request adds a distinctive element (rotation, jump, two hands, a specific shot) choose the
@@ -2133,7 +2317,7 @@ def _build_response(plan: Dict[str, Any], duration: Optional[float], fps: int, s
 
 @app.post("/generate")
 def generate(req: GenerateRequest) -> Dict[str, Any]:
-    key = _cache_key("v11", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
+    key = _cache_key("v12", req.movement.strip().lower(), req.extra_instructions.strip(), req.duration_seconds,
                      req.quality, MODEL)
     plan = cache_get(key) if req.use_cache else None
     calls: List[Dict[str, Any]] = []
