@@ -37,12 +37,11 @@ All objects are arranged in this hierarchy in the unity game. All joints are not
 
 ## Motion engine contract
 
-`motion_engine.py` uses these proportions (measured against the Unity WebGL build) for its
-kinematics; `GET /rig` returns them. The language model never writes joint angles, coordinates or
-movement data, and the engine has no pre-programmed movements: the model describes each beat of a
-movement with enum-only spatial descriptors (see `motion_grammar.py`) - hand height x direction x
-reach x elbow, foot position x height x leg shape, support base, hip level, trunk, facing, timing
-and which limbs perform the skill - and the
-engine computes the targets, infers supporting biomechanics, solves the joints and emits local
-Unity Euler angles (Z-X-Y) per joint in the sparse frame format consumed by `RagdollTest_AI.html`.
+`motion_engine.py` uses these proportions (measured against the Unity WebGL build); `GET /rig`
+returns them. The language model never writes joint angles: it writes a short CogniCoach Motion
+Script (`motion_script.py`) that composes stored motions from `motion_database.py`. Each stored
+motion is authored in anatomical angles for the body parts it drives (body, pelvis, spine, neck,
+right/left arm, right/left leg); the compiler merges parts across motions, interpolates limbs as
+rotations, blends lines, keeps the lowest contact point on the floor and emits local Unity Euler
+angles (Z-X-Y) per joint in the sparse frame format consumed by `RagdollTest_AI.html`.
 `positionx/y/z` carry whole-body rotation and `rooty` the vertical root offset in metres.

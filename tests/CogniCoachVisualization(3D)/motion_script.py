@@ -316,6 +316,8 @@ def parse(script: str) -> Tuple[List[Dict[str, Any]], bool, List[str]]:
         if text.lower() == "loop":
             loop = True
             continue
+        if re.search(r"\s+loop$", text.lower()):        # "freestyle loop" on one line
+            loop, text = True, text[: -4].strip()
         repeat = 1
         m = re.search(r"\s+[x\*]\s*(\d+)\s*$", text)
         if m:

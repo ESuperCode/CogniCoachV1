@@ -663,6 +663,49 @@ def _burpee():
     return keys
 
 
+@motion("jump_rope", "Jump rope: small quick two-foot hops on the balls of the feet, elbows by the sides, "
+        "hands turning small circles at hip height.", "cycle", LEGS + ARMS + ["body"], ["spine"], period=0.5)
+def _jump_rope():
+    down = {"right_leg": Lg(4, 0, 8, 14), "left_leg": Lg(4, 0, 8, 14)}
+    up = {"right_leg": Lg(6, 0, 8, 10), "left_leg": Lg(6, 0, 8, 10)}
+    return [k(0.0, **down, body=B(air=0.0, root=0.0), right_arm=A(22, 70, 40, 55), left_arm=A(22, 70, 40, 55), spine=S(4)),
+            k(0.12, body=B(air=1.0, root=0.0)),
+            k(0.25, **up, body=B(air=1.0, root=0.06), right_arm=A(28, 50, 40, 45), left_arm=A(28, 50, 40, 45)),
+            k(0.38, body=B(air=1.0, root=0.0)),
+            k(0.45, body=B(air=0.0, root=0.0), **down)]
+
+
+@motion("lateral_lunge", "Lateral (side) lunge to the right: step wide, sit the hips back over the bent right "
+        "leg with the left leg straight, push back to standing.", "action", LEGS + ["pelvis"], ARMS + ["spine"])
+def _lateral_lunge():
+    stand = stance_legs("normal", 0.05)
+    low = {"right_leg": leg_at(0.08, 0.50, 0.34, 0.0, 20, "right"), "left_leg": leg_at(0.0, 0.42, 0.0, 0.0, 15, "left")}
+    return [k(0.0, **stand, pelvis=P(), spine=S(3), right_arm=HANG, left_arm=HANG),
+            k(1.0, **low, pelvis=P(12, 0, 6), spine=S(32, 0, 0), right_arm=A(70, 10, 0, 20), left_arm=A(70, 10, 0, 20)),
+            k(1.3, hold=True),
+            k(2.2, **stand, pelvis=P(), spine=S(3), right_arm=HANG, left_arm=HANG)]
+
+
+@motion("overhead_press", "Overhead press: hands start at the shoulders with the elbows down and forward, "
+        "press straight overhead, lower back.", "action", ARMS, ["spine"])
+def _overhead_press():
+    rack = {"right_arm": arm_at(0.24, 0.04, 0.16, "down", "right"), "left_arm": arm_at(0.24, 0.04, 0.16, "down", "left")}
+    top = {"right_arm": A(170, 15, 0, 5), "left_arm": A(170, 15, 0, 5)}
+    return [k(0.0, **rack, spine=S(3)), k(0.8, **top, spine=S(-3)), k(1.0, hold=True), k(1.9, **rack, spine=S(3))]
+
+
+@motion("deadlift", "Deadlift (two hands on a bar): hips back and knees bent, flat back, arms hanging straight "
+        "to the bar at the shins; stand up by driving the hips forward; lower under control.", "action",
+        LEGS + ARMS + ["spine", "pelvis"], ["neck"])
+def _deadlift():
+    up = stance_legs("normal", 0.05)
+    down = stance_legs("normal", 0.6)
+    return [k(0.0, **up, spine=S(4), pelvis=P(), right_arm=A(6, -5, 0, 4), left_arm=A(6, -5, 0, 4), neck=N()),
+            k(1.0, **down, spine=S(55), pelvis=P(16), right_arm=A(55, -5, 0, 4), left_arm=A(55, -5, 0, 4), neck=N(-15)),
+            k(1.3, hold=True),
+            k(2.3, **up, spine=S(4), pelvis=P(), right_arm=A(6, -5, 0, 4), left_arm=A(6, -5, 0, 4), neck=N())]
+
+
 # =============================================================================
 # 5. KICKING
 # =============================================================================
@@ -756,6 +799,17 @@ def _forehand():
             k(1.15, right_arm=arm_at(-0.22, 0.16, 0.28, "out", "right"), left_arm=A(40, -20, -50, 125), spine=S(6, -55),
               pelvis=P(3, -35), neck=N(5, 20)),
             k(1.6, right_arm=READY_R, left_arm=READY_R, spine=S(10, 0), pelvis=P(3, 0), neck=N(5, 0))]
+
+
+@motion("volley", "Tennis forehand volley: compact - racket hand up in front, short punch forward and "
+        "slightly down to meet the ball in front of the body, no backswing, recover.", "action",
+        ARMS + ["spine"], ["pelvis"])
+def _volley():
+    return [k(0.0, right_arm=READY_R, left_arm=READY_R, spine=S(12), pelvis=P(3)),
+            k(0.35, right_arm=arm_at(0.42, -0.02, 0.18, "down", "right"), left_arm=A(50, -10, -30, 80), spine=S(12, 25), pelvis=P(3, 12)),
+            k(0.55, right_arm=arm_at(0.32, -0.08, 0.50, "down", "right"), spine=S(14, 5), pelvis=P(3, 0)),
+            k(0.75, hold=True),
+            k(1.2, right_arm=READY_R, left_arm=READY_R, spine=S(12), pelvis=P(3))]
 
 
 @motion("backhand", "Two-handed tennis backhand: turn the shoulders left with both hands on the racket back by "

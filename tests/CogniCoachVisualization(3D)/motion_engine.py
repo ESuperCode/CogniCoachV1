@@ -2127,6 +2127,9 @@ def _compile_script(script: str, side: str) -> Dict[str, Any]:
     return ms.compile_script(script, mdb.DB, dominant_side=side)
 
 
+MAX_SCRIPT_SECONDS = 12.0
+
+
 def plan_script(movement: str, extra: str = "") -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     """Text -> motion script (one model call) -> compile; compile errors go back for one repair."""
     import motion_script as ms
@@ -2135,7 +2138,10 @@ def plan_script(movement: str, extra: str = "") -> Tuple[Dict[str, Any], List[Di
     raw, meta = _call_model(instructions, request, PLANNER_EFFORT, SCRIPT_SCHEMA, name="motion_script", max_tokens=6000)
     calls = [{"stage": "script", **meta, "script": raw.get("script")}]
     try:
-        _compile_script(raw.get("script", ""), "right")
+        compiled = _compile_script(raw.get("script", ""), "right")
+        if compiled["duration_seconds"] > MAX_SCRIPT_SECONDS:
+            raise ms.ScriptError(f"the animation lasts {compiled['duration_seconds']:.0f} s; keep it under 8 s "
+                                 "(fewer repetitions with times= / xN)")
         return raw, calls
     except ms.ScriptError as err:
         calls[-1]["errors"] = str(err)
