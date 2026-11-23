@@ -6001,7 +6001,7 @@ def _clap_pu():
     up, dn = support_arms(PLANK_PITCH), support_arms(PUSHUP_LOW_PITCH)
     base = {**STRAIGHT, "spine": S(0), "neck": N(-25)}
     return [kk(0.0, base, up, body=B(PLANK_PITCH)), kk(0.6, dn, body=B(PUSHUP_LOW_PITCH)),
-            kk(0.85, body=B(45, air=1.0, root=0.10), **both(0.02, -0.25, 0.35, "down")), kk(1.05, up, body=B(PLANK_PITCH, air=0.0, root=0.0)),
+            kk(0.85, body=B(64, air=1.0, root=0.10), **both(0.02, -0.25, 0.35, "down")), kk(1.05, up, body=B(PLANK_PITCH, air=0.0, root=0.0)),
             k(1.4, hold=True)]
 
 
