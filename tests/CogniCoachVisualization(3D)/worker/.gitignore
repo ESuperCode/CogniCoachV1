@@ -1,0 +1,5 @@
+node_modules/
+.wrangler/
+.dev.vars
+test/reference.json
+test/.bundle.mjs

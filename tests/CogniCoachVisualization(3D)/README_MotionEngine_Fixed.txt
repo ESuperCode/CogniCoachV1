@@ -71,3 +71,12 @@ Cost / speed: common phrases compile instantly with no model call; otherwise one
 (logged per request). Each request sends ~2.5k tokens: the core building blocks plus the ~70 database
 motions that best match its words (the full catalog would be ~9k tokens and 3x slower).
 Results are cached per prompt.
+
+Cloudflare Worker (no Python server needed)
+-------------------------------------------
+worker/ holds a JavaScript port of the script pipeline for Cloudflare Workers (free plan). The Worker
+does access control, rate limits, caching and the one gpt-5-mini call; the viewer compiles the frames
+in the browser with worker/dist/motion-compiler.js (same compiler). RagdollTest_AI.html uses the Worker
+by default; ?api=http://127.0.0.1:8000 still points it at a local motion_engine.py.
+After editing motions: python export_worker_data.py, then cd worker && npm run build:client.
+See worker/README.md.

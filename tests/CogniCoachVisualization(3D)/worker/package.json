@@ -1,0 +1,17 @@
+{
+  "name": "cognicoach-motion-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CogniCoach 3D motion engine on Cloudflare Workers (JS port of motion_engine.py / motion_script.py)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build:client": "node build_client.mjs",
+    "test": "node test/run_tests.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "wrangler": "^4.0.0"
+  }
+}

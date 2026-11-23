@@ -177,8 +177,13 @@
       </div>
       <div id="drag-help">Use Up/Down arrows for positionx and Left/Right arrows for positiony.</div>
       <textarea id="bodycode-frames-input" spellcheck="false"></textarea>
-      <div id="motion-status">Unity is loading. Start motion_engine.py, then use Generate AI Motion.</div>
+      <div class="motion-row" id="dev-code-row" style="display:none">
+        <label>Dev code <input id="dev-code-input" type="password" autocomplete="off" placeholder="needed off cognicoachai.com" /></label>
+        <button id="dev-code-save" type="button">Save</button>
+      </div>
+      <div id="motion-status">Unity is loading. Then type a movement and press Generate AI Motion.</div>
     </div>
+    <script src="worker/dist/motion-compiler.js"></script>
     <script>
       
       // Motion service location. Override with ?api=https://your-server or window.COGNICOACH_MOTION_API.
@@ -187,8 +192,77 @@
           var fromQuery = new URLSearchParams(window.location.search).get("api");
           if (fromQuery) { return fromQuery; }
         } catch (error) {}
-        return window.COGNICOACH_MOTION_API || "http://127.0.0.1:8000";
+        // The Cloudflare Worker (tests/CogniCoachVisualization(3D)/worker). A local motion_engine.py still
+        // works with ?api=http://127.0.0.1:8000.
+        return window.COGNICOACH_MOTION_API || "https://cognicoach-motion.bodhishanbhag.workers.dev";
       })();
+
+      // Dev code: lets the Worker answer pages that are not on cognicoachai.com (kept in this browser only).
+      var DEV_CODE_KEY = "cognicoach_motion_dev_code";
+      function getDevCode() {
+        try { return localStorage.getItem(DEV_CODE_KEY) || ""; } catch (error) { return ""; }
+      }
+      function setDevCode(code) {
+        try { if (code) { localStorage.setItem(DEV_CODE_KEY, code); } else { localStorage.removeItem(DEV_CODE_KEY); } } catch (error) {}
+      }
+      function showDevCodeRow(show) {
+        var row = document.querySelector("#dev-code-row");
+        if (row) { row.style.display = show ? "flex" : "none"; }
+      }
+      function motionApiHeaders(extra) {
+        var headers = { "Content-Type": "application/json" };
+        var code = getDevCode();
+        if (code) { headers["X-Dev-Code"] = code; }
+        for (var k in (extra || {})) { headers[k] = extra[k]; }
+        return headers;
+      }
+
+      // Optional Cloudflare Turnstile bot check: only used when the Worker reports it is switched on.
+      var TURNSTILE_SITE_KEY = "0x4AAAAAAD1cShM7YT2v5dHL";
+      var motionServiceInfo = null;
+      async function getMotionServiceInfo() {
+        if (motionServiceInfo) { return motionServiceInfo; }
+        try {
+          var r = await fetch(MOTION_API_URL.replace(/\/$/, "") + "/health");
+          motionServiceInfo = await r.json();
+        } catch (error) {
+          motionServiceInfo = {};
+        }
+        return motionServiceInfo;
+      }
+      function loadTurnstile() {
+        return new Promise(function(resolve, reject) {
+          if (window.turnstile) { resolve(window.turnstile); return; }
+          var tag = document.createElement("script");
+          tag.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+          tag.async = true;
+          tag.onload = function() { resolve(window.turnstile); };
+          tag.onerror = function() { reject(new Error("Bot check failed to load.")); };
+          document.head.appendChild(tag);
+        });
+      }
+      var turnstileWidgetId = null;
+      async function getTurnstileToken() {
+        var info = await getMotionServiceInfo();
+        if (!info.protections || !info.protections.turnstile || getDevCode()) { return ""; }
+        var ts = await loadTurnstile();
+        return new Promise(function(resolve, reject) {
+          var box = document.querySelector("#turnstile-box");
+          if (!box) { box = document.createElement("div"); box.id = "turnstile-box"; motionControls.appendChild(box); }
+          var options = { sitekey: TURNSTILE_SITE_KEY, size: "flexible", callback: resolve,
+                          "error-callback": function() { reject(new Error("Bot check failed. Refresh and try again.")); } };
+          if (turnstileWidgetId === null) { turnstileWidgetId = ts.render(box, options); } else { ts.reset(turnstileWidgetId); }
+          ts.execute(turnstileWidgetId);
+        });
+      }
+
+      // Frames are compiled in this browser by the same compiler the Worker uses (worker/dist/motion-compiler.js).
+      function compileMotionPlan(plan, side) {
+        if (!window.CogniCoachMotion) {
+          throw new Error("The motion compiler (worker/dist/motion-compiler.js) did not load.");
+        }
+        return window.CogniCoachMotion.compilePlan(plan, side);
+      }
 
       var canvas = document.querySelector("#unity-canvas");
       var motionControls = document.querySelector("#motion-controls");
@@ -668,13 +742,8 @@
         var controls = getFrameInputElements();
         button.disabled = true;
         try {
-          var response = await fetch(MOTION_API_URL.replace(/\/$/, "") + "/script", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ script: script, dominant_side: controls.sideInput ? controls.sideInput.value : "right" })
-          });
-          var payload = JSON.parse(await response.text() || "{}");
-          if (!response.ok) { throw new Error(payload.detail || ("HTTP " + response.status)); }
+          // Compiled right here: no server and no model call.
+          var payload = compileMotionPlan({ script: script, title: "Motion script" }, controls.sideInput ? controls.sideInput.value : "right");
           playGeneratedMotion(payload);
         } catch (error) {
           setMotionStatus("Script error: " + error.message, true);
@@ -744,7 +813,20 @@
           button.onclick = function() { setCameraView(button.getAttribute("data-view")); };
         });
 
-        // The OpenAI API key stays on the Python backend, never in this browser file.
+        var devSave = document.querySelector("#dev-code-save");
+        if (devSave) {
+          devSave.onclick = function() {
+            var input = document.querySelector("#dev-code-input");
+            setDevCode((input && input.value || "").trim());
+            if (input) { input.value = ""; }
+            setMotionStatus(getDevCode() ? "Dev code saved in this browser. Press Generate AI Motion." : "Dev code cleared.");
+            showDevCodeRow(!getDevCode());
+          };
+        }
+        var onSite = /(^|\.)cognicoachai\.com$/.test(window.location.hostname);
+        showDevCodeRow(!onSite && !getDevCode());
+
+        // The OpenAI API key stays on the server (a Cloudflare Worker secret), never in this browser file.
         if (controls.generateButton) {
           controls.generateButton.onclick = async function() {
             var movement = (controls.promptInput && controls.promptInput.value || "").trim();
@@ -758,11 +840,13 @@
 
             controls.generateButton.disabled = true;
             controls.generateButton.textContent = "Generating...";
-            setMotionStatus("Planning the movement (this takes ~20-40 s)...");
+            setMotionStatus("Planning the movement (usually 3-7 s)...");
+            var side = controls.sideInput ? controls.sideInput.value : "right";
             try {
+              var turnstileToken = await getTurnstileToken();
               var response = await fetch(MOTION_API_URL.replace(/\/$/, "") + "/generate", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: motionApiHeaders(turnstileToken ? { "X-Turnstile-Token": turnstileToken } : {}),
                 body: JSON.stringify({
                   movement: movement,
                   duration_seconds: duration && duration >= 0.6 ? duration : null,
@@ -779,14 +863,18 @@
                 throw new Error("Motion service returned invalid JSON (HTTP " + response.status + ").");
               }
               if (!response.ok) {
+                if (response.status === 401) { showDevCodeRow(true); }
                 throw new Error(payload.detail || ("Motion service returned HTTP " + response.status));
+              }
+              if (payload.compile === "client") {
+                payload = compileMotionPlan(payload, side);
               }
               if (!Array.isArray(payload.frames) || payload.frames.length < 2) {
                 throw new Error("The motion service returned no usable frames.");
               }
               playGeneratedMotion(payload);
             } catch (error) {
-              setMotionStatus("Generation failed: " + error.message + " Make sure motion_engine.py is running at " + MOTION_API_URL + ".", true);
+              setMotionStatus("Generation failed: " + error.message + " (motion service: " + MOTION_API_URL + ")", true);
               console.error(error);
             } finally {
               controls.generateButton.disabled = false;
@@ -834,6 +922,9 @@
         startMotionLoop();
         var report = payload.report || {};
         var status = "Generated " + motionFrames.length + " frames" + (payload.cached ? " (cached)" : "") + ".";
+        if (payload.timing && payload.timing.total_seconds !== undefined) {
+          status += " " + payload.timing.total_seconds + " s (" + (payload.timing.source || "") + ").";
+        }
         var timeScale = report.playback_time_scale || 1;
         if (Math.abs(timeScale - 1) > 0.05) {
           status += " Auto speed: " + (timeScale > 1 ? "slowed " + timeScale.toFixed(1) + "x" : "sped up " + (1 / timeScale).toFixed(1) + "x") +

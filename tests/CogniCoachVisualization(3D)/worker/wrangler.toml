@@ -1,0 +1,19 @@
+# CogniCoach Motion Engine Worker (free plan friendly: no paid features).
+# Secrets (set in the Cloudflare dashboard -> Worker -> Settings -> Variables and Secrets, or `wrangler secret put`):
+#   OPENAI_API_KEY    required for AI requests (instant phrases work without it)
+#   DEV_CODE          lets other origins / tools call the API with the header X-Dev-Code
+#   TURNSTILE_SECRET  optional: when set, requests from the site must carry a Turnstile token
+name = "cognicoach-motion"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+workers_dev = true
+preview_urls = false
+
+[vars]
+ALLOWED_ORIGINS = "https://cognicoachai.com,https://www.cognicoachai.com"
+RATE_LIMIT_PER_MINUTE = "10"
+DAILY_MODEL_LIMIT = "300"
+MOTION_SCRIPT_TIMEOUT = "9"
+
+[observability]
+enabled = true
