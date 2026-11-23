@@ -535,8 +535,17 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
         else:
             break
         trimmed = True
+    if total() > MAX_SECONDS:
+        # still too long: shorten every hold proportionally (holds are the only other free time)
+        holds = [tr for t, r, _, _ in built for tr in t if tr.hold > 0]
+        if holds:
+            excess = total() - MAX_SECONDS
+            sum_h = sum(tr.hold for tr in holds)
+            for tr in holds:
+                tr.hold = max(0.2, tr.hold - excess * tr.hold / sum_h)
+            trimmed = True
     if trimmed:
-        warnings.append(f"repetitions trimmed so the clip stays under {MAX_SECONDS:.0f} s")
+        warnings.append(f"repetitions / holds trimmed so the clip stays under {MAX_SECONDS:.0f} s")
 
     # timeline
     pose = {p: dict(v) for p, v in NEUTRAL.items()}
@@ -591,16 +600,62 @@ def _smooth(u: float) -> float:
     return u * u * (3 - 2 * u)
 
 
+ARM_WAYPOINTS = [  # arm detours (out to the own side, or up) for blends that would pass through the body
+    {"raise": 60.0, "dir": 95.0, "twist": 0.0, "elbow": 30.0},
+    {"raise": 110.0, "dir": 60.0, "twist": 0.0, "elbow": 30.0},
+    {"raise": 45.0, "dir": 30.0, "twist": 0.0, "elbow": 60.0},
+]
+
+
+def _slerp_m(a: np.ndarray, b: np.ndarray, u: float) -> np.ndarray:
+    return me.quat_to_matrix(me.slerp(me.matrix_to_quat(a), me.matrix_to_quat(b), u))
+
+
+def _arm_route_penetration(r0, r1, side: str, wp=None) -> float:
+    """Worst arm/body penetration along a blend from rotations r0 to r1 (optionally via waypoint rotations)."""
+    worst = 0.0
+    sh, el = f"{side}shoulder", f"{side}elbow"
+    for u in (0.2, 0.35, 0.5, 0.65, 0.8):
+        rot = {j: _slerp_m(r0[j], r1[j], u) for j in r1}
+        if wp is not None:
+            for j in (sh, el):
+                rot[j] = _slerp_m(r0[j], wp[j], u / 0.5) if u < 0.5 else _slerp_m(wp[j], r1[j], (u - 0.5) / 0.5)
+        world = me.world_rotations(rot)
+        worst = max(worst, body_penetration(world, me.forward_kinematics(world), side))
+    return worst
+
+
 def _frames(samples, loop: bool, fps: int) -> List[Dict[str, float]]:
     frames: List[Dict[str, float]] = []
     prev_e: Dict[str, Tuple[float, float, float]] = {}
+    routes: Dict[int, Dict[str, Any]] = {}    # one detour decision per line transition (no flicker)
     for idx, (pose, blend) in enumerate(samples):
         rot = part_rotations(pose)
         w = blend["w"]
         scal = pose["body"]
         if w < 1.0:
             r0 = part_rotations(blend["start"])
-            rot = {j: me.quat_to_matrix(me.slerp(me.matrix_to_quat(r0[j]), me.matrix_to_quat(rot[j]), w)) for j in rot}
+            key = id(blend["start"])
+            if key not in routes:
+                routes[key] = {}
+                for side, sign in (("right", 1.0), ("left", -1.0)):
+                    if _arm_route_penetration(r0, rot, side) <= 0.03:
+                        continue
+                    best = None
+                    for wpa in ARM_WAYPOINTS:
+                        wp = dict(rot)
+                        wp[f"{side}shoulder"] = me.limb_local_rotation(wpa["raise"], wpa["dir"], wpa["twist"], sign)
+                        wp[f"{side}elbow"] = me.rx(-wpa["elbow"])
+                        d = _arm_route_penetration(r0, rot, side, wp)
+                        if best is None or d < best[0]:
+                            best = (d, wp)
+                    if best and best[0] <= 0.03:
+                        routes[key][side] = best[1]
+            blended = {j: _slerp_m(r0[j], rot[j], w) for j in rot}
+            for side, wp in routes[key].items():
+                for j in (f"{side}shoulder", f"{side}elbow"):
+                    blended[j] = _slerp_m(r0[j], wp[j], w / 0.5) if w < 0.5 else _slerp_m(wp[j], rot[j], (w - 0.5) / 0.5)
+            rot = blended
             scal = {k: blend["start"]["body"][k] + (pose["body"][k] - blend["start"]["body"][k]) * w for k in scal}
         world = me.world_rotations(rot)
         pos = me.forward_kinematics(world)

@@ -13,9 +13,10 @@ How it works (default pipeline: "script")
 
 Files
 -----
-motion_database.py           THE MOTION DATABASE. Every stored motion: name, comment, kind (action /
+motion_database.py           THE MOTION DATABASE (317 motions: skills, drills, positions, floor/yoga/fitness). Every stored motion: name, comment, kind (action /
                              cycle / pose), the body parts it drives (hard) or offers (soft),
                              parameters, and its keyframes in anatomical angles.
+sport_coverage.py            351 sport movements as scripts (instant phrases + model recipes); writes SPORT_COVERAGE.md.
 validate_motion_database.py  Checks every motion (arm/body contact, abrupt joint changes).
                              Run after adding or editing motions.
 motion_script.py             The language: parser + compiler.

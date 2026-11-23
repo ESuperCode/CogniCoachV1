@@ -3285,6 +3285,375 @@ _POS_ALIASES2 = {
 }
 
 
+# =============================================================================
+# 25. FITNESS / YOGA / STRETCHING POSITIONS
+# =============================================================================
+PRAYER = {"right_arm": arm_at(0.02, -0.20, 0.22, "down", "right"), "left_arm": arm_at(0.02, -0.20, 0.22, "down", "left")}
+SUPINE = {"body": B(-90)}   # body orientation only (spine / pelvis keep their defaults unless given)
+
+
+@motion("mountain_pose", "Mountain pose / tall standing: feet together, legs straight, spine tall, hands pressed "
+        "together at the chest (prayer).", "pose", FULL, ["neck"])
+def _mountain():
+    return [k(0.0, right_leg=Lg(1, 0, 4, 2), left_leg=Lg(1, 0, 4, 2), spine=S(0), pelvis=P(), **PRAYER)]
+
+
+@motion("chair_pose", "Chair pose: knees bent as if sitting back into a chair, weight in the heels, chest lifted, "
+        "both arms reaching up overhead.", "pose", FULL, ["neck"])
+def _chair():
+    return [k(0.0, **stance_legs("narrow", 0.8), spine=S(18), pelvis=P(8), right_arm=A(165, 10, 0, 5), left_arm=A(165, 10, 0, 5))]
+
+
+@motion("warrior_one", "Warrior I / crescent lunge: the left foot forward with the knee bent, the right leg long "
+        "behind, hips square, both arms reaching straight up.", "pose", FULL, ["neck"])
+def _warrior1():
+    return [k(0.0, left_leg=leg_at(0.45, 0.16, 0.25, 0, 10, "left"), right_leg=Lg(35, 180, 20, 3), spine=S(-5), pelvis=P(-5),
+              right_arm=A(170, 10, 0, 3), left_arm=A(170, 10, 0, 3), neck=N(-15))]
+
+
+@motion("reverse_warrior", "Reverse warrior: wide stance with the right knee bent, trunk leaning back over the "
+        "straight left leg, the right arm arcing up overhead and the left hand sliding down the left leg.",
+        "pose", FULL, ["neck"])
+def _rev_warrior():
+    return [k(0.0, right_leg=leg_at(0.0, 0.48, 0.25, 0, 70, "right"), left_leg=leg_at(0.0, 0.42, 0.0, 0, 10, "left"),
+              spine=S(0, 0, -25), right_arm=A(165, 60, 0, 5), left_arm=A(25, 85, 0, 5), neck=N(-20, 0, -10))]
+
+
+@motion("triangle_pose", "Triangle pose: wide straight-legged stance, the trunk tipped sideways over the right leg, "
+        "the right hand down toward the right shin and the left arm straight up to the sky.", "pose", FULL, ["neck"])
+def _triangle():
+    return [k(0.0, right_leg=leg_at(0.0, 0.50, 0.03, 0, 70, "right"), left_leg=leg_at(0.0, 0.40, 0.03, 0, 10, "left"),
+              spine=S(5, 0, 55), pelvis=P(0, 0, 15), right_arm=A(10, 85, 0, 3), left_arm=A(170, 85, 0, 3), neck=N(0, -30))]
+
+
+@motion("garland_squat", "Garland / deep yogi squat: heels down, knees wide, hips low between the heels, elbows "
+        "pressing the knees apart with the hands together at the chest.", "pose", FULL, ["neck"])
+def _garland():
+    return [k(0.0, **stance_legs("wide", 1.3, toe=35), spine=S(30), pelvis=P(12), **PRAYER)]
+
+
+@motion("standing_side_stretch", "Standing side stretch: feet together, the right arm reaching up and over the head "
+        "to the left as the trunk bends sideways, the left hand on the hip.", "pose", ARMS + ["spine"], ["neck"])
+def _side_stretch():
+    return [k(0.0, spine=S(0, 0, -25), right_arm=A(160, 60, 0, 10), left_arm=arm_at(0.26, -0.47, 0.02, "out", "left"))]
+
+
+@motion("triceps_stretch", "Overhead triceps stretch: the right arm up with the elbow bent and the hand dropped "
+        "behind the head, the left hand pulling the right elbow.", "pose", ARMS, ["neck"])
+def _tri_stretch():
+    return [k(0.0, right_arm=A(165, 15, 0, 140), left_arm=A(150, -20, 0, 100))]
+
+
+@motion("chest_opener", "Chest opener: hands clasped behind the back, arms straight, shoulders pulled back and chest "
+        "lifted.", "pose", ARMS + ["spine"], ["neck"])
+def _chest_opener():
+    return [k(0.0, spine=S(-8), right_arm=A(35, 175, 0, 5), left_arm=A(35, 175, 0, 5), neck=N(-10))]
+
+
+@motion("neck_stretch", "Neck side stretch: tilt the head toward the right shoulder, the right hand resting on the "
+        "head, the left arm long by the side.", "pose", ["neck", "right_arm"], ["left_arm"])
+def _neck_stretch():
+    return [k(0.0, neck=N(0, 0, 30), right_arm=A(145, 60, 90, 120), left_arm=A(8, 70, 0, 5))]
+
+
+@motion("calf_stretch", "Standing calf stretch: the right leg back straight with the heel pressed down, the left "
+        "knee bent in front, hands on the left thigh.", "pose", FULL, ["neck"])
+def _calf_stretch():
+    return [k(0.0, left_leg=leg_at(0.30, 0.15, 0.16, 0, 10, "left"), right_leg=Lg(28, 180, 10, 3), spine=S(25),
+              **both(0.18, -0.55, 0.30, "out"))]
+
+
+@motion("wall_sit", "Wall sit hold: back upright, thighs parallel to the floor and shins vertical (as if sitting "
+        "against a wall), arms crossed or hanging.", "pose", FULL, ["neck"])
+def _wall_sit():
+    return [k(0.0, right_leg=Lg(88, 0, 8, 88), left_leg=Lg(88, 0, 8, 88), spine=S(0), pelvis=P(), right_arm=A(10, 30, 0, 5),
+              left_arm=A(10, 30, 0, 5))]
+
+
+@motion("goblet_squat", "Goblet squat: holding a weight with both hands at the chest, elbows down, squat deep between "
+        "the knees and stand.", "action", FULL, ["neck"])
+def _goblet():
+    hold = grip2(0.0, -0.22, 0.26, "down")
+    return [k(0.0, **stance_legs("wide", 0.05, toe=25), spine=S(4), pelvis=P(), **hold),
+            k(1.0, **stance_legs("wide", 1.1, toe=25), spine=S(25), pelvis=P(10)), k(1.25, hold=True),
+            k(2.1, **stance_legs("wide", 0.05, toe=25), spine=S(4), pelvis=P())]
+
+
+@motion("sumo_squat", "Sumo squat: very wide stance with the toes turned out, sink straight down with the trunk "
+        "upright, hands together at the chest, stand.", "action", FULL, ["neck"])
+def _sumo():
+    return [k(0.0, **stance_legs("very_wide", 0.05, toe=40), spine=S(3), **PRAYER),
+            k(1.0, **stance_legs("very_wide", 0.95, toe=40), spine=S(12)), k(1.25, hold=True),
+            k(2.1, **stance_legs("very_wide", 0.05, toe=40), spine=S(3))]
+
+
+@motion("thruster", "Thruster: front squat with the hands at the shoulders, then drive up and press both arms "
+        "straight overhead in one motion.", "action", FULL, ["neck"])
+def _thruster():
+    rack = both(0.20, 0.04, 0.16, "forward")
+    return [k(0.0, **stance_legs("normal", 0.05), spine=S(4), **rack),
+            k(0.9, **stance_legs("normal", 1.0), spine=S(25), pelvis=P(10)),
+            k(1.4, **stance_legs("normal", 0.05), spine=S(0), pelvis=P(), right_arm=A(170, 15, 0, 5), left_arm=A(170, 15, 0, 5)),
+            k(1.7, hold=True), k(2.2, **rack, spine=S(4))]
+
+
+@motion("reverse_lunge", "Reverse lunge: step the right foot back and lower until both knees are near 90 degrees, "
+        "then drive back up to standing.", "action", LEGS + ["pelvis"], ARMS + ["spine"])
+def _reverse_lunge():
+    stand = stance_legs("normal", 0.05)
+    low = {"left_leg": leg_at(0.10, 0.14, 0.36, 0, 6, "left"), "right_leg": Lg(30, 180, 4, 100)}
+    return [k(0.0, **stand, right_arm=HANG, left_arm=HANG),
+            k(0.45, left_leg=leg_at(0.05, 0.14, 0.06, 0, 6, "left"), right_leg=Lg(25, 180, 4, 25)),
+            k(1.1, **low, right_arm=A(10, 60, 30, 20), left_arm=A(10, 60, 30, 20)), k(1.35, hold=True),
+            k(1.9, left_leg=leg_at(0.05, 0.14, 0.06, 0, 6, "left"), right_leg=Lg(25, 180, 4, 25)), k(2.3, **stand, right_arm=HANG, left_arm=HANG)]
+
+
+@motion("curtsy_lunge", "Curtsy lunge: step the right foot back and across behind the left, bend both knees, then "
+        "return.", "action", LEGS + ["pelvis"], ARMS + ["spine"])
+def _curtsy():
+    stand = stance_legs("normal", 0.05)
+    return [k(0.0, **stand, **PRAYER),
+            k(1.0, left_leg=leg_at(0.10, 0.14, 0.32, 0, 10, "left"), right_leg=Lg(30, -160, 0, 95), pelvis=P(5, -15)),
+            k(1.3, hold=True), k(2.1, **stand, pelvis=P())]
+
+
+@motion("good_morning", "Good morning: hands behind the head, knees soft, hinge forward at the hips with a flat back "
+        "until the trunk is near horizontal, then stand.", "action", FULL, ["neck"])
+def _good_morning():
+    hands = {"right_arm": A(130, 80, 90, 120), "left_arm": A(130, 80, 90, 120)}
+    return [k(0.0, **stance_legs("normal", 0.1), spine=S(3), pelvis=P(), **hands),
+            k(1.0, **stance_legs("normal", 0.25), spine=S(70), pelvis=P(20)), k(1.25, hold=True),
+            k(2.1, **stance_legs("normal", 0.1), spine=S(3), pelvis=P())]
+
+
+@motion("lateral_raise", "Lateral raise: arms straight out to the sides up to shoulder height and back down.",
+        "cycle", ARMS, ["spine"], period=1.8)
+def _lat_raise():
+    return [k(0.0, right_arm=A(10, 85, 0, 10), left_arm=A(10, 85, 0, 10)), k(0.8, right_arm=A(88, 85, 0, 10), left_arm=A(88, 85, 0, 10)),
+            k(1.0, hold=True)]
+
+
+@motion("front_raise", "Front raise: straight arms raised forward to shoulder height and lowered.", "cycle", ARMS,
+        ["spine"], period=1.8)
+def _front_raise():
+    return [k(0.0, right_arm=A(10, 5, 0, 5), left_arm=A(10, 5, 0, 5)), k(0.8, right_arm=A(88, 5, 0, 5), left_arm=A(88, 5, 0, 5)),
+            k(1.0, hold=True)]
+
+
+@motion("overhead_triceps_extension", "Overhead triceps extension: both hands holding a weight behind the head with "
+        "the elbows pointing up, straighten the arms overhead and lower.", "cycle", ARMS, ["spine"], period=1.8)
+def _oh_tri():
+    return [k(0.0, right_arm=A(160, 20, 0, 140), left_arm=A(160, 20, 0, 140)), k(0.8, right_arm=A(170, 15, 0, 5), left_arm=A(170, 15, 0, 5)),
+            k(1.0, hold=True)]
+
+
+@motion("pull_up", "Pull-up / chin-up: hanging from a bar with straight arms overhead, pull the chin up over the bar "
+        "with the elbows driving down, lower.", "cycle", ["body"] + FULL, ["neck"], period=2.0)
+def _pull_up():
+    hang = {"right_arm": A(170, 25, 0, 5), "left_arm": A(170, 25, 0, 5)}
+    top = {"right_arm": A(120, 40, 60, 140), "left_arm": A(120, 40, 60, 140)}
+    return [k(0.0, body=B(air=1.0, root=0.25), right_leg=Lg(15, 0, 4, 40), left_leg=Lg(15, 0, 4, 40), spine=S(-3), **hang, neck=N(-15)),
+            k(0.9, body=B(air=1.0, root=0.55), **top), k(1.1, hold=True)]
+
+
+@motion("plank_jacks", "Plank jacks: in a plank on straight arms, hop the feet wide apart and back together.",
+        "cycle", ["body"] + FULL, ["neck"], period=0.8)
+def _plank_jacks():
+    arms = support_arms(PLANK_PITCH)
+    return [k(0.0, body=B(PLANK_PITCH), spine=S(0), pelvis=P(), **arms, right_leg=Lg(2, 90, 0, 0), left_leg=Lg(2, 90, 0, 0), neck=N(-25)),
+            k(0.4, right_leg=Lg(18, 90, 0, 0), left_leg=Lg(18, 90, 0, 0))]
+
+
+@motion("shoulder_taps", "Plank shoulder taps: in a straight-arm plank, lift one hand to tap the opposite shoulder, "
+        "alternating, hips steady.", "cycle", ["body"] + FULL, ["neck"], period=1.2)
+def _shoulder_taps():
+    arms = support_arms(PLANK_PITCH, spread=0.32)
+    tap_r = {"right_arm": arm_at(-0.18, 0.0, 0.12, "down", "right")}
+    tap_l = {"left_arm": arm_at(-0.18, 0.0, 0.12, "down", "left")}
+    legs = {"right_leg": Lg(8, 90, 0, 0), "left_leg": Lg(8, 90, 0, 0)}
+    return [k(0.0, body=B(PLANK_PITCH), spine=S(0), pelvis=P(), **arms, **legs, neck=N(-25)),
+            k(0.3, **tap_r), k(0.6, right_arm=arms["right_arm"]), k(0.9, **tap_l)]
+
+
+@motion("bicycle_crunch", "Bicycle crunch: lying on the back with hands behind the head, shoulders lifted, bring the "
+        "right elbow toward the left knee while the right leg extends, then switch.", "cycle", ["body"] + FULL, ["neck"],
+        period=1.2)
+def _bicycle():
+    hands = {"right_arm": A(130, 80, 90, 125), "left_arm": A(130, 80, 90, 125)}
+    return [k(0.0, **SUPINE, spine=S(25, -30), **hands, left_leg=Lg(85, 0, 0, 100), right_leg=Lg(25, 0, 0, 5), neck=N(20)),
+            k(0.6, spine=S(25, 30), right_leg=Lg(85, 0, 0, 100), left_leg=Lg(25, 0, 0, 5))]
+
+
+@motion("leg_raises", "Lying leg raises: on the back with the arms by the sides, raise both straight legs to "
+        "vertical and lower them slowly toward the floor.", "cycle", ["body"] + FULL, ["neck"], period=2.4)
+def _leg_raises():
+    arms = {"right_arm": A(10, 30, 0, 5), "left_arm": A(10, 30, 0, 5)}
+    return [k(0.0, **SUPINE, **arms, right_leg=Lg(10, 0, 0, 2), left_leg=Lg(10, 0, 0, 2)),
+            k(1.0, right_leg=Lg(88, 0, 0, 2), left_leg=Lg(88, 0, 0, 2)), k(1.2, hold=True)]
+
+
+@motion("flutter_kicks_back", "Flutter kicks on the back: lying face up with the lower back down, straight legs "
+        "hovering and kicking up and down in small fast alternating beats.", "cycle", ["body"] + FULL, ["neck"],
+        period=0.5)
+def _flutter_back():
+    arms = {"right_arm": A(10, 30, 0, 5), "left_arm": A(10, 30, 0, 5)}
+    return [k(0.0, **SUPINE, **arms, right_leg=Lg(30, 0, 0, 2), left_leg=Lg(12, 0, 0, 2), neck=N(15)),
+            k(0.25, right_leg=Lg(12, 0, 0, 2), left_leg=Lg(30, 0, 0, 2))]
+
+
+@motion("v_up", "V-up: from lying flat with the arms overhead, lift the straight legs and the trunk together so the "
+        "hands reach toward the toes in a V, then lower.", "action", ["body"] + FULL, ["neck"])
+def _v_up():
+    flat = {**SUPINE, "right_leg": Lg(0, 0, 0, 2), "left_leg": Lg(0, 0, 0, 2), "right_arm": A(170, 8, 0, 3), "left_arm": A(170, 8, 0, 3)}
+    return [k(0.0, **flat), k(0.6, body=B(-45), spine=S(30), right_leg=Lg(110, 0, 0, 2), left_leg=Lg(110, 0, 0, 2),
+                                right_arm=A(75, 5, 0, 3), left_arm=A(75, 5, 0, 3)),
+            k(0.8, hold=True), k(1.5, **flat)]
+
+
+@motion("boat_pose", "Boat pose / V-sit hold: balancing on the sit bones, trunk leaning back, straight legs lifted, "
+        "arms reaching forward parallel to the floor.", "pose", ["body"] + FULL, ["neck"])
+def _boat():
+    return [k(0.0, body=B(-40), spine=S(5), right_leg=Lg(100, 0, 0, 5), left_leg=Lg(100, 0, 0, 5),
+              right_arm=A(70, 5, 0, 3), left_arm=A(70, 5, 0, 3))]
+
+
+@motion("donkey_kicks", "Donkey kicks: on hands and knees, kick the right foot up toward the ceiling with the knee "
+        "bent at 90 degrees, lower, repeat.", "cycle", ["body"] + FULL, ["neck"], period=1.4)
+def _donkey():
+    t = _table()
+    return [k(0.0, **t, neck=N(-10)), k(0.6, right_leg=full("right_leg", **{**t["right_leg"], "raise": 10.0, "dir": 180.0, "knee": 90.0})),
+            k(0.8, hold=True)]
+
+
+@motion("fire_hydrants", "Fire hydrants: on hands and knees, lift the bent right knee out to the side to hip height "
+        "and lower.", "cycle", ["body"] + FULL, ["neck"], period=1.4)
+def _hydrant():
+    t = _table()
+    return [k(0.0, **t, neck=N(-10)), k(0.6, right_leg=full("right_leg", **{**t["right_leg"], "dir": 70.0})), k(0.8, hold=True)]
+
+
+@motion("side_lying_leg_raise", "Side-lying leg raise: lying on the left side with the head on the left arm, lift "
+        "the straight top (right) leg up and lower it.", "cycle", ["body"] + FULL, ["neck"], period=1.6)
+def _side_leg():
+    return [k(0.0, body=B(0, 0, -85), spine=S(0), pelvis=P(), left_leg=Lg(0, 0, 0, 2), right_leg=Lg(2, 90, 0, 2),
+              left_arm=A(170, 85, 0, 20), right_arm=A(20, 0, 0, 30)),
+            k(0.7, right_leg=Lg(45, 90, 0, 2)), k(0.9, hold=True)]
+
+
+@motion("crab_walk", "Crab walk: face up on the hands and feet with the hips lifted, stepping the opposite hand and "
+        "foot forward together.", "cycle", ["body"] + FULL, ["neck"], period=1.0)
+def _crab():
+    base = fit_pose("crab", {"body.pitch": -90, "legs.raise": 85, "legs.knee": 95, "arms.raise": 35},
+                    {"legs": {"dir": 0.0, "twist": 10.0}, "arms": {"dir": 175.0, "twist": 0.0, "elbow": 3.0}, "spine": {"lean": 0.0}},
+                    [("right_foot", "floor", 0, 3), ("right_hand", "floor", 0, 3), ("pelvis", "y", 0.45, 1)])
+    a, b = dict(base), dict(base)
+    a["right_arm"] = full("right_arm", **{**base["right_arm"], "raise": base["right_arm"]["raise"] + 15})
+    a["left_leg"] = full("left_leg", **{**base["left_leg"], "raise": base["left_leg"]["raise"] + 12})
+    b["left_arm"] = full("left_arm", **{**base["left_arm"], "raise": base["left_arm"]["raise"] + 15})
+    b["right_leg"] = full("right_leg", **{**base["right_leg"], "raise": base["right_leg"]["raise"] + 12})
+    return [k(0.0, **a, neck=N(20)), k(0.5, **b)]
+
+
+@motion("pigeon_pose", "Pigeon pose: the right shin folded across in front on the floor, the left leg straight back "
+        "along the floor, hips square and low, trunk upright on the hands.", "pose", ["body"] + FULL, ["neck"])
+def _pigeon():
+    return [k(0.0, **fit_pose("pigeon", {"right_leg.raise": 70, "right_leg.knee": 120, "left_leg.raise": 70, "spine.lean": 10},
+                               {"right_leg": {"dir": -15.0, "twist": 70.0}, "left_leg": {"dir": 180.0, "twist": 0.0, "knee": 3.0},
+                                "arms": {"raise": 15.0, "dir": 20.0, "twist": 0.0, "elbow": 3.0}},
+                               [("right_knee", "floor", 0, 3), ("left_foot", "floor", 0, 3), ("pelvis", "y", 0.16, 2),
+                                ("right_hand", "floor", 0, 1)]))]
+
+
+@motion("happy_baby", "Happy baby: lying on the back, knees pulled wide toward the armpits, hands holding the feet "
+        "with the soles facing up.", "pose", ["body"] + FULL, ["neck"])
+def _happy_baby():
+    return [k(0.0, **SUPINE, right_leg=Lg(115, 45, 30, 95), left_leg=Lg(115, 45, 30, 95), right_arm=A(110, 30, 0, 20),
+              left_arm=A(110, 30, 0, 20))]
+
+
+@motion("knee_to_chest", "Lying knee-to-chest stretch: on the back, both knees hugged into the chest.", "pose",
+        ["body"] + FULL, ["neck"])
+def _knee_chest():
+    return [k(0.0, **SUPINE, right_leg=Lg(125, 0, 0, 130), left_leg=Lg(125, 0, 0, 130), right_arm=A(75, 10, 0, 70),
+              left_arm=A(75, 10, 0, 70), neck=N(15))]
+
+
+@motion("figure_four_stretch", "Figure-four stretch: lying on the back, the right ankle crossed over the left knee, "
+        "pulling the left thigh toward the chest.", "pose", ["body"] + FULL, ["neck"])
+def _figure_four():
+    return [k(0.0, **SUPINE, left_leg=Lg(100, 0, 0, 90), right_leg=Lg(90, 50, 60, 110), right_arm=A(75, 10, 0, 60),
+              left_arm=A(75, 10, 0, 60))]
+
+
+@motion("supine_twist", "Lying spinal twist: on the back with the arms out wide, both bent knees dropped over to "
+        "the right side, head turned left.", "pose", ["body"] + FULL, ["neck"])
+def _supine_twist():
+    return [k(0.0, **SUPINE, pelvis=P(0, 25, 0), right_leg=Lg(80, 75, 0, 95), left_leg=Lg(80, -60, 0, 95), right_arm=A(88, 88, 0, 3),
+              left_arm=A(88, 88, 0, 3), neck=N(0, -45))]
+
+
+@motion("seated_twist", "Seated spinal twist: sitting tall with the legs out, the trunk rotated to the right with "
+        "the right hand behind on the floor and the left elbow across the right knee.", "pose", ["body"] + FULL, ["neck"])
+def _seated_twist():
+    s = _seated()
+    return [k(0.0, **{**s, "spine": S(5, 55), "right_arm": A(25, 170, 0, 5), "left_arm": A(60, -40, 0, 60)}, neck=N(0, 30))]
+
+
+@motion("camel_pose", "Camel pose: kneeling upright, the hips pushed forward and the back arched as the hands reach "
+        "back to the heels, chest lifted to the sky.", "pose", FULL, ["neck"])
+def _camel():
+    return [k(0.0, right_leg=Lg(-10, 0, 0, 100), left_leg=Lg(-10, 0, 0, 100), spine=S(-55), pelvis=P(-15),
+              right_arm=A(45, 175, 0, 3), left_arm=A(45, 175, 0, 3), neck=N(-35))]
+
+
+@motion("low_plank", "Low plank (chaturanga): body in a straight line hovering just above the floor on bent arms, "
+        "elbows hugging the ribs.", "pose", ["body"] + FULL, ["neck"])
+def _low_plank():
+    return [k(0.0, body=B(PUSHUP_LOW_PITCH), spine=S(0), pelvis=P(), **support_arms(PUSHUP_LOW_PITCH),
+              right_leg=Lg(0, 0, 0, 0), left_leg=Lg(0, 0, 0, 0), neck=N(-30))]
+
+
+@motion("prayer_hands", "Hands pressed together in front of the chest (greeting, centering, yoga).", "pose", ARMS, [])
+def _prayer():
+    return [k(0.0, **PRAYER)]
+
+
+@motion("dead_hang", "Dead hang from a bar: arms straight overhead, body long and relaxed, feet off the ground.",
+        "pose", ["body"] + FULL, ["neck"])
+def _dead_hang():
+    return [k(0.0, body=B(air=1.0, root=0.25), right_leg=Lg(5, 0, 4, 10), left_leg=Lg(5, 0, 4, 10), spine=S(0),
+              right_arm=A(172, 20, 0, 3), left_arm=A(172, 20, 0, 3))]
+
+
+_POS_ALIASES3 = {
+    "mountain pose": "mountain_pose(hold=2)", "chair pose": "chair_pose(hold=2)", "warrior one": "warrior_one(hold=2)",
+    "warrior 1": "warrior_one(hold=2)", "crescent lunge": "warrior_one(hold=2)", "warrior two": "warrior_pose(hold=2)",
+    "warrior 2": "warrior_pose(hold=2)", "reverse warrior": "reverse_warrior(hold=2)", "triangle pose": "triangle_pose(hold=2)",
+    "garland pose": "garland_squat(hold=2)", "yogi squat": "garland_squat(hold=2)", "malasana": "garland_squat(hold=2)",
+    "side stretch": "stand + standing_side_stretch(hold=2)", "triceps stretch": "stand + triceps_stretch(hold=2)",
+    "chest stretch": "stand + chest_opener(hold=2)", "neck stretch": "stand + neck_stretch(hold=2)", "calf stretch": "calf_stretch(hold=2)",
+    "wall sit": "wall_sit(hold=3)", "goblet squat": "goblet_squat", "sumo squat": "sumo_squat", "thruster": "thruster",
+    "thrusters": "thruster\nthruster", "reverse lunge": "reverse_lunge", "reverse lunges": "reverse_lunge\nreverse_lunge(side=left)",
+    "curtsy lunge": "curtsy_lunge\ncurtsy_lunge(side=left)", "good morning": "good_morning", "good mornings": "good_morning\ngood_morning",
+    "lateral raise": "stand + lateral_raise(times=3)", "lateral raises": "stand + lateral_raise(times=3)",
+    "front raise": "stand + front_raise(times=3)", "front raises": "stand + front_raise(times=3)",
+    "triceps extension": "stand + overhead_triceps_extension(times=3)", "overhead triceps extension": "stand + overhead_triceps_extension(times=3)",
+    "pull up": "pull_up(times=2)", "pull ups": "pull_up(times=3)", "chin up": "pull_up(times=2)", "chin ups": "pull_up(times=3)",
+    "plank jacks": "plank_jacks(times=4)", "shoulder taps": "shoulder_taps(times=3)", "plank shoulder taps": "shoulder_taps(times=3)",
+    "bicycle crunches": "bicycle_crunch(times=4)", "bicycle crunch": "bicycle_crunch(times=4)", "leg raises": "leg_raises(times=3)",
+    "flutter kicks": "flutter_kicks_back(times=6)", "v up": "v_up", "v ups": "v_up\nv_up", "boat pose": "boat_pose(hold=2)",
+    "v sit": "boat_pose(hold=2)", "donkey kicks": "donkey_kicks(times=3)", "fire hydrants": "fire_hydrants(times=3)",
+    "side leg raises": "side_lying_leg_raise(times=3)", "crab walk": "crab_walk(times=3)", "pigeon pose": "pigeon_pose(hold=2)",
+    "pigeon stretch": "pigeon_pose(hold=2)", "happy baby": "happy_baby(hold=2)", "knee to chest": "knee_to_chest(hold=2)",
+    "knees to chest": "knee_to_chest(hold=2)", "figure four stretch": "figure_four_stretch(hold=2)", "figure 4 stretch": "figure_four_stretch(hold=2)",
+    "spinal twist": "supine_twist(hold=2)", "lying twist": "supine_twist(hold=2)", "seated twist": "seated_twist(hold=2)",
+    "camel pose": "camel_pose(hold=2)", "chaturanga": "plank\nlow_plank(hold=1.5)", "low plank": "low_plank(hold=2)",
+    "prayer hands": "stand + prayer_hands(hold=2)", "dead hang": "dead_hang(hold=2)", "hang from a bar": "dead_hang(hold=2)",
+    "corpse pose": "lie_on_back(hold=3)", "savasana": "lie_on_back(hold=3)", "forward fold": "hamstring_stretch(hold=2)",
+    "toe touch": "hamstring_stretch(hold=2)", "upward salute": "stand + arms_overhead(hold=2)",
+}
+
+
 ALIASES: Dict[str, str] = {
     "childs pose": "childs_pose(hold=2)", "child pose": "childs_pose(hold=2)", "childs pose stretch": "childs_pose(hold=2)",
     "kneeling": "kneel(hold=1)", "kneel": "kneel(hold=1)", "half kneeling": "half_kneel(hold=1)",
@@ -3336,16 +3705,29 @@ ALIASES: Dict[str, str] = {
 
 
 def catalog_text() -> str:
-    """Compact catalog for the language model: name(params) [kind; parts] comment."""
+    """Compact catalog for the language model: name(params) kind parts - short description."""
+    abbrev = {"body": "body", "pelvis": "hips", "spine": "trunk", "neck": "head", "right_arm": "Rarm", "left_arm": "Larm",
+              "right_leg": "Rleg", "left_leg": "Lleg"}
     lines = []
     for name, m in DB.items():
-        ps = ", ".join(f"{p}={'|'.join(map(str, v[1])) if not (isinstance(v[1], tuple) and len(v[1]) == 2 and all(isinstance(x, (int, float)) for x in v[1])) else f'{v[1][0]}..{v[1][1]}'}"
-                       for p, v in m["params"].items())
-        sig = f"{name}({ps})" if ps else name
-        full = {"right_arm", "left_arm"} <= set(m["parts"]) and {"right_leg", "left_leg"} <= set(m["parts"])
-        parts = "FULL BODY" if full else "+".join(m["parts"])
-        soft = ("; soft: " + "+".join(m["soft_parts"])) if m["soft_parts"] else ""
-        lines.append(f"- {sig} [{m['kind']}; drives {parts}{soft}] {m['comment']}")
+        ps = []
+        for p, v in m["params"].items():
+            allowed = v[1]
+            if isinstance(allowed, tuple) and len(allowed) == 2 and all(isinstance(x, (int, float)) for x in allowed):
+                ps.append(f"{p}={allowed[0]}..{allowed[1]}")
+            else:
+                ps.append(f"{p}={'|'.join(map(str, allowed))}")
+        sig = f"{name}({', '.join(ps)})" if ps else name
+        parts = set(m["parts"])
+        if {"right_arm", "left_arm", "right_leg", "left_leg"} <= parts:
+            pc = "full"
+        else:
+            pc = "+".join("arms" if p == "right_arm" and "left_arm" in parts else "legs" if p == "right_leg" and "left_leg" in parts
+                          else abbrev[p] for p in m["parts"] if not (p == "left_arm" and "right_arm" in parts)
+                          and not (p == "left_leg" and "right_leg" in parts)) or "soft"
+        desc = re.split(r"(?<=[a-z\)])[:.] ", m["comment"])[0]
+        desc = desc if len(desc) <= 110 else desc[:107].rsplit(" ", 1)[0] + "..."
+        lines.append(f"- {sig} [{m['kind'][0]}; {pc}] {desc}")
     return "\n".join(lines)
 
 
@@ -3431,6 +3813,7 @@ for _a, _script in list(ALIASES.items()):
 
 ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES.items() if k_ not in ALIASES})
 ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES2.items() if k_ not in ALIASES})
+ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES3.items() if k_ not in ALIASES})
 try:   # every movement in the sport coverage map is also an instant request
     import sport_coverage as _cov
     for _sport, _phrase, _script in _cov.all_entries():

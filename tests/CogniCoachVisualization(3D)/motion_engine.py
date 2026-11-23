@@ -2124,13 +2124,35 @@ stance(width=wide, depth=0.5) + ready_arms
 stance(width=wide, depth=0.5) + forehand
 run(pace=sprint, times=2)
 
-CATALOG (name(params) [kind; parts it drives; soft parts] description):
+CATALOG (name(params) [kind a=action c=cycle p=pose; body parts it drives] description):
 {mdb.catalog_text()}
 
 RECIPES - proven scripts for common sport movements (one line each, " / " = new line). Reuse and
 combine them; adapt for drills that are not listed:
 {recipes_text()}
 """.strip()
+
+
+_STOP = {"the", "and", "then", "with", "into", "from", "for", "a", "an", "of", "to", "on", "in", "at", "your", "do", "does",
+         "drill", "player", "athlete", "takes", "while", "after", "before"}
+
+
+def relevant_recipes(text: str, n: int = 8) -> List[str]:
+    """The proven recipes whose phrase/sport share the most words with the request (cheap retrieval)."""
+    try:
+        import sport_coverage as cov
+    except ImportError:
+        return []
+    words = {w.rstrip("s") for w in re.findall(r"[a-z]+", text.lower()) if w not in _STOP and len(w) > 2}
+    scored = []
+    for sport, phrase, script in cov.all_entries():
+        pw = {w.rstrip("s") for w in re.findall(r"[a-z]+", phrase.lower()) if w not in _STOP and len(w) > 2}
+        sw = {w.rstrip("s") for w in re.findall(r"[a-z]+", sport.lower())}
+        score = 2 * len(words & pw) + len(words & sw)
+        if score >= 2:
+            scored.append((score, -len(pw), f"{sport.split(' ')[0].lower()} {phrase}: {script.replace(chr(10), ' / ')}"))
+    scored.sort(reverse=True)
+    return [x[2] for x in scored[:n]]
 
 
 def recipes_text() -> str:
@@ -2225,6 +2247,9 @@ def plan_script(movement: str, extra: str = "") -> Tuple[Dict[str, Any], List[Di
     if local and local.get("exact") and not extra.strip():
         return local, [{"stage": "local", "seconds": round(time.time() - t0, 2), "script": local["script"]}]
     request = f"Request: {movement.strip()}" + (f"\nNotes: {extra.strip()}" if extra.strip() else "")
+    hints = relevant_recipes(movement + " " + extra)
+    if hints:
+        request += "\n\nMost relevant recipes for this request (adapt them):\n" + "\n".join(hints)
     last_exc: Optional[Exception] = None
     for attempt in range(2):
         budget = SCRIPT_TIMEOUT - (time.time() - t0)

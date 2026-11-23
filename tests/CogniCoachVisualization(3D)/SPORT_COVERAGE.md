@@ -457,6 +457,73 @@ Each phrase is also an instant request (no model call). Regenerate: `python spor
 | en garde | `en_garde(hold=1)` | 1.4 |
 | fencing lunge | `en_garde / fencing_lunge` | 2.3 |
 
+## Fitness positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| burpee | `burpee` | 3.73 |
+| burpee with push up | `burpee / push_up` | 5.33 |
+| squat | `squat` | 2.5 |
+| goblet squat | `goblet_squat` | 2.5 |
+| sumo squat | `sumo_squat` | 2.5 |
+| jump squat | `squat(end=0.5) / jump(height=high)` | 3.2 |
+| thruster | `thruster` | 2.6 |
+| reverse lunge | `reverse_lunge` | 2.7 |
+| curtsy lunge | `curtsy_lunge` | 2.5 |
+| lateral lunge | `lateral_lunge` | 2.6 |
+| good morning | `good_morning` | 2.5 |
+| wall sit | `wall_sit(hold=2)` | 2.4 |
+| lateral raise | `stand + lateral_raise(times=3)` | 5.8 |
+| front raise | `stand + front_raise(times=3)` | 5.8 |
+| triceps extension | `stand + overhead_triceps_extension(times=3)` | 5.8 |
+| pull up | `pull_up(times=2)` | 4.4 |
+| dead hang | `dead_hang(hold=2)` | 2.4 |
+| plank jacks | `plank_jacks(times=4)` | 3.6 |
+| shoulder taps | `shoulder_taps(times=3)` | 4.0 |
+| bicycle crunches | `bicycle_crunch(times=4)` | 5.2 |
+| leg raises | `leg_raises(times=3)` | 7.6 |
+| flutter kicks | `flutter_kicks_back(times=6)` | 3.4 |
+| v-up | `v_up` | 1.9 |
+| sit-up | `sit_up(times=2)` | 4.4 |
+| russian twist | `russian_twist(times=3)` | 4.6 |
+| mountain climbers | `mountain_climbers(times=4)` | 2.8 |
+| donkey kicks | `donkey_kicks(times=3)` | 4.6 |
+| fire hydrants | `fire_hydrants(times=3)` | 4.6 |
+| side leg raise | `side_lying_leg_raise(times=3)` | 5.2 |
+| crab walk | `crab_walk(times=3)` | 3.4 |
+| bear crawl | `bear_crawl(times=3)` | 3.4 |
+| glute bridge | `glute_bridge(times=2)` | 4.4 |
+| low plank | `low_plank(hold=2)` | 2.4 |
+| dumbbell upper body circuit | `stand + lateral_raise(times=2) / stand + biceps_curl(times=2) / stand + overhead_triceps_extension(times=2)` | 11.2 |
+
+## Yoga and stretching positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| mountain pose | `mountain_pose(hold=2)` | 2.4 |
+| chair pose | `chair_pose(hold=2)` | 2.4 |
+| warrior one | `warrior_one(hold=2)` | 2.4 |
+| warrior two | `warrior_pose(hold=2)` | 2.4 |
+| reverse warrior | `reverse_warrior(hold=2)` | 2.4 |
+| triangle | `triangle_pose(hold=2)` | 2.4 |
+| tree pose | `tree_pose(hold=2)` | 2.4 |
+| garland squat | `garland_squat(hold=2)` | 2.4 |
+| boat pose | `boat_pose(hold=2)` | 2.4 |
+| pigeon | `pigeon_pose(hold=2)` | 2.4 |
+| happy baby | `happy_baby(hold=2)` | 2.4 |
+| camel | `camel_pose(hold=2)` | 2.4 |
+| seated twist | `seated_twist(hold=2)` | 2.4 |
+| lying twist | `supine_twist(hold=2)` | 2.4 |
+| knee to chest | `knee_to_chest(hold=2)` | 2.4 |
+| figure four | `figure_four_stretch(hold=2)` | 2.4 |
+| side stretch | `stand + standing_side_stretch(hold=2)` | 2.4 |
+| triceps stretch | `stand + triceps_stretch(hold=2)` | 2.4 |
+| chest opener | `stand + chest_opener(hold=2)` | 2.4 |
+| neck stretch | `stand + neck_stretch(hold=2)` | 2.4 |
+| calf stretch | `calf_stretch(hold=2)` | 2.4 |
+| sun salutation | `mountain_pose(hold=0.5) / stand + arms_overhead(hold=0.5) / hamstring_stretch(hold=0.6) / plank(hold=0.4) / low_plank(hold=0.4) / cobra(hold=0.6) / downward_dog(hold=1) / mountain_pose` | 5.6 |
+| savasana | `lie_on_back(hold=3)` | 3.4 |
+
 ## Rest / sideline positions
 
 | Movement | Script | Seconds |
