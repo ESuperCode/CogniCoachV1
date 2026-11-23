@@ -524,6 +524,38 @@ Each phrase is also an instant request (no model call). Regenerate: `python spor
 | sun salutation | `mountain_pose(hold=0.5) / stand + arms_overhead(hold=0.5) / hamstring_stretch(hold=0.6) / plank(hold=0.4) / low_plank(hold=0.4) / cobra(hold=0.6) / downward_dog(hold=1) / mountain_pose` | 5.6 |
 | savasana | `lie_on_back(hold=3)` | 3.4 |
 
+## Gym positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| leg press | `leg_press(times=2)` | 4.4 |
+| hack squat | `hack_squat` | 2.6 |
+| leg extension | `leg_extension(times=3)` | 5.8 |
+| leg curl | `lying_leg_curl(times=3)` | 5.8 |
+| hip abduction | `hip_abduction(times=3)` | 5.8 |
+| lat pulldown | `lat_pulldown(times=3)` | 5.8 |
+| seated cable row | `seated_cable_row(times=3)` | 5.8 |
+| one arm dumbbell row | `one_arm_row(times=3)` | 5.8 |
+| face pull | `stand + face_pull(times=3)` | 5.8 |
+| cable crossover | `stance(stagger=left, depth=0.2) + cable_crossover(times=3)` | 6.4 |
+| incline bench press | `incline_press(times=2)` | 4.4 |
+| overhead press | `stand + overhead_press(times=2)` | 4.4 |
+| arnold press | `stand + arnold_press(times=2)` | 4.8 |
+| triceps pushdown | `stand + triceps_pushdown(times=3)` | 5.2 |
+| preacher curl | `sit_on_bench + preacher_curl(times=3)` | 5.8 |
+| front squat | `front_rack + squat` | 2.5 |
+| sumo deadlift | `sumo_deadlift` | 2.7 |
+| romanian deadlift | `hinge` | 2.8 |
+| back extension | `back_extension(times=3)` | 6.4 |
+| ab wheel rollout | `ab_wheel_rollout(times=2)` | 5.2 |
+| pallof press | `stance(depth=0.3) + pallof_press(times=3)` | 6.4 |
+| farmer carry | `walk(times=3) + arms_hang` | 3.7 |
+| rowing machine | `rowing_stroke(times=3)` | 6.4 |
+| stair climber | `stair_climber(times=4)` | 4.4 |
+| push day | `bench_press(times=2) / stand + overhead_press(times=2) / dips(times=2) / stand + triceps_pushdown(times=2)` | 11.2 |
+| pull day | `lat_pulldown(times=2) / seated_cable_row(times=2) / stand + face_pull(times=2) / stand + biceps_curl(times=2)` | 11.2 |
+| leg day | `back_squat / leg_press(times=2) / lying_leg_curl(times=2) / calf_raise(times=2)` | 11.3 |
+
 ## Rest / sideline positions
 
 | Movement | Script | Seconds |
