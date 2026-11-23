@@ -7223,7 +7223,9 @@ _MORE_ALIASES3 = {
     "speed skating start": "speed_skating_start\nskating_stride(times=2)", "j stroke": "kneel + single_blade_paddle(times=3)",
     "canoe j stroke": "kneel + single_blade_paddle(times=3)", "canoe stroke": "kneel + single_blade_paddle(times=3)",
     "triple jump hop step jump": "triple_jump", "kayak stroke": "paddling(times=3)", "kayak forward stroke": "paddling(times=3)", "kayak paddling": "paddling(times=3)",
-    "double blade paddle": "paddling(times=3)", "dolphin kick on the back": "back_dolphin_kick(times=6)", "butterfly kick on the back": "back_dolphin_kick(times=6)",
+    "double blade paddle": "paddling(times=3)", "form shooting": "stance(depth=0.3) + one_hand_set_shot(hold=1)", "shooting form": "stance(depth=0.3) + one_hand_set_shot(hold=1)",
+    "one hand form shooting": "stance(depth=0.3) + one_hand_set_shot(hold=1)", "box jump step down": "jump(height=high)\nstep_over",
+    "box jump then step down": "jump(height=high)\nstep_over", "box jumps": "jump(height=high)\nstep_over\njump(height=high)\nstep_over", "dolphin kick on the back": "back_dolphin_kick(times=6)", "butterfly kick on the back": "back_dolphin_kick(times=6)",
     "back dolphin kick": "back_dolphin_kick(times=6)", "underwater dolphin on back": "back_dolphin_kick(times=6)", "supine dolphin kick": "back_dolphin_kick(times=6)", "hop step and jump": "triple_jump", "hop step jump": "triple_jump",
 }
 
@@ -7307,7 +7309,8 @@ def catalog_text() -> str:
 
 # Names the language model commonly writes that are not database names -> what they mean.
 NAME_ALIASES: Dict[str, str] = {
-    "hop": "single_leg_hop", "chamber": "knee_drive", "takeoff": "jump", "take_off": "jump", "plant": "stride_step",
+    "step": "stride_step", "one_hand_up": "one_arm_up", "drop_bat": "stand", "drive_step": "run", "shift": "cutting_step",
+    "toss": "trophy_position", "hop": "single_leg_hop", "chamber": "knee_drive", "takeoff": "jump", "take_off": "jump", "plant": "stride_step",
     "throwing_followthrough": "stand", "follow_through_throw": "stand",
     "head_lift": "front_crawl", "sighting": "front_crawl", "breath": "front_crawl", "catch_and_sweep": "breaststroke",
     "pullout": "breaststroke", "shift_center_of_mass": "stance", "weight_shift": "stance", "glide": "streamline",

@@ -645,6 +645,31 @@ def _slerp_m(a: np.ndarray, b: np.ndarray, u: float) -> np.ndarray:
     return me.quat_to_matrix(me.slerp(me.matrix_to_quat(a), me.matrix_to_quat(b), u))
 
 
+def _slerp_dir(qa: np.ndarray, qb: np.ndarray, u: float) -> np.ndarray:
+    """slerp WITHOUT the shortest-path flip (the caller picks the direction)."""
+    d = max(-1.0, min(1.0, float(np.dot(qa, qb))))
+    if abs(d) > 0.9995:
+        q = qa + (qb - qa) * u
+        return q / np.linalg.norm(q)
+    th = math.acos(d)
+    return (math.sin((1 - u) * th) * qa + math.sin(u * th) * qb) / math.sin(th)
+
+
+def _slerp_steady(a: np.ndarray, b: np.ndarray, u: float, prev: Optional[np.ndarray]) -> np.ndarray:
+    """Blend a -> b along the arc that continues the previous frame's blend. Near-opposite rotations have
+    two almost equally short arcs; picking the shortest every frame lets a moving target flip the arc and
+    the limb snaps across the body - keeping the side the blend is already on cannot jump."""
+    qa, qb = me.matrix_to_quat(a), me.matrix_to_quat(b)
+    if np.dot(qa, qb) < 0:
+        qb = -qb
+    q = _slerp_dir(qa, qb, u)
+    if prev is not None:
+        q2 = _slerp_dir(qa, -qb, u)
+        if abs(float(np.dot(q2, prev))) > abs(float(np.dot(q, prev))) + 1e-6:
+            q = q2
+    return q
+
+
 def _arm_route_penetration(r0, r1, side: str, wp=None) -> float:
     """Worst arm/body penetration along a blend from rotations r0 to r1 (optionally via waypoint rotations)."""
     worst = 0.0
@@ -663,6 +688,7 @@ def _frames(samples, loop: bool, fps: int) -> List[Dict[str, float]]:
     frames: List[Dict[str, float]] = []
     prev_e: Dict[str, Tuple[float, float, float]] = {}
     routes: Dict[int, Dict[str, Any]] = {}    # one detour decision per line transition (no flicker)
+    prev_blend: Dict[str, Any] = {}           # last blended quaternion per joint (steady arc choice)
     for idx, (pose, blend) in enumerate(samples):
         rot = part_rotations(pose)
         w = blend["w"]
@@ -685,10 +711,19 @@ def _frames(samples, loop: bool, fps: int) -> List[Dict[str, float]]:
                             best = (d, wp)
                     if best and best[0] <= 0.03:
                         routes[key][side] = best[1]
-            blended = {j: _slerp_m(r0[j], rot[j], w) for j in rot}
-            for side, wp in routes[key].items():
-                for j in (f"{side}shoulder", f"{side}elbow"):
-                    blended[j] = _slerp_m(r0[j], wp[j], w / 0.5) if w < 0.5 else _slerp_m(wp[j], rot[j], (w - 0.5) / 0.5)
+            if prev_blend.get("key") != key:
+                prev_blend.clear()
+                prev_blend["key"] = key
+            blended = {}
+            for j in rot:
+                src, dst, u = r0[j], rot[j], w
+                side = next((sd for sd in ("right", "left") if j in (f"{sd}shoulder", f"{sd}elbow")), None)
+                wp = routes[key].get(side) if side else None
+                if wp is not None:     # detour around the body: start -> waypoint -> target
+                    src, dst, u = (r0[j], wp[j], w / 0.5) if w < 0.5 else (wp[j], rot[j], (w - 0.5) / 0.5)
+                q = _slerp_steady(src, dst, u, prev_blend.get(j))
+                prev_blend[j] = q
+                blended[j] = me.quat_to_matrix(q)
             rot = blended
             scal = {k: blend["start"]["body"][k] + (pose["body"][k] - blend["start"]["body"][k]) * w for k in scal}
         world = me.world_rotations(rot)

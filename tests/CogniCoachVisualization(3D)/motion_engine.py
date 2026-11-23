@@ -2191,6 +2191,13 @@ def relevant_catalog(request: str, n: int = _CATALOG_N) -> str:
             if sc > 0 and name not in names:
                 scored.append((sc, -len(name), name))
         names += [x[2] for x in sorted(scored, reverse=True)[:n]]
+        # motions whose whole name appears in the request ("euro step", "turkish get up"): listed first
+        rw = set(re.findall(r"[a-z]+", request.lower().replace("-", " ")))
+        named = [nm for nm in mdb.DB if len(nm) > 3 and set(nm.split("_")) <= rw and nm not in list(mdb.DB)[:_CORE]
+                 and len(nm.split("_")) >= 2]
+        if named:
+            head = "Motions NAMED in the request - use them for those steps:\n" + "\n".join(lines[nm] for nm in named)
+            return head + "\n\nOther motions:\n" + "\n".join(lines[nm] for nm in names if nm not in named)
     else:
         names = list(mdb.DB)
     return "\n".join(lines[nm] for nm in names)
