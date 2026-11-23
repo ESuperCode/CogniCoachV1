@@ -6883,6 +6883,215 @@ _MORE_ALIASES = {
 }
 
 
+# =============================================================================
+# 35. BARRE / BALLET VOCABULARY, STEP AEROBICS, BOXING FITNESS, PARTNER + AGILITY DRILLS
+# =============================================================================
+BALLET_ARMS = {"right_arm": A(55, 40, 0, 50), "left_arm": A(55, 40, 0, 50)}       # rounded arms in front (first position)
+BARRE_HAND = {"left_arm": A(60, 50, 0, 50)}                                        # left hand resting on the barre
+
+
+@motion("ballet_position", "Ballet foot positions: standing tall with the legs turned out. first = heels together, "
+        "second = feet apart, fifth = feet crossed heel to toe; arms rounded.", "pose", LEGS, ARMS + ["spine"],
+        params={"position": ("first", ("first", "second", "fifth"))})
+def _ballet_pos(position="first"):
+    legs = {"first": (Lg(2, 90, 60, 3), Lg(2, 90, 60, 3)), "second": (Lg(12, 90, 60, 3), Lg(12, 90, 60, 3)),
+            "fifth": (Lg(3, -20, 60, 3), Lg(2, 60, 60, 3))}[position]
+    return [kk(0.0, BALLET_ARMS, right_leg=legs[0], left_leg=legs[1])]
+
+
+@motion("passe", "Passe / retire: standing on the left leg, the right foot draws up the inside of the standing leg "
+        "until the toe touches beside the knee, the right knee turned out to the side.", "action", LEGS, ARMS + ["spine"])
+def _passe():
+    return [kk(0.0, BALLET_ARMS, right_leg=Lg(2, 60, 50, 3), left_leg=Lg(2, 60, 50, 3)),
+            k(0.6, right_leg=Lg(60, 70, 60, 125)), k(1.4, hold=True), k(2.0, right_leg=Lg(2, 60, 50, 3))]
+
+
+@motion("attitude", "Attitude: standing on the left leg, the right leg lifted behind (or in front) with the knee bent "
+        "about 90 degrees and turned out, one arm curved overhead.", "pose", FULL, ["neck"])
+def _attitude():
+    return [k(0.0, left_leg=Lg(2, 0, 30, 3), right_leg=Lg(70, 150, 50, 85), spine=S(15), pelvis=P(8), right_arm=A(160, 40, 0, 40),
+              left_arm=A(85, 85, 0, 10), neck=N(-10))]
+
+
+@motion("grand_battement", "Grand battement: a high straight-leg kick of the right leg to the front, controlled down, "
+        "standing tall on the left leg with a hand on the barre.", "action", LEGS, ARMS + ["spine"])
+def _battement():
+    return [kk(0.0, BARRE_HAND, right_arm=A(85, 85, 0, 10), right_leg=Lg(2, 0, 40, 3), left_leg=Lg(2, 0, 40, 3)),
+            k(0.35, right_leg=Lg(110, 5, 40, 3)), k(0.5, hold=True), k(1.1, right_leg=Lg(2, 0, 40, 3))]
+
+
+@motion("rond_de_jambe", "Rond de jambe: the pointed right foot traces a half circle on the floor (or in the air) from "
+        "front, out to the side, to the back, standing on the left leg.", "cycle", LEGS, ARMS + ["spine"], period=2.0)
+def _rond():
+    return [kk(0.0, BARRE_HAND, right_arm=A(85, 85, 0, 10), right_leg=Lg(28, 0, 40, 3), left_leg=Lg(2, 0, 40, 3)),
+            k(0.6, right_leg=Lg(28, 90, 40, 3)), k(1.2, right_leg=Lg(28, 180, 40, 3)), k(1.6, right_leg=Lg(3, 60, 40, 3))]
+
+
+@motion("fondu", "Fondu: bend the standing left knee while the right foot wraps at the ankle, then unfold both legs "
+        "together as the right leg extends forward in the air.", "cycle", LEGS + ["body"], ARMS + ["spine"], period=2.4)
+def _fondu():
+    return [kk(0.0, BARRE_HAND, right_arm=A(70, 60, 0, 30), left_leg=Lg(20, 0, 40, 40), right_leg=Lg(25, 20, 40, 80)),
+            k(1.1, left_leg=Lg(2, 0, 40, 3), right_leg=Lg(45, 5, 40, 3), right_arm=A(85, 85, 0, 10)), k(1.4, hold=True)]
+
+
+@motion("port_de_bras", "Port de bras: flowing arm carriage through the ballet positions, from low in front, up "
+        "overhead and opening out to the sides, with a gentle bend of the trunk.", "cycle", ARMS + ["spine"], LEGS, period=4.0)
+def _port():
+    return [k(0.0, right_arm=A(20, 30, 0, 40), left_arm=A(20, 30, 0, 40), spine=S(3)),
+            k(1.0, right_arm=A(70, 35, 0, 45), left_arm=A(70, 35, 0, 45)),
+            k(2.0, right_arm=A(160, 35, 0, 40), left_arm=A(160, 35, 0, 40), spine=S(-8)),
+            k(3.0, right_arm=A(85, 88, 0, 15), left_arm=A(85, 88, 0, 15), spine=S(3))]
+
+
+@motion("barre_leg_lift", "Barre back leg lifts: hinged slightly forward holding the barre, lift the straight right "
+        "leg behind in small pulses, glute squeezing.", "cycle", LEGS + ["spine", "pelvis"], ARMS, period=0.8)
+def _barre_lift():
+    return [kk(0.0, right_arm=A(70, 20, 0, 30), left_arm=A(70, 20, 0, 30), left_leg=Lg(5, 0, 6, 15), right_leg=Lg(30, 180, 6, 3),
+               spine=S(30), pelvis=P(10)),
+            k(0.4, right_leg=Lg(45, 180, 6, 3))]
+
+
+def _on_step(r, l, root, air=1.0):
+    return {"right_leg": r, "left_leg": l, "body": B(air=air, root=root)}
+
+
+@motion("basic_step", "Step aerobics basic step: up with the right, up with the left, down with the right, down "
+        "with the left, arms pumping.", "cycle", LEGS + ["body"] + ARMS, ["spine"], period=2.0)
+def _basic_step():
+    floor = Lg(3, 0, 8, 5)
+    return [kk(0.0, _on_step(floor, floor, 0.0, 0.0), right_arm=A(30, 10, 0, 90), left_arm=A(30, 10, 0, 90)),
+            kk(0.5, _on_step(Lg(3, 0, 8, 5), Lg(25, 0, 8, 40), 0.18), right_arm=A(60, 10, 0, 90), left_arm=A(20, 10, 0, 90)),
+            kk(1.0, _on_step(Lg(3, 0, 8, 5), Lg(3, 0, 8, 5), 0.20), right_arm=A(30, 10, 0, 90), left_arm=A(60, 10, 0, 90)),
+            kk(1.5, _on_step(Lg(25, 180, 8, 15), Lg(3, 0, 8, 5), 0.10), right_arm=A(60, 10, 0, 90), left_arm=A(20, 10, 0, 90))]
+
+
+@motion("v_step", "Step aerobics V-step: step the right foot up and wide, then the left up and wide, then each back "
+        "down to the middle.", "cycle", LEGS + ["body"] + ARMS, ["spine"], period=2.0)
+def _v_step():
+    return [kk(0.0, _on_step(Lg(3, 90, 8, 5), Lg(3, 90, 8, 5), 0.0, 0.0), right_arm=A(30, 10, 0, 90), left_arm=A(30, 10, 0, 90)),
+            kk(0.5, _on_step(Lg(18, 60, 15, 5), Lg(20, 0, 8, 40), 0.15), right_arm=A(130, 40, 0, 10)),
+            kk(1.0, _on_step(Lg(15, 60, 15, 5), Lg(15, 60, 15, 5), 0.18), left_arm=A(130, 40, 0, 10)),
+            kk(1.5, _on_step(Lg(20, 180, 8, 15), Lg(15, 60, 15, 5), 0.08), right_arm=A(30, 10, 0, 90), left_arm=A(30, 10, 0, 90))]
+
+
+@motion("knee_up_step", "Step aerobics knee-up: step up onto the step with the right foot and drive the left knee up "
+        "high, then step back down.", "cycle", LEGS + ["body"] + ARMS, ["spine"], period=2.0)
+def _knee_up_step():
+    return [kk(0.0, _on_step(Lg(3, 0, 8, 5), Lg(3, 0, 8, 5), 0.0, 0.0), right_arm=A(30, 10, 0, 90), left_arm=A(30, 10, 0, 90)),
+            kk(0.5, _on_step(Lg(3, 0, 8, 5), Lg(30, 0, 8, 50), 0.18)),
+            kk(0.9, _on_step(Lg(3, 0, 8, 5), Lg(90, 0, 8, 100), 0.20), right_arm=A(60, 10, 0, 95), left_arm=A(25, 170, 0, 80)),
+            kk(1.4, _on_step(Lg(25, 180, 8, 15), Lg(20, 0, 8, 20), 0.08), right_arm=A(30, 10, 0, 90), left_arm=A(30, 10, 0, 90))]
+
+
+@motion("repeater_step", "Step aerobics repeater: standing on the step on the right foot, drive the left knee up three "
+        "times in a row, tapping the floor behind between lifts.", "cycle", LEGS + ["body"] + ARMS, ["spine"], period=1.0)
+def _repeater():
+    return [kk(0.0, _on_step(Lg(3, 0, 8, 5), Lg(20, 180, 8, 10), 0.20), right_arm=A(25, 170, 0, 80), left_arm=A(60, 10, 0, 95)),
+            kk(0.5, _on_step(Lg(3, 0, 8, 5), Lg(90, 0, 8, 100), 0.20), right_arm=A(60, 10, 0, 95), left_arm=A(25, 170, 0, 80))]
+
+
+@motion("speed_bag", "Speed bag: fists up at eye level rolling in small fast circles, alternating hands striking the "
+        "bag in rhythm.", "cycle", ARMS, ["spine"], period=0.5)
+def _speed_bag():
+    return [k(0.0, right_arm=A(75, 20, -40, 110), left_arm=A(65, 25, -40, 125)), k(0.125, right_arm=A(85, 15, -40, 95), left_arm=A(70, 20, -40, 120)),
+            k(0.25, right_arm=A(65, 25, -40, 125), left_arm=A(75, 20, -40, 110)), k(0.375, right_arm=A(70, 20, -40, 120), left_arm=A(85, 15, -40, 95))]
+
+
+@motion("wheelbarrow_walk", "Wheelbarrow walk: walking forward on the hands with straight arms while a partner holds "
+        "the ankles, the body held straight like a plank.", "cycle", ["body"] + FULL, ["neck"], period=0.8)
+def _wheelbarrow():
+    legs = {"right_leg": Lg(0, 0, 0, 3), "left_leg": Lg(0, 0, 0, 3)}
+    return [kk(0.0, legs, body=B(65), spine=S(0), pelvis=P(), right_arm=A(105, 8, 0, 3), left_arm=A(80, 8, 0, 3), neck=N(-20)),
+            k(0.4, right_arm=A(80, 8, 0, 3), left_arm=A(105, 8, 0, 3))]
+
+
+@motion("leap_frog", "Leap frog: run up, place both hands on a crouched partner's back, push down and jump over with "
+        "the legs straddled wide, landing on two feet.", "action", LEGS + ["body"] + ARMS, ["spine", "pelvis"])
+def _leap_frog():
+    pts, T = _flight(0.35, 0.35)
+    keys = [kk(0.0, stance_legs("normal", 0.4), body=B(), right_arm=A(40, 10, 0, 20), left_arm=A(40, 10, 0, 20), spine=S(15)),
+            kk(0.35, right_leg=Lg(40, 80, 15, 10), left_leg=Lg(40, 80, 15, 10), body=B(pitch=25, air=1.0, root=0.0), right_arm=A(60, 15, 0, 3),
+               left_arm=A(60, 15, 0, 3))]
+    for t, r in pts[1:-1]:
+        keys.append(k(t, body=B(pitch=20, air=1.0, root=r)))
+    keys[len(keys) // 2 + 1] = (keys[len(keys) // 2 + 1][0], {**keys[len(keys) // 2 + 1][1], "right_leg": Lg(60, 80, 15, 5),
+                                                                "left_leg": Lg(60, 80, 15, 5), "right_arm": A(25, 30, 0, 3), "left_arm": A(25, 30, 0, 3)})
+    keys += [kk(T, stance_legs("normal", 0.6), body=B(pitch=0, air=0.0, root=0.0), right_arm=A(60, 20, 0, 10), left_arm=A(60, 20, 0, 10)),
+             k(T + 0.4, hold=True)]
+    return keys
+
+
+@motion("ladder_quick_feet", "Agility ladder / icky shuffle: fast light steps on the balls of the feet, in and out of "
+        "the ladder squares while moving sideways, arms pumping.", "cycle", LEGS + ARMS, ["spine", "pelvis"], period=0.6)
+def _ladder():
+    return [k(0.0, right_leg=leg_at(0.05, 0.25, 0.12, 0, 10, "right"), left_leg=leg_at(0.0, 0.10, 0.12, 0.05, 10, "left"), right_arm=A(30, 170, 0, 90),
+              left_arm=A(45, 10, 0, 90)),
+            k(0.15, right_leg=leg_at(0.20, 0.12, 0.12, 0.06, 10, "right"), left_leg=leg_at(0.05, 0.10, 0.12, 0, 10, "left")),
+            k(0.3, left_leg=leg_at(0.05, 0.25, 0.12, 0, 10, "left"), right_leg=leg_at(0.0, 0.10, 0.12, 0.05, 10, "right"), left_arm=A(30, 170, 0, 90),
+              right_arm=A(45, 10, 0, 90)),
+            k(0.45, left_leg=leg_at(0.20, 0.12, 0.12, 0.06, 10, "left"), right_leg=leg_at(0.05, 0.10, 0.12, 0, 10, "right"))]
+
+
+@motion("thigh_trap", "Thigh trap (soccer): lift the right thigh up to meet a dropping ball and cushion it down to "
+        "the feet, arms out for balance.", "action", LEGS, ARMS + ["spine"])
+def _thigh_trap():
+    return [kk(0.0, stance_legs("normal", 0.2), right_arm=A(35, 70, 0, 30), left_arm=A(35, 70, 0, 30), spine=S(6)),
+            k(0.4, right_leg=Lg(80, 0, 8, 90), left_leg=Lg(3, 0, 8, 15)), k(0.7, right_leg=Lg(50, 0, 8, 70)),
+            kk(1.1, stance_legs("normal", 0.2))]
+
+
+@motion("set_screen", "Set a screen (basketball): a wide, solid stance with the knees bent and both forearms crossed "
+        "over the chest, standing still so a defender runs into the body.", "pose", FULL, ["neck"])
+def _screen():
+    return [kk(0.0, stance_legs("wide", 0.35), spine=S(6), pelvis=P(), right_arm=arm_at(-0.10, 0.05, 0.18, "down", "right"),
+               left_arm=arm_at(-0.10, 0.10, 0.20, "down", "left"))]
+
+
+_MORE_ALIASES2 = {
+    "first position": "ballet_position(position=first, hold=2)", "second position": "ballet_position(position=second, hold=2)",
+    "fifth position": "ballet_position(position=fifth, hold=2)", "ballet positions": "ballet_position(position=first)\nballet_position(position=second)\nballet_position(position=fifth)",
+    "passe": "passe", "retire": "passe", "retiré": "passe", "passé": "passe", "attitude": "attitude(hold=2)", "grand battement": "grand_battement(times=2)",
+    "battement": "grand_battement(times=2)", "rond de jambe": "rond_de_jambe(times=2)", "fondu": "fondu(times=2)", "port de bras": "port_de_bras",
+    "barre": "plie\nreleve\ngrand_battement\nbarre_leg_lift(times=4)", "barre class": "plie\nreleve\ngrand_battement\nbarre_leg_lift(times=4)",
+    "barre plie": "plie(times=2)", "arabesque lift": "barre_leg_lift(times=6)", "barre leg lift": "barre_leg_lift(times=6)",
+    "barre pulses": "barre_leg_lift(times=6)",
+    "basic step": "basic_step(times=2)", "step basic": "basic_step(times=2)", "v step": "v_step(times=2)", "knee up": "knee_up_step(times=2)",
+    "knee up step": "knee_up_step(times=2)", "turn step": "basic_step(times=2)", "l step": "basic_step\nv_step", "a step": "v_step(times=2)",
+    "repeater": "repeater_step(times=3)", "repeater knee": "repeater_step(times=3)", "over the top": "step_up\nstep_up(side=left)",
+    "step aerobics class": "basic_step(times=2)\nv_step(times=2)\nknee_up_step(times=2)",
+    "jab cross hook": "fighting_stance + guard\nfighting_stance + guard + jab\nfighting_stance + guard + cross\nfighting_stance + guard + hook",
+    "one two": "fighting_stance + guard\nfighting_stance + guard + jab\nfighting_stance + guard + cross",
+    "1 2": "fighting_stance + guard\nfighting_stance + guard + jab\nfighting_stance + guard + cross",
+    "shadow boxing": "fighting_stance + guard\nfighting_stance + guard + jab\nfighting_stance + guard + cross\nbob_and_weave\nfighting_stance + guard + hook\nfighting_stance + guard + uppercut",
+    "shadowboxing": "fighting_stance + guard\nfighting_stance + guard + jab\nfighting_stance + guard + cross\nbob_and_weave\nfighting_stance + guard + hook\nfighting_stance + guard + uppercut",
+    "heavy bag": "fighting_stance + guard\nfighting_stance + guard + jab\nfighting_stance + guard + cross\nfighting_stance + guard + hook",
+    "heavy bag workout": "fighting_stance + guard\nfighting_stance + guard + jab\nfighting_stance + guard + cross\nfighting_stance + guard + hook",
+    "double end bag": "fighting_stance + guard\nfighting_stance + guard + jab x2\nfighting_stance + guard + cross", "speed bag": "stance(depth=0.1) + speed_bag(times=8)",
+    "cross": "fighting_stance + guard\nfighting_stance + guard + cross", "straight right": "fighting_stance + guard\nfighting_stance + guard + cross",
+    "hook": "fighting_stance + guard\nfighting_stance + guard + hook", "uppercut": "fighting_stance + guard\nfighting_stance + guard + uppercut",
+    "elbow": "fighting_stance + guard\nelbow_strike", "kick": "instep_kick", "shoot": "jump + one_hand_set_shot(delay=0.35)", "run": "run(times=3)",
+    "wheelbarrow": "wheelbarrow_walk(times=4)", "wheelbarrow walk": "wheelbarrow_walk(times=4)", "leap frog": "leap_frog", "leapfrog": "leap_frog",
+    "partner medicine ball toss": "stance(depth=0.3) + chest_pass", "partner pass": "stance(depth=0.3) + chest_pass",
+    "partner squat": "squat(times=2)", "partner sit up": "sit_up\nchest_pass", "partner sit up toss": "sit_up\nchest_pass",
+    "relay": "run(pace=sprint, times=2)\nrelay_hand_back", "baton pass": "run(pace=sprint, times=2)\nrelay_hand_back",
+    "ladder drill": "ladder_quick_feet(times=6)", "agility ladder": "ladder_quick_feet(times=6)", "icky shuffle": "ladder_quick_feet(times=6)",
+    "in and out": "ladder_quick_feet(times=6)", "quick feet": "ladder_quick_feet(times=6)",
+    "t drill": "run(pace=sprint, times=2)\nshuffle(times=2)\nshuffle(times=2, side=left)\nbackpedal(times=2)",
+    "5 10 5": "shuffle(times=2)\nshuttle_touch\nrun(pace=sprint, times=2)\nshuttle_touch\nrun(pace=sprint)", "pro agility": "shuffle(times=2)\nshuttle_touch\nrun(pace=sprint, times=2)\nshuttle_touch\nrun(pace=sprint)",
+    "l drill": "run(pace=sprint, times=2)\nshuttle_touch\nrun(pace=sprint, times=2)\ncutting_step\nrun(pace=sprint)", "3 cone drill": "run(pace=sprint, times=2)\nshuttle_touch\nrun(pace=sprint, times=2)\ncutting_step\nrun(pace=sprint)",
+    "box drill": "run(pace=sprint, times=2)\nshuffle(times=2)\nbackpedal(times=2)\nshuffle(times=2, side=left)", "zig zag": "cutting_step\ncutting_step(side=left)\ncutting_step\ncutting_step(side=left)",
+    "zig zag run": "cutting_step\ncutting_step(side=left)\ncutting_step\ncutting_step(side=left)",
+    "thigh trap": "thigh_trap", "thigh control": "thigh_trap", "keepy uppy": "juggle_ball(times=4)", "keepie uppie": "juggle_ball(times=4)", "juggle": "juggle_ball(times=4)",
+    "rondo": "foot_trap\npush_pass", "cone dribble": "foot_dribble(times=4)", "figure 8": "stance(depth=0.5) + between_legs_dribble(times=2)",
+    "figure 8 dribble": "stance(depth=0.5) + between_legs_dribble(times=2)", "between the legs": "stance(depth=0.5) + between_legs_dribble(times=2)",
+    "behind the back": "stance(depth=0.5) + behind_back_dribble(times=2)", "hesitation": "stance(depth=0.4) + hand_dribble(times=2, speed=0.6)\nstance(depth=0.5) + crossover_dribble",
+    "hesitation dribble": "stance(depth=0.4) + hand_dribble(times=2, speed=0.6)\nstance(depth=0.5) + crossover_dribble",
+    "three pointer": "jump + one_hand_set_shot(delay=0.35)", "3 pointer": "jump + one_hand_set_shot(delay=0.35)", "outlet pass": "two_hand_overhead_throw",
+    "screen": "set_screen(hold=2)", "set a screen": "set_screen(hold=2)", "pick": "set_screen(hold=2)", "pick and roll": "set_screen(hold=1)\nrun(times=2)",
+    "charge": "take_a_charge",
+}
+
+
 ALIASES: Dict[str, str] = {
     "childs pose": "childs_pose(hold=2)", "child pose": "childs_pose(hold=2)", "childs pose stretch": "childs_pose(hold=2)",
     "kneeling": "kneel(hold=1)", "kneel": "kneel(hold=1)", "half kneeling": "half_kneel(hold=1)",
@@ -7051,7 +7260,7 @@ ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES7.items() if k_ not in ALIASES}
 ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES8.items() if k_ not in ALIASES})
 ALIASES.update(_GYM_ALIASES)   # gym names map to the dedicated gym motions
 ALIASES.update(_GYM_ALIASES2)
-for _p, _sc in list(_GYM_ALIASES3.items()) + list(_MORE_ALIASES.items()):
+for _p, _sc in list(_GYM_ALIASES3.items()) + list(_MORE_ALIASES.items()) + list(_MORE_ALIASES2.items()):
     ALIASES.setdefault(_p, _sc)   # never override a phrase that already maps somewhere
 try:   # every movement in the sport coverage map is also an instant request
     import sport_coverage as _cov
