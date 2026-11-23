@@ -13,7 +13,7 @@ How it works (default pipeline: "script")
 
 Files
 -----
-motion_database.py           THE MOTION DATABASE (675 motions: sport skills, positions, gym, calisthenics, Pilates, strongman, CrossFit, dance, ballet/barre, step, boxing fitness, agility, mobility, stretching, yoga). Every stored motion: name, comment, kind (action /
+motion_database.py           THE MOTION DATABASE (680 motions: sport skills, positions, gym, calisthenics, Pilates, strongman, CrossFit, dance, ballet/barre, step, boxing fitness, agility, mobility, stretching, yoga). Every stored motion: name, comment, kind (action /
                              cycle / pose), the body parts it drives (hard) or offers (soft),
                              parameters, and its keyframes in anatomical angles.
 sport_coverage.py            351 sport movements as scripts (instant phrases + model recipes); writes SPORT_COVERAGE.md.

@@ -3297,7 +3297,7 @@ _POS_ALIASES2 = {
     "pop up": "pop_up\nboard_stance(hold=1)", "cycling": "cycling(times=4)", "biking": "cycling(times=4)", "riding a bike": "cycling(times=4)",
     "rowing": "rowing_stroke(times=3)", "row": "rowing_stroke(times=3)", "kayaking": "paddling(times=3)", "paddling": "paddling(times=3)",
     "back squat": "back_squat", "barbell squat": "back_squat", "front rack": "stand + front_rack(hold=1.5)", "clean": "power_clean",
-    "power clean": "power_clean", "overhead squat": "overhead_squat_hold(hold=2)", "snatch": "power_clean\noverhead_squat_hold(hold=1)",
+    "power clean": "power_clean", "overhead squat": "overhead_squat_hold(hold=2)", "snatch": "snatch",
     "bench press": "bench_press(times=2)", "bicep curls": "stand + biceps_curl(times=3)", "biceps curl": "stand + biceps_curl(times=3)",
     "bent over row": "bent_over_row(times=3)", "kettlebell swing": "kettlebell_swing(times=3)", "kettlebell swings": "kettlebell_swing(times=3)",
     "rock climbing": "climbing(times=3)", "climbing": "climbing(times=3)", "rope climb": "climbing(times=3)",
@@ -7230,6 +7230,65 @@ _MORE_ALIASES3 = {
 }
 
 
+
+# =============================================================================
+# 37. MORE GAP FILLERS (archery shot, breaking, water-ski start, pole carry)
+# =============================================================================
+@motion("archery_shot", "Archery shot: side-on with the bow arm straight out, draw the string hand back to the chin "
+        "anchor with the elbow high, hold, release (the string hand flies back past the ear) and hold the follow-through.",
+        "action", FULL, ["neck"])
+def _archery_shot():
+    legs = stance_legs("normal", 0.05)
+    anchor = arm_at(-0.05, 0.20, 0.12, "out", "right")
+    return [kk(0.0, legs, spine=S(3), left_arm=A(90, 88, 0, 3), right_arm=A(85, 85, 0, 30), neck=N(0, -80)),
+            k(0.8, right_arm=anchor), k(1.6, hold=True),
+            k(1.75, right_arm=A(80, 150, 0, 60)), k(2.4, hold=True)]
+
+
+@motion("six_step", "Breakdance six-step (footwork): crouched low with the weight on the hands, the legs walk in a "
+        "circle around the body - step through, cross, kick out - in six counts.", "cycle", ["body"] + FULL, ["neck"], period=2.4)
+def _six_step():
+    arms_r = {"right_arm": A(40, 60, 0, 5), "left_arm": A(25, 30, 0, 20)}
+    arms_l = {"left_arm": A(40, 60, 0, 5), "right_arm": A(25, 30, 0, 20)}
+    T = 2.4
+    return [kk(0.0, arms_r, body=B(25), spine=S(20), right_leg=Lg(60, 30, 10, 110), left_leg=Lg(40, -20, 10, 100)),
+            kk(T / 6, right_leg=Lg(30, 60, 10, 60), left_leg=Lg(70, 20, 10, 120)),
+            kk(2 * T / 6, body=B(15), right_leg=Lg(50, 170, 10, 80), left_leg=Lg(60, 60, 10, 120)),
+            kk(3 * T / 6, arms_l, body=B(25), left_leg=Lg(60, 30, 10, 110), right_leg=Lg(40, -20, 10, 100)),
+            kk(4 * T / 6, left_leg=Lg(30, 60, 10, 60), right_leg=Lg(70, 20, 10, 120)),
+            kk(5 * T / 6, body=B(15), left_leg=Lg(50, 170, 10, 80), right_leg=Lg(60, 60, 10, 120))]
+
+
+@motion("deep_water_start", "Water-ski deep-water start: crouched in the water with the knees to the chest, ski tips "
+        "up, arms straight holding the handle, then let the boat pull you up into the ski stance.", "action",
+        ["body"] + FULL, ["neck"])
+def _dws():
+    handle = grip2(0.0, -0.25, 0.50, "out")
+    return [kk(0.0, handle, body=B(pitch=-45, air=1.0, root=-0.35), right_leg=Lg(120, 5, 8, 120), left_leg=Lg(120, 5, 8, 120), spine=S(25)),
+            k(0.6, hold=True),
+            kk(1.6, stance_legs("narrow", 0.6), grip2(0.0, -0.40, 0.48, "out"), body=B(pitch=-15, air=0.0, root=0.0), spine=S(15)),
+            k(2.1, hold=True)]
+
+
+@motion("pole_carry", "Carrying a long pole for the vault run-up: right hand low at the hip, left hand in front at "
+        "chest height, the pole angled up in front.", "pose", ARMS, ["spine"])
+def _pole_carry():
+    return [k(0.0, right_arm=A(25, 40, 0, 70), left_arm=A(60, 10, 0, 80))]
+
+
+_MORE_ALIASES4 = {
+    "archery shot": "archery_shot", "shoot an arrow": "archery_shot", "archery release": "archery_shot", "bow and arrow": "archery_shot",
+    "six step": "six_step(times=2)", "6 step": "six_step(times=2)", "breakdance six step": "six_step(times=2)", "breakdance footwork": "six_step(times=2)",
+    "breakdancing": "six_step(times=2)", "breakdance": "six_step(times=2)", "breaking footwork": "six_step(times=2)",
+    "deep water start": "deep_water_start", "water ski start": "deep_water_start", "wakeboard start": "deep_water_start",
+    "pole carry": "run(times=2) + pole_carry", "pole vault run up": "run(pace=sprint, times=3) + pole_carry\npole_vault",
+    "disc golf drive": "run(times=2)\nstride_step + backhand_disc_throw", "disc golf": "stride_step + backhand_disc_throw",
+    "backhand huck": "stance(depth=0.2) + backhand_disc_throw", "frisbee huck": "stance(depth=0.2) + backhand_disc_throw",
+    "snatch from the floor": "snatch", "weightlifting snatch": "snatch", "olympic snatch": "snatch", "full snatch": "snatch",
+    "four step approach": "bowling_stance_approach", "bowling approach": "bowling_stance_approach",
+}
+
+
 ALIASES: Dict[str, str] = {
     "childs pose": "childs_pose(hold=2)", "child pose": "childs_pose(hold=2)", "childs pose stretch": "childs_pose(hold=2)",
     "kneeling": "kneel(hold=1)", "kneel": "kneel(hold=1)", "half kneeling": "half_kneel(hold=1)",
@@ -7403,7 +7462,7 @@ ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES7.items() if k_ not in ALIASES}
 ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES8.items() if k_ not in ALIASES})
 ALIASES.update(_GYM_ALIASES)   # gym names map to the dedicated gym motions
 ALIASES.update(_GYM_ALIASES2)
-for _p, _sc in list(_GYM_ALIASES3.items()) + list(_MORE_ALIASES.items()) + list(_MORE_ALIASES2.items()) + list(_MORE_ALIASES3.items()):
+for _p, _sc in list(_GYM_ALIASES3.items()) + list(_MORE_ALIASES.items()) + list(_MORE_ALIASES2.items()) + list(_MORE_ALIASES3.items()) + list(_MORE_ALIASES4.items()):
     ALIASES.setdefault(_p, _sc)   # never override a phrase that already maps somewhere
 try:   # every movement in the sport coverage map is also an instant request
     import sport_coverage as _cov
