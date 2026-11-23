@@ -485,7 +485,9 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
                 return ((new_hard < old_hard and o.kind in ("pose", "cycle")) or
                         (old_hard < new_hard and tr.kind in ("pose", "cycle")))
             if clash:
-                if strict and not all(overlay(o) for o in clash):
+                if strict and not all(overlay(o) or (({p for p, h in o.owned() if h} & new_hard) <= {"spine", "neck"}
+                                                     and bool(({p for p, h in o.owned() if h} | new_hard) & {"right_arm", "left_arm"}))
+                                      for o in clash):
                     for o in clash:
                         parts = sorted({p for p, h in o.owned() if h} & {p for p, h in tr.owned() if h})
                         errors.append(f"line {line['no']}: '{tr.name}' and '{o.name}' both drive {', '.join(parts)}; "
@@ -510,6 +512,13 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
                 # Base + overlay: a pose / cycle (board_stance, tread_water) and a motion that drives only
                 # some of its parts (single_blade_paddle, a shot) play TOGETHER - the more specific motion
                 # takes the shared parts (the owner ranking below), the base keeps the rest.
+                arms = {"right_arm", "left_arm"}
+                if all(({p for p, h in o.owned() if h} & new_hard) <= {"spine", "neck"} and
+                       bool(({p for p, h in o.owned() if h} | new_hard) & arms) for o in clash):
+                    # footwork + an arm action that both lean the trunk (stop_and_stick + overhand_throw):
+                    # one skill - they play together and the arm action owns the trunk (owner rule below)
+                    target.append(tr)
+                    continue
                 if all(overlay(o) for o in clash):
                     # ...except a posture pose (sit_on_bench, kneel) inside a moving motion that already has
                     # its own posture (paddling is seated): the pose is dropped, the motion plays as stored.
@@ -540,6 +549,13 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
                         owners[part] = (tr, hard)
                         continue
                     cur, cur_hard = owners[part]
+                    if part in ("spine", "neck") and hard and cur_hard:
+                        tr_arm = any(p in ("right_arm", "left_arm") and h for p, h in tr.owned())
+                        cur_arm = any(p in ("right_arm", "left_arm") and h for p, h in cur.owned())
+                        if tr_arm != cur_arm:
+                            if tr_arm:
+                                owners[part] = (tr, hard)
+                            continue
                     if hard and not cur_hard:
                         owners[part] = (tr, hard)
                     elif hard == cur_hard and (
