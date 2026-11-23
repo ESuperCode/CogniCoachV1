@@ -2343,9 +2343,10 @@ def _table():
 
 
 def _down_dog():
-    return fit_pose("downward_dog", {"body.pitch": 120, "legs.raise": 75, "arms.raise": 175, "spine.lean": 0},
+    return fit_pose("downward_dog_v2", {"body.pitch": 120, "legs.raise": 75, "arms.raise": 175, "spine.lean": 0},
                     {"legs": {"dir": 0.0, "twist": 0.0, "knee": 2.0}, "arms": {"dir": 5.0, "twist": 0.0, "elbow": 2.0}, "neck": {"nod": 10.0}},
-                    [("right_foot", "floor", 0, 3), ("right_hand", "floor", 0, 3), ("pelvis", "y", 0.95, 0.4)])
+                    [("right_foot", "floor", 0, 3), ("right_hand", "floor", 0, 3), ("pelvis", "y", 0.95, 0.4),
+                     ("right_hand", "z", 0.75, 1), ("right_foot", "z", -0.45, 1)])
 
 
 def _cobra():
@@ -2362,17 +2363,17 @@ def _forearm_plank():
 
 
 def _seated():
-    return fit_pose("seated_v2", {"body.pitch": -10, "legs.raise": 90},
+    return fit_pose("seated_v3", {"body.pitch": 0, "legs.raise": 90},
                     {"legs": {"dir": 0.0, "twist": 5.0, "knee": 3.0}, "spine": {"lean": 0.0},
                      "arms": {"raise": 25.0, "dir": 150.0, "twist": 0.0, "elbow": 5.0}},
-                    [("right_foot", "floor", 0, 3), ("right_knee", "floor", 0, 3), ("neck", "y", 0.62, 1)])
+                    [("right_foot", "floor", 0, 3), ("right_knee", "floor", 0, 3), ("neck", "z", 0.0, 2)])
 
 
 def _side_plank_fit():
-    return fit_pose("side_plank", {"body.roll": 70, "right_arm.raise": 80, "right_arm.elbow": 90},
+    return fit_pose("side_plank_v2", {"body.roll": 70, "right_arm.raise": 80, "right_arm.elbow": 90},
                     {"legs": {"raise": 0.0, "dir": 0.0, "twist": 0.0, "knee": 0.0}, "spine": {"lean": 0.0},
-                     "right_arm": {"dir": 85.0, "twist": 90.0}, "left_arm": {"raise": 170.0, "dir": 85.0, "twist": 0.0, "elbow": 5.0}},
-                    [("right_elbow", "floor", 0, 3), ("right_foot", "floor", 0, 3), ("pelvis", "y", 0.30, 1)])
+                     "right_arm": {"dir": 85.0, "twist": 90.0}, "left_arm": {"raise": 90.0, "dir": 88.0, "twist": 0.0, "elbow": 3.0}},
+                    [("right_elbow", "floor", 0, 3), ("right_foot", "floor", 0, 3), ("pelvis", "y", 0.42, 1)])
 
 
 @motion("kneel", "Tall kneeling: both knees on the floor, shins flat behind, hips over the knees, trunk upright.",
@@ -2492,20 +2493,21 @@ def _seated_pose():
 @motion("seated_forward_fold", "Seated forward fold / sit-and-reach: sitting with straight legs, hinge forward and "
         "reach the hands toward the toes, hold.", "pose", ["body"] + ARMS + LEGS + ["spine", "pelvis"], ["neck"])
 def _seated_fold():
-    return [k(0.0, **fit_pose("seated_fold", {"body.pitch": 0, "legs.raise": 90, "spine.lean": 50, "arms.raise": 60},
+    return [k(0.0, **fit_pose("seated_fold_v2", {"body.pitch": 0, "legs.raise": 90, "spine.lean": 50, "arms.raise": 60},
                                {"legs": {"dir": 0.0, "twist": 5.0, "knee": 3.0}, "arms": {"dir": 5.0, "twist": 0.0, "elbow": 5.0},
                                 "neck": {"nod": 15.0}},
                                [("right_foot", "floor", 0, 3), ("right_knee", "floor", 0, 3), ("pelvis", "y", 0.11, 3),
-                                ("right_hand", "y", 0.16, 2), ("right_hand", "z", 0.62, 1)]))]
+                                ("right_hand", "y", 0.16, 2), ("right_hand", "z", 0.62, 1),
+                                ("neck", "z", 0.42, 2), ("neck", "y", 0.38, 1)]))]
 
 
 @motion("butterfly_stretch", "Butterfly stretch: sitting tall with the soles of the feet together and the knees "
         "dropped out to the sides, hands holding the feet.", "pose", ["body"] + ARMS + LEGS + ["spine", "pelvis"], ["neck"])
 def _butterfly_stretch():
-    return [k(0.0, **fit_pose("butterfly", {"body.pitch": -10, "legs.raise": 60, "legs.knee": 120, "spine.lean": 15},
+    return [k(0.0, **fit_pose("butterfly_v2", {"body.pitch": -10, "legs.raise": 60, "legs.knee": 120, "spine.lean": 15},
                                {"legs": {"dir": 60.0, "twist": 70.0}, "arms": {"raise": 45.0, "dir": 0.0, "twist": 0.0, "elbow": 30.0}},
                                [("right_foot", "floor", 0, 3), ("pelvis", "y", 0.11, 3), ("right_knee", "y", 0.22, 1),
-                                ("neck", "y", 0.62, 1)]))]
+                                ("neck", "z", 0.08, 2)]))]
 
 
 @motion("get_up_from_floor", "Get up from lying on the back: roll up to sitting, tuck the feet in, push up through "
