@@ -65,5 +65,7 @@ POST /script   {"script": "...", "dominant_side": "right"}  compile a script dir
 GET  /motions  the database catalog
 GET  /health   engine_version, model, key configured
 
-Cost / speed: common phrases compile instantly with no model call; otherwise one gpt-5-mini call, typically 2-8 s (logged per request).
+Cost / speed: common phrases compile instantly with no model call; otherwise one gpt-5-mini call, typically 3-6 s
+(logged per request). Each request sends ~2.5k tokens: the core building blocks plus the ~70 database
+motions that best match its words (the full catalog would be ~9k tokens and 3x slower).
 Results are cached per prompt.

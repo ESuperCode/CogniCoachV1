@@ -79,7 +79,7 @@ def _load_dotenv(path: Path) -> None:
 _load_dotenv(Path(__file__).with_name(".env"))
 
 # Bump on every engine change. The viewer page checks this and warns when the running server is stale.
-ENGINE_VERSION = "17-fast-script"
+ENGINE_VERSION = "18-retrieval-catalog"
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
 HOST = os.getenv("MOTION_HOST", "127.0.0.1")
 PORT = int(os.getenv("MOTION_PORT", "8000"))
@@ -2075,7 +2075,7 @@ SCRIPT_SCHEMA = _obj({
 })
 
 
-def script_instructions() -> str:
+def script_instructions(request: str = "") -> str:
     import motion_database as mdb
     return f"""
 You turn a coaching request into a short animation script for a 3D athlete, built from a database
@@ -2124,12 +2124,13 @@ stance(width=wide, depth=0.5) + ready_arms
 stance(width=wide, depth=0.5) + forehand
 run(pace=sprint, times=2)
 
-CATALOG (name(params) [kind a=action c=cycle p=pose; body parts it drives] description):
-{mdb.catalog_text()}
+The script field holds ONLY script lines: no notes, comments, explanations or invented names. If no
+catalog motion fits a step, leave that step out or use the closest catalog motion. When the catalog has
+a motion named for the requested skill (discus_spin, pole_vault, sit_spin, fencing_lunge ...), use it.
 
-RECIPES - proven scripts for common sport movements (one line each, " / " = new line). Reuse and
-combine them; adapt for drills that are not listed:
-{recipes_text()}
+CATALOG - the basic building blocks plus the database motions that match this request
+(name(params) [kind a=action c=cycle p=pose; body parts it drives] description):
+{relevant_catalog(request)}
 """.strip()
 
 
@@ -2153,6 +2154,47 @@ def relevant_recipes(text: str, n: int = 8) -> List[str]:
             scored.append((score, -len(pw), f"{sport.split(' ')[0].lower()} {phrase}: {script.replace(chr(10), ' / ')}"))
     scored.sort(reverse=True)
     return [x[2] for x in scored[:n]]
+
+
+_CORE = 30          # the first database motions are the generic building blocks (stance, run, jump, turn ...)
+_CATALOG_N = 70     # request-specific motions sent to the model (the full catalog is ~9k tokens: too slow)
+_CORE_EXTRA = ["seated", "sit_on_bench", "lie_on_back", "lie_face_down", "kneel", "half_kneel", "table_top", "stride_step",
+               "crossover_step", "cutting_step", "stop_and_stick", "catch", "overhand_throw", "chest_pass", "balance_point"]
+_cat_index: Optional[List[Tuple[str, set, set, set]]] = None
+
+
+def _stems(text: str) -> set:
+    return {w.rstrip("s")[:6] for w in re.findall(r"[a-z]+", text.lower()) if w not in _STOP and len(w) > 2}
+
+
+def relevant_catalog(request: str, n: int = _CATALOG_N) -> str:
+    """Catalog lines for the model: the core building blocks + the motions whose name, phrases and
+    description share the most words with the request (+ every motion its closest recipes use)."""
+    global _cat_index
+    import motion_database as mdb
+    lines = dict(zip(mdb.DB, mdb.catalog_text().split("\n")))
+    if _cat_index is None:
+        used: Dict[str, set] = {name: set() for name in mdb.DB}
+        for phrase, script in mdb.ALIASES.items():
+            for name in set(re.findall(r"[a-z_0-9]+", script)) & used.keys():
+                used[name] |= _stems(phrase)
+        _cat_index = [(name, _stems(name.replace("_", " ")), used[name], _stems(m["comment"])) for name, m in mdb.DB.items()]
+    names = list(mdb.DB)[:_CORE] + [n for n in _CORE_EXTRA if n in mdb.DB and n not in list(mdb.DB)[:_CORE]]
+    if request:
+        q = _stems(request)
+        hinted = set()
+        for h in relevant_recipes(request):
+            hinted |= set(re.findall(r"[a-z_0-9]+", h.split(":", 1)[-1])) & lines.keys()
+        scored = []
+        for name, nw, aw, cw in _cat_index:
+            sc = 3 * len(q & nw) + 2 * len(q & aw) + len(q & cw) + (4 if name in hinted else 0)
+            if sc > 0 and name not in names:
+                scored.append((sc, -len(name), name))
+        names += [x[2] for x in sorted(scored, reverse=True)[:n]]
+    else:
+        names = list(mdb.DB)
+    return "\n".join(lines[nm] for nm in names)
+
 
 
 def recipes_text() -> str:
@@ -2256,7 +2298,7 @@ def plan_script(movement: str, extra: str = "") -> Tuple[Dict[str, Any], List[Di
         if attempt and budget < 4.0:
             break   # not enough time left for a second try: answer locally
         try:
-            raw, meta = _call_model(script_instructions(), request, SCRIPT_EFFORT, SCRIPT_SCHEMA, name="motion_script",
+            raw, meta = _call_model(script_instructions(movement + " " + extra), request, SCRIPT_EFFORT, SCRIPT_SCHEMA, name="motion_script",
                                     max_tokens=3000, timeout=budget)
             _compile_script(raw.get("script", ""), "right")   # lenient: only fails if nothing usable is left
             return raw, [{"stage": "script" if not attempt else "script-retry", **meta, "script": raw.get("script")}]

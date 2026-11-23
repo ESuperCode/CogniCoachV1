@@ -7088,7 +7088,7 @@ _MORE_ALIASES2 = {
     "hesitation dribble": "stance(depth=0.4) + hand_dribble(times=2, speed=0.6)\nstance(depth=0.5) + crossover_dribble",
     "three pointer": "jump + one_hand_set_shot(delay=0.35)", "3 pointer": "jump + one_hand_set_shot(delay=0.35)", "outlet pass": "two_hand_overhead_throw",
     "screen": "set_screen(hold=2)", "set a screen": "set_screen(hold=2)", "pick": "set_screen(hold=2)", "pick and roll": "set_screen(hold=1)\nrun(times=2)",
-    "charge": "take_a_charge",
+    "charge": "take_a_charge", "slap shot": "stance(width=wide, depth=0.3) + two_hand_ground_strike",
 }
 
 
@@ -7171,6 +7171,10 @@ def catalog_text() -> str:
 
 # Names the language model commonly writes that are not database names -> what they mean.
 NAME_ALIASES: Dict[str, str] = {
+    "hop": "single_leg_hop", "chamber": "knee_drive", "takeoff": "jump", "take_off": "jump", "plant": "stride_step",
+    "throwing_followthrough": "stand", "follow_through_throw": "stand",
+    "head_lift": "front_crawl", "sighting": "front_crawl", "breath": "front_crawl", "catch_and_sweep": "breaststroke",
+    "pullout": "breaststroke", "shift_center_of_mass": "stance", "weight_shift": "stance", "glide": "streamline",
     "sprint": "run(pace=sprint)", "jog": "run(pace=jog)", "running": "run", "athletic_stance": "stance",
     "ready_stance": "stance", "ready": "stance", "boxing_stance": "fighting_stance", "land": "stand", "landing": "stand",
     "recover": "stand", "rest": "stand", "idle": "stand", "hold": "stand", "box_jump": "jump(height=high)",

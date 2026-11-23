@@ -345,6 +345,10 @@ def parse(script: str) -> Tuple[List[Dict[str, Any]], bool, List[str]]:
         text = raw.split("#", 1)[0].strip()
         if not text:
             continue
+        # "plant_pole = pole_vault": the model named a step - the right-hand side is the motion
+        named = re.fullmatch(r"([a-z_][a-z0-9_]*)\s*=\s*([a-z_][a-z0-9_]*(?:\s*\(.*\))?(?:\s*\+.*)?)", text)
+        if named and named.group(1) not in GENERIC_PARAMS:
+            text = named.group(2).strip()
         if text.lower() == "loop":
             loop = True
             continue
@@ -495,6 +499,30 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
                                     f"'{tr.name}' drives those parts")
                     target.append(tr)
                     continue
+                # Base + overlay: a pose / cycle (board_stance, tread_water) and a motion that drives only
+                # some of its parts (single_blade_paddle, a shot) play TOGETHER - the more specific motion
+                # takes the shared parts (the owner ranking below), the base keeps the rest.
+                new_hard = {p for p, h in tr.owned() if h}
+
+                def overlay(o: Track) -> bool:
+                    old_hard = {p for p, h in o.owned() if h}
+                    return ((new_hard < old_hard and o.kind in ("pose", "cycle")) or
+                            (old_hard < new_hard and tr.kind in ("pose", "cycle")))
+                if all(overlay(o) for o in clash):
+                    # ...except a posture pose (sit_on_bench, kneel) inside a moving motion that already has
+                    # its own posture (paddling is seated): the pose is dropped, the motion plays as stored.
+                    lower = {"body", "right_leg", "left_leg"}
+                    if tr.kind == "pose" and new_hard & lower and all(o.kind != "pose" and new_hard < {p for p, h in o.owned() if h}
+                                                                      for o in clash):
+                        warnings.append(f"line {line['no']}: '{tr.name}' dropped - '{clash[0].name}' already has its posture")
+                        continue
+                    posture = [o for o in clash if o.kind == "pose" and {p for p, h in o.owned() if h} & lower
+                               and tr.kind != "pose" and {p for p, h in o.owned() if h} < new_hard]
+                    for o in posture:
+                        target.remove(o)
+                        warnings.append(f"line {line['no']}: '{o.name}' dropped - '{tr.name}' already has its posture")
+                    target.append(tr)
+                    continue
                 warnings.append(f"line {line['no']}: '{tr.name}' and '{clash[0].name}' drive the same body parts - "
                                 f"'{tr.name}' plays right after it")
                 sublines.append([tr])
@@ -512,7 +540,10 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
                     cur, cur_hard = owners[part]
                     if hard and not cur_hard:
                         owners[part] = (tr, hard)
-                    elif hard == cur_hard and (KIND_RANK[tr.kind], -len(tr.owned())) > (KIND_RANK[cur.kind], -len(cur.owned())):
+                    elif hard == cur_hard and (
+                            {p for p, h in tr.owned() if h} < {p for p, h in cur.owned() if h} or
+                            (not {p for p, h in cur.owned() if h} < {p for p, h in tr.owned() if h} and
+                             (KIND_RANK[tr.kind], -len(tr.owned())) > (KIND_RANK[cur.kind], -len(cur.owned())))):
                         # tie: the more specific motion (fewer body parts) wins - "stand + ready_arms" shows the arms
                         owners[part] = (tr, hard)
             built.append((tracks, line["repeat"], line["no"], owners))
