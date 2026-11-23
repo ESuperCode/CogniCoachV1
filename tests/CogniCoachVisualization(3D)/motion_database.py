@@ -3030,10 +3030,11 @@ def _front_split():
 @motion("l_sit", "L-sit: hands on the floor beside the hips with straight arms, body lifted, legs held straight out "
         "in front off the floor.", "pose", ["body"] + FULL, ["neck"])
 def _l_sit():
-    return [k(0.0, **fit_pose("l_sit", {"body.pitch": 0, "legs.raise": 90, "arms.raise": 10},
+    return [k(0.0, **fit_pose("l_sit_v2", {"body.pitch": 0, "legs.raise": 90, "arms.raise": 10},
                                {"legs": {"dir": 0.0, "twist": 5.0, "knee": 2.0}, "arms": {"dir": 20.0, "twist": 0.0, "elbow": 3.0},
                                 "spine": {"lean": 10.0}},
-                               [("right_hand", "floor", 0, 3), ("right_foot", "y", 0.18, 2), ("pelvis", "y", 0.14, 1)]))]
+                               [("right_hand", "floor", 0, 3), ("right_foot", "y", 0.22, 3), ("pelvis", "y", 0.16, 2),
+                                ("neck", "z", 0.02, 3), ("right_foot", "z", 0.70, 1)]))]
 
 
 @motion("hollow_hold", "Hollow body hold: lying on the back with the lower back pressed down, shoulders and legs "
