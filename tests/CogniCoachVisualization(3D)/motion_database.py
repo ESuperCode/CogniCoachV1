@@ -7213,7 +7213,8 @@ _MORE_ALIASES3 = {
     "breaststroke pullout": "breaststroke_pullout", "pullout": "breaststroke_pullout", "underwater pullout": "breaststroke_pullout",
     "speed skating start": "speed_skating_start\nskating_stride(times=2)", "j stroke": "kneel + single_blade_paddle(times=3)",
     "canoe j stroke": "kneel + single_blade_paddle(times=3)", "canoe stroke": "kneel + single_blade_paddle(times=3)",
-    "triple jump hop step jump": "triple_jump", "hop step and jump": "triple_jump", "hop step jump": "triple_jump",
+    "triple jump hop step jump": "triple_jump", "kayak stroke": "paddling(times=3)", "kayak forward stroke": "paddling(times=3)", "kayak paddling": "paddling(times=3)",
+    "double blade paddle": "paddling(times=3)", "hop step and jump": "triple_jump", "hop step jump": "triple_jump",
 }
 
 

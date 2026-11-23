@@ -2231,7 +2231,10 @@ def local_script(movement: str) -> Optional[Dict[str, Any]]:
         # drive", "a proper golf putt"): use the proven script for the longest phrase it contains.
         words = text.split()
         sports = {"basketball", "soccer", "football", "tennis", "baseball", "softball", "volleyball", "swimming",
-                  "swim", "cricket", "rugby", "golf", "hockey", "track", "a", "the", "proper", "basic", "simple"}
+                  "swim", "cricket", "rugby", "golf", "hockey", "track", "a", "the", "proper", "basic", "simple",
+                  # filler that does not change the movement
+                  "technique", "drill", "practice", "form", "position", "from", "line", "on", "at", "in", "place",
+                  "during", "side", "underwater", "properly", "correctly", "how", "to", "do"}
         best_key, any_key = None, None
         for key in mdb.ALIASES:
             kw = key.split()
