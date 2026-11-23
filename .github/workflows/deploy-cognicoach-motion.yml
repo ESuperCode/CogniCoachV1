@@ -1,0 +1,72 @@
+# Deploys the CogniCoach motion engine Worker (tests/CogniCoachVisualization(3D)/worker) to Cloudflare.
+# Runs on pushes to main that touch the worker, or by hand (Actions -> Deploy cognicoach-motion -> Run workflow).
+#
+# Repository secrets (Settings -> Secrets and variables -> Actions):
+#   CLOUDFLARE_API_TOKEN  required - Cloudflare token from the "Edit Cloudflare Workers" template
+#   OPENAI_API_KEY        optional - copied to the Worker as a secret on every run when set
+#   MOTION_DEV_CODE       optional - copied to the Worker as its DEV_CODE secret when set
+# Without CLOUDFLARE_API_TOKEN the workflow skips the deploy instead of failing.
+name: Deploy cognicoach-motion
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tests/CogniCoachVisualization(3D)/worker/**"
+      - ".github/workflows/deploy-cognicoach-motion.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cognicoach-motion
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "tests/CogniCoachVisualization(3D)/worker"
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 00ed78486159dbce2f059215aeee83e9
+    steps:
+      - name: Check for the Cloudflare token
+        id: token
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else
+            echo "::warning::CLOUDFLARE_API_TOKEN repository secret is not set - skipping the deploy"; echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+        working-directory: .
+      - uses: actions/checkout@v4
+        if: steps.token.outputs.ok == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.token.outputs.ok == 'true'
+        with:
+          node-version: 22
+      - name: Install
+        if: steps.token.outputs.ok == 'true'
+        run: npm ci
+      - name: Test (JS compiler) and build the browser bundle
+        if: steps.token.outputs.ok == 'true'
+        run: |
+          npm test
+          npm run build:client
+      - name: Deploy
+        if: steps.token.outputs.ok == 'true'
+        run: npx wrangler deploy
+      - name: Copy secrets to the Worker
+        if: steps.token.outputs.ok == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          MOTION_DEV_CODE: ${{ secrets.MOTION_DEV_CODE }}
+        run: |
+          node -e '
+            const s = {};
+            if (process.env.OPENAI_API_KEY) s.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+            if (process.env.MOTION_DEV_CODE) s.DEV_CODE = process.env.MOTION_DEV_CODE;
+            require("fs").writeFileSync("/tmp/worker-secrets.json", JSON.stringify(s));
+            console.log("secrets to set:", Object.keys(s).join(", ") || "none");'
+          if [ "$(cat /tmp/worker-secrets.json)" != "{}" ]; then npx wrangler secret bulk /tmp/worker-secrets.json; fi
+          rm -f /tmp/worker-secrets.json
+      - name: Health check
+        if: steps.token.outputs.ok == 'true'
+        run: curl -fsS --retry 6 --retry-delay 5 --retry-all-errors https://cognicoach-motion.bodhishanbhag.workers.dev/health
