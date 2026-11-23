@@ -302,6 +302,74 @@ def support_arms(pitch: float, lean: float = 0.0, elbow: str = "down", spread: f
     return {"right_arm": arm_at(x, y, z, elbow, "right"), "left_arm": arm_at(x, y, z, elbow, "left")}
 
 
+FLOOR_Y = -(1.0 + me.THIGH + me.SHIN + me.SOLE_DROP) * U       # floor height below the standing pelvis (m)
+CONTACT_R = {"head": 0.17, "right_foot": 0.065, "left_foot": 0.065}  # point -> its distance from the floor at contact
+
+
+def fit_pose(name: str, free: Dict[str, float], fixed: Dict[str, Dict[str, float]],
+             goals: List[Tuple[str, str, float, float]]) -> Dict[str, Dict[str, float]]:
+    """Solve a floor pose once (cached in the solved-pose file). free: {"part.param": start value};
+    fixed: part values that do not change; goals: (point, kind, value, weight) where kind is "floor"
+    (that point rests on the floor), "y" (height above the floor, m), "z" / "x" (body-frame forward /
+    sideways position relative to the pelvis, m). Ground contact is resolved like playback does it."""
+    import motion_script as ms
+    keys = list(free)
+    key = _solved_key("pose", name)
+    if key not in _SOLVED:
+        def build(x):
+            pose = {q: dict(v) for q, v in ms.NEUTRAL.items()}
+            for part, vals in fixed.items():
+                for p2 in GROUPS.get(part, [part]):
+                    pose[p2].update(vals)
+            for kname, v in zip(keys, x):
+                part, prm = kname.split(".")
+                for p2 in GROUPS.get(part, [part]):
+                    pose[p2][prm] = float(v)
+            return pose
+
+        def cost(x):
+            pose = build(x)
+            w = me.world_rotations(ms.part_rotations(pose))
+            pos = me.forward_kinematics(w)
+            g = ms.ground_offset(pos, w)
+            c = 0.0
+            for point, kind, value, weight in goals:
+                pt = pos[point] * U + np.array([0.0, g, 0.0])
+                if kind == "floor":
+                    r = CONTACT_R.get(point, me.LIMB_RADIUS * U)
+                    c += weight * (pt[1] - r - FLOOR_Y) ** 2 * 100
+                elif kind == "y":
+                    c += weight * (pt[1] - FLOOR_Y - value) ** 2 * 100
+                elif kind == "z":
+                    c += weight * (pt[2] - value) ** 2 * 100
+                elif kind == "x":
+                    c += weight * (pt[0] - value) ** 2 * 100
+            return c + 1e-6 * float(np.sum(np.square(x)))
+        x = np.array([free[kk] for kk in keys], dtype=float)
+        x = _nelder_mead(cost, x, step=15.0, iters=500)
+        x = _nelder_mead(cost, x, step=4.0, iters=500)
+        _SOLVED[key] = [round(float(v), 2) for v in x]
+        _SOLVED_DIRTY[0] = True
+    out: Dict[str, Dict[str, float]] = {part: dict(vals) for part, vals in fixed.items()}
+    for kname, v in zip(keys, _SOLVED[key]):
+        part, prm = kname.split(".")
+        for p2 in GROUPS_DB.get(part, [part]):
+            out.setdefault(p2, {})[prm] = v
+    return out
+
+
+GROUPS_DB = {"legs": ["right_leg", "left_leg"], "arms": ["right_arm", "left_arm"]}
+GROUPS = GROUPS_DB
+
+
+def full(part: str, **vals: float) -> Dict[str, float]:
+    """Complete parameter dict for a part (fit_pose results only set what was solved)."""
+    import motion_script as ms
+    d = dict(ms.NEUTRAL[part])
+    d.update(vals)
+    return d
+
+
 PLANK_PITCH = 57.0        # straight arms reach the floor at this body angle on this rig
 PUSHUP_LOW_PITCH = 75.0   # chest a hand's width off the floor
 
@@ -2254,7 +2322,215 @@ def _juggle():
             k(0.22, right_leg=Lg(8, 0, 8, 20)), k(0.45, right_leg=Lg(75, 0, 8, 90)), k(0.68, right_leg=Lg(8, 0, 8, 20))]
 
 
+# =============================================================================
+# 22. FLOOR / MAT POSITIONS (kneeling, all fours, lying, seated) - solved against the floor
+# =============================================================================
+STRAIGHT_LEGS = {"legs": {"dir": 0.0, "twist": 0.0}}
+
+
+def _childs():
+    return fit_pose("childs_pose", {"body.pitch": 110, "legs.raise": 100, "legs.knee": 150, "spine.lean": 10, "arms.raise": 150},
+                    {"legs": {"dir": 0.0, "twist": 0.0}, "arms": {"dir": 5.0, "twist": 0.0, "elbow": 5.0}, "neck": {"nod": 10.0}},
+                    [("right_foot", "floor", 0, 3), ("right_knee", "floor", 0, 3), ("head", "floor", 0, 2),
+                     ("right_hand", "floor", 0, 2), ("pelvis", "y", 0.30, 0.5)])
+
+
+def _table():
+    return fit_pose("table_top", {"body.pitch": 90, "legs.raise": 90, "legs.knee": 90, "arms.raise": 90},
+                    {"legs": {"dir": 0.0, "twist": 0.0}, "arms": {"dir": 5.0, "twist": 0.0, "elbow": 3.0}, "spine": {"lean": 0.0}},
+                    [("right_knee", "floor", 0, 3), ("right_foot", "floor", 0, 2), ("right_hand", "floor", 0, 3),
+                     ("pelvis", "y", 0.48, 1), ("neck", "y", 0.50, 1)])
+
+
+def _down_dog():
+    return fit_pose("downward_dog", {"body.pitch": 120, "legs.raise": 75, "arms.raise": 175, "spine.lean": 0},
+                    {"legs": {"dir": 0.0, "twist": 0.0, "knee": 2.0}, "arms": {"dir": 5.0, "twist": 0.0, "elbow": 2.0}, "neck": {"nod": 10.0}},
+                    [("right_foot", "floor", 0, 3), ("right_hand", "floor", 0, 3), ("pelvis", "y", 0.95, 0.4)])
+
+
+def _cobra():
+    return fit_pose("cobra", {"body.pitch": 90, "spine.lean": -40, "arms.raise": 40, "arms.elbow": 30},
+                    {"legs": {"raise": 0.0, "dir": 0.0, "twist": 0.0, "knee": 0.0}, "arms": {"dir": 10.0, "twist": 0.0}, "neck": {"nod": -20.0}},
+                    [("right_foot", "floor", 0, 3), ("pelvis", "y", 0.10, 2), ("right_hand", "floor", 0, 3), ("neck", "y", 0.55, 1)])
+
+
+def _forearm_plank():
+    return fit_pose("forearm_plank", {"body.pitch": 75, "arms.raise": 70, "arms.elbow": 90},
+                    {"legs": {"raise": 0.0, "dir": 0.0, "twist": 0.0, "knee": 0.0}, "arms": {"dir": 5.0, "twist": 0.0}, "spine": {"lean": 0.0},
+                     "neck": {"nod": -20.0}},
+                    [("right_foot", "floor", 0, 3), ("right_elbow", "floor", 0, 3), ("right_hand", "floor", 0, 2)])
+
+
+def _seated():
+    return fit_pose("seated_v2", {"body.pitch": -10, "legs.raise": 90},
+                    {"legs": {"dir": 0.0, "twist": 5.0, "knee": 3.0}, "spine": {"lean": 0.0},
+                     "arms": {"raise": 25.0, "dir": 150.0, "twist": 0.0, "elbow": 5.0}},
+                    [("right_foot", "floor", 0, 3), ("right_knee", "floor", 0, 3), ("neck", "y", 0.62, 1)])
+
+
+def _side_plank_fit():
+    return fit_pose("side_plank", {"body.roll": 70, "right_arm.raise": 80, "right_arm.elbow": 90},
+                    {"legs": {"raise": 0.0, "dir": 0.0, "twist": 0.0, "knee": 0.0}, "spine": {"lean": 0.0},
+                     "right_arm": {"dir": 85.0, "twist": 90.0}, "left_arm": {"raise": 170.0, "dir": 85.0, "twist": 0.0, "elbow": 5.0}},
+                    [("right_elbow", "floor", 0, 3), ("right_foot", "floor", 0, 3), ("pelvis", "y", 0.30, 1)])
+
+
+@motion("kneel", "Tall kneeling: both knees on the floor, shins flat behind, hips over the knees, trunk upright.",
+        "pose", LEGS, ARMS + ["spine"])
+def _kneel():
+    return [k(0.0, right_leg=Lg(0, 0, 0, 90), left_leg=Lg(0, 0, 0, 90), spine=S(3), right_arm=HANG, left_arm=HANG)]
+
+
+@motion("half_kneel", "Half-kneeling: the left knee on the floor with the shin behind, the right foot planted in "
+        "front with the knee at 90 degrees, trunk upright.", "pose", LEGS, ARMS + ["spine"])
+def _half_kneel():
+    return [k(0.0, right_leg=Lg(88, 0, 4, 90), left_leg=Lg(0, 0, 0, 90), spine=S(3), right_arm=HANG, left_arm=HANG)]
+
+
+@motion("hip_flexor_stretch", "Kneeling hip-flexor stretch: from half-kneeling, shift the hips forward and reach the "
+        "left arm overhead, hold.", "pose", LEGS + ARMS + ["spine", "pelvis"], [])
+def _hip_flexor():
+    return [k(0.0, **fit_pose("hip_flexor_stretch", {"right_leg.raise": 70, "right_leg.knee": 100, "left_leg.raise": 20,
+                                                     "left_leg.knee": 90},
+                               {"right_leg": {"dir": 0.0, "twist": 4.0}, "left_leg": {"dir": 180.0, "twist": 0.0},
+                                "pelvis": {"tilt": -8.0}, "spine": {"lean": -6.0, "side": 10.0},
+                                "left_arm": {"raise": 170.0, "dir": 15.0, "twist": 0.0, "elbow": 5.0},
+                                "right_arm": {"raise": 25.0, "dir": 120.0, "twist": 60.0, "elbow": 100.0}},
+                               [("right_foot", "floor", 0, 3), ("left_knee", "floor", 0, 3), ("left_foot", "floor", 0, 2),
+                                ("right_foot", "z", 0.35, 1)]))]
+
+
+@motion("childs_pose", "Child's pose (rest / stretch): kneeling with the hips sitting back on the heels, the "
+        "chest folded down over the thighs, forehead on the floor and arms stretched long in front.",
+        "pose", ["body"] + ARMS + LEGS + ["spine", "pelvis", "neck"], [])
+def _childs_pose():
+    return [k(0.0, **_childs())]
+
+
+@motion("table_top", "Hands-and-knees (all fours / table top): hands under the shoulders, knees under the hips, "
+        "back flat.", "pose", ["body"] + ARMS + LEGS + ["spine", "pelvis"], ["neck"])
+def _table_top():
+    return [k(0.0, **_table(), neck=N(-10))]
+
+
+@motion("cat_cow", "Cat-cow on hands and knees: round the back up with the chin tucked (cat), then let the belly "
+        "drop with the chest and head lifted (cow).", "cycle", ["body"] + ARMS + LEGS + ["spine", "pelvis", "neck"], [],
+        period=3.0)
+def _cat_cow():
+    t = _table()
+    return [k(0.0, **{**t, "spine": S(22), "pelvis": P(-10), "neck": N(30)}), k(1.5, spine=S(-22), pelvis=P(10), neck=N(-30))]
+
+
+@motion("bird_dog", "Bird dog: on hands and knees, reach the right arm forward and the left leg straight back, "
+        "hold, return, switch sides.", "cycle", ["body"] + ARMS + LEGS + ["spine", "pelvis"], ["neck"], period=3.2)
+def _bird_dog():
+    t = _table()
+    leg_kn, arm_up = t["right_leg"], t["right_arm"]
+    return [k(0.0, **t, neck=N(-10)),
+            k(0.6, right_arm=full("right_arm", **{**arm_up, "raise": 175}), left_leg=full("left_leg", **{**leg_kn, "raise": 0.0, "knee": 3.0})),
+            k(1.1, hold=True),
+            k(1.6, right_arm=full("right_arm", **arm_up), left_leg=full("left_leg", **leg_kn)),
+            k(2.2, left_arm=full("left_arm", **{**arm_up, "raise": 175}), right_leg=full("right_leg", **{**leg_kn, "raise": 0.0, "knee": 3.0})),
+            k(2.7, hold=True)]
+
+
+@motion("downward_dog", "Downward dog: hands and feet on the floor with the hips pushed high into an upside-down "
+        "V, arms and legs long, head between the arms.", "pose", ["body"] + ARMS + LEGS + ["spine", "pelvis", "neck"], [])
+def _downward_dog():
+    return [k(0.0, **_down_dog())]
+
+
+@motion("cobra", "Cobra / upward dog: lying face down, press the hands into the floor and lift the chest, hips "
+        "and legs stay on the floor, look forward.", "pose", ["body"] + ARMS + LEGS + ["spine", "pelvis", "neck"], [])
+def _cobra_pose():
+    return [k(0.0, **_cobra())]
+
+
+@motion("forearm_plank", "Forearm plank: forearms on the floor with the elbows under the shoulders, body in a "
+        "straight line on the toes.", "pose", ["body"] + ARMS + LEGS + ["spine", "pelvis"], ["neck"])
+def _forearm_plank_pose():
+    return [k(0.0, **_forearm_plank())]
+
+
+@motion("lie_on_back", "Lying flat on the back (supine), arms by the sides, legs long - rest or start position.",
+        "pose", ["body"] + ARMS + LEGS + ["spine", "pelvis"], ["neck"])
+def _supine():
+    return [k(0.0, body=B(-90), right_leg=Lg(0, 0, 0, 0), left_leg=Lg(0, 0, 0, 0), spine=S(0), pelvis=P(),
+              right_arm=A(10, 30, 0, 5), left_arm=A(10, 30, 0, 5), neck=N())]
+
+
+@motion("lie_face_down", "Lying face down (prone), arms by the sides or forward, legs long.", "pose",
+        ["body"] + ARMS + LEGS + ["spine", "pelvis"], ["neck"])
+def _prone():
+    return [k(0.0, body=B(90), right_leg=Lg(0, 0, 0, 0), left_leg=Lg(0, 0, 0, 0), spine=S(0), pelvis=P(),
+              right_arm=A(10, 30, 0, 5), left_arm=A(10, 30, 0, 5), neck=N(-10))]
+
+
+@motion("dead_bug", "Dead bug: on the back with arms pointing up and knees bent at 90 degrees in the air; lower "
+        "the right arm overhead and the left leg long toward the floor, return, switch.", "cycle",
+        ["body"] + ARMS + LEGS + ["spine", "pelvis"], ["neck"], period=3.0)
+def _dead_bug():
+    up_leg, up_arm = Lg(90, 0, 0, 90), A(90, 5, 0, 5)
+    return [k(0.0, body=B(-90), spine=S(0), pelvis=P(), right_leg=up_leg, left_leg=up_leg, right_arm=up_arm, left_arm=up_arm, neck=N(10)),
+            k(0.7, right_arm=A(170, 5, 0, 5), left_leg=Lg(15, 0, 0, 5)), k(1.1, hold=True),
+            k(1.5, right_arm=up_arm, left_leg=up_leg),
+            k(2.2, left_arm=A(170, 5, 0, 5), right_leg=Lg(15, 0, 0, 5)), k(2.6, hold=True)]
+
+
+@motion("side_plank", "Side plank on the right forearm: body in a straight line sideways, hips lifted, the left "
+        "arm on the hip or reaching up.", "pose", ["body"] + ARMS + LEGS + ["spine", "pelvis"], ["neck"])
+def _side_plank():
+    return [k(0.0, **_side_plank_fit(), pelvis=P(), neck=N())]
+
+
+@motion("seated", "Sitting on the floor with the legs straight out in front, trunk upright, hands beside the hips.",
+        "pose", ["body"] + ARMS + LEGS + ["spine", "pelvis"], ["neck"])
+def _seated_pose():
+    return [k(0.0, **_seated())]
+
+
+@motion("seated_forward_fold", "Seated forward fold / sit-and-reach: sitting with straight legs, hinge forward and "
+        "reach the hands toward the toes, hold.", "pose", ["body"] + ARMS + LEGS + ["spine", "pelvis"], ["neck"])
+def _seated_fold():
+    return [k(0.0, **fit_pose("seated_fold", {"body.pitch": 0, "legs.raise": 90, "spine.lean": 50, "arms.raise": 60},
+                               {"legs": {"dir": 0.0, "twist": 5.0, "knee": 3.0}, "arms": {"dir": 5.0, "twist": 0.0, "elbow": 5.0},
+                                "neck": {"nod": 15.0}},
+                               [("right_foot", "floor", 0, 3), ("right_knee", "floor", 0, 3), ("pelvis", "y", 0.11, 3),
+                                ("right_hand", "y", 0.16, 2), ("right_hand", "z", 0.62, 1)]))]
+
+
+@motion("butterfly_stretch", "Butterfly stretch: sitting tall with the soles of the feet together and the knees "
+        "dropped out to the sides, hands holding the feet.", "pose", ["body"] + ARMS + LEGS + ["spine", "pelvis"], ["neck"])
+def _butterfly_stretch():
+    return [k(0.0, **fit_pose("butterfly", {"body.pitch": -10, "legs.raise": 60, "legs.knee": 120, "spine.lean": 15},
+                               {"legs": {"dir": 60.0, "twist": 70.0}, "arms": {"raise": 45.0, "dir": 0.0, "twist": 0.0, "elbow": 30.0}},
+                               [("right_foot", "floor", 0, 3), ("pelvis", "y", 0.11, 3), ("right_knee", "y", 0.22, 1),
+                                ("neck", "y", 0.62, 1)]))]
+
+
+@motion("get_up_from_floor", "Get up from lying on the back: roll up to sitting, tuck the feet in, push up through "
+        "a squat to standing.", "action", ["body"] + ARMS + LEGS + ["spine", "pelvis", "neck"], [])
+def _get_up():
+    return [k(0.0, body=B(-90), right_leg=Lg(0, 0, 0, 0), left_leg=Lg(0, 0, 0, 0), spine=S(0), pelvis=P(),
+              right_arm=A(10, 30, 0, 5), left_arm=A(10, 30, 0, 5), neck=N()),
+            k(0.7, body=B(-20), spine=S(30), right_leg=Lg(60, 0, 8, 100), left_leg=Lg(60, 0, 8, 100), right_arm=A(30, 150, 0, 5), left_arm=A(60, 5, 0, 10)),
+            k(1.3, body=B(0), **stance_legs("normal", 1.25), spine=S(45), right_arm=A(60, 5, 0, 10), left_arm=A(60, 5, 0, 10)),
+            k(2.1, **stance_legs("normal", 0.05), spine=S(4), right_arm=HANG, left_arm=HANG, neck=N())]
+
+
 ALIASES: Dict[str, str] = {
+    "childs pose": "childs_pose(hold=2)", "child pose": "childs_pose(hold=2)", "childs pose stretch": "childs_pose(hold=2)",
+    "kneeling": "kneel(hold=1)", "kneel": "kneel(hold=1)", "half kneeling": "half_kneel(hold=1)",
+    "cat cow": "cat_cow(times=2)", "cat camel": "cat_cow(times=2)", "bird dog": "bird_dog(times=2)", "bird dogs": "bird_dog(times=2)",
+    "downward dog": "downward_dog(hold=2)", "down dog": "downward_dog(hold=2)", "cobra": "cobra(hold=2)", "cobra stretch": "cobra(hold=2)",
+    "upward dog": "cobra(hold=2)", "forearm plank": "forearm_plank(hold=2)", "elbow plank": "forearm_plank(hold=2)",
+    "side plank": "side_plank(hold=2)", "dead bug": "dead_bug(times=2)", "dead bugs": "dead_bug(times=2)",
+    "hands and knees": "table_top(hold=1)", "all fours": "table_top(hold=1)", "table top": "table_top(hold=1)",
+    "sit and reach": "seated_forward_fold(hold=2)", "seated forward fold": "seated_forward_fold(hold=2)",
+    "seated hamstring stretch": "seated_forward_fold(hold=2)", "butterfly stretch": "butterfly_stretch(hold=2)",
+    "hip flexor stretch": "hip_flexor_stretch(hold=2)", "kneeling hip flexor stretch": "hip_flexor_stretch(hold=2)",
+    "lie down": "lie_on_back(hold=1)", "lying on back": "lie_on_back(hold=1)", "get up": "get_up_from_floor",
+    "sun salutation": "stand + arms_overhead\nhamstring_stretch(hold=0.6)\nplank(hold=0.5)\ncobra(hold=0.8)\ndownward_dog(hold=1)\nstand",
     "medicine ball slam": "overhead_slam(times=2)", "ball slam": "overhead_slam(times=2)", "slam": "overhead_slam",
     "forward roll": "forward_roll", "somersault": "forward_roll", "backstroke start": "backstroke_start\nback_crawl(times=2)",
     "juggling": "juggle_ball(times=4)", "soccer juggling": "juggle_ball(times=4)", "keep ups": "juggle_ball(times=4)",
@@ -2315,7 +2591,9 @@ NAME_ALIASES: Dict[str, str] = {
     "jump_lunge": "lunge_jump", "split_jump": "lunge_jump", "punch": "cross", "kick": "soccer_kick", "shot": "soccer_kick",
     "throw": "overhand_throw", "pitch": "overhand_throw", "swing": "bat_swing", "skip": "a_skip", "pushup": "push_up",
     "situp": "sit_up", "crunch": "sit_up", "pass": "chest_pass", "spike": "spike_arms", "block": "block_arms",
-    "set": "volleyball_set", "slam": "overhead_slam", "ball_slam": "overhead_slam", "roll": "forward_roll",
+    "set": "volleyball_set", "kneeling": "kneel", "child_pose": "childs_pose", "childs_pose_stretch": "childs_pose",
+    "all_fours": "table_top", "quadruped": "table_top", "down_dog": "downward_dog", "upward_dog": "cobra",
+    "supine": "lie_on_back", "lie_down": "lie_on_back", "prone": "lie_face_down", "sit": "seated", "sitting": "seated", "slam": "overhead_slam", "ball_slam": "overhead_slam", "roll": "forward_roll",
     "scrum": "bent_over_drive", "ruck": "bent_over_drive", "sled_push": "bent_over_drive", "juggle": "juggle_ball",
     "churn": "run", "finish": "stand", "secure_catch": "catch", "overhead_two_hand_set_shot": "overhead_two_hand_set",
     "two_hand_overhead_set": "overhead_two_hand_set", "bump": "forearm_pass", "smash": "spike_arms", "plank_hold": "plank", "dive": "side_dive", "follow_through": "stand",

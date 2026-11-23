@@ -127,13 +127,23 @@ BEND = {"right_arm": "elbow", "left_arm": "elbow", "right_leg": "knee", "left_le
 STAND_SOLE_Y = me.HIP_OFFSET[1] - me.THIGH - me.SHIN - me.SOLE_DROP   # rig units below the pelvis
 
 
-def ground_offset(pos: Dict[str, np.ndarray]) -> float:
-    """Metres to move the body so the lowest contact point (soles, knees, hands) is on the floor."""
+def _support_low(center: np.ndarray, rot: np.ndarray, half: Tuple[float, float, float]) -> float:
+    """Lowest point (y) of a rounded body part: ellipsoid support along world-down."""
+    return float(center[1] - math.sqrt(sum((rot[1, i] * half[i]) ** 2 for i in range(3))))
+
+
+def ground_offset(pos: Dict[str, np.ndarray], world: Optional[Dict[str, np.ndarray]] = None) -> float:
+    """Metres to move the body so the lowest contact point is on the floor: soles, knees, hands,
+    elbows, head and - when the world rotations are given - the hips and the chest (sitting, lying)."""
     r = me.LIMB_RADIUS
     lows = [pos["right_foot"][1] - me.SOLE_DROP, pos["left_foot"][1] - me.SOLE_DROP,
             pos["right_knee"][1] - r, pos["left_knee"][1] - r,
             pos["right_hand"][1] - r, pos["left_hand"][1] - r,
             pos["right_elbow"][1] - r, pos["left_elbow"][1] - r, pos["head"][1] - 8.0]
+    if world is not None:
+        lows[-1] = _support_low(pos["head"], world["neck"], me.HEAD_HALF)   # rounded head (lying on the back)
+        lows.append(_support_low(pos["pelvis"], world["hip"], me.PELVIS_HALF))
+        lows.append(_support_low(world["spine"] @ np.array([0.0, me.TORSO_HALF[1], 0.0]), world["spine"], me.TORSO_HALF))
     return -(min(lows) - STAND_SOLE_Y) * me.UNIT_TO_M
 
 
@@ -601,7 +611,7 @@ def _frames(samples, loop: bool, fps: int) -> List[Dict[str, float]]:
         f["positionx"], f["positiony"], f["positionz"] = (round(scal["pitch"], 2), round(scal["turn"], 2),
                                                           round(-scal["roll"], 2))
         air = max(0.0, min(1.0, scal["air"]))
-        f["rooty"] = round((1 - air) * ground_offset(pos) + scal["root"], 3)
+        f["rooty"] = round((1 - air) * ground_offset(pos, world) + scal["root"], 3)
         frames.append(f)
     return frames
 

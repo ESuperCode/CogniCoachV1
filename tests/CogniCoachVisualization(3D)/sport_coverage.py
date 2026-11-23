@@ -18,6 +18,13 @@ WARMUPS = {
     "jump rope": "jump_rope(times=6)", "squats": "squat\nsquat", "push ups": "push_up(times=2)",
     "plank": "plank(hold=2)", "hamstring stretch": "hamstring_stretch(hold=2)", "quad stretch": "quad_stretch(hold=2)",
     "shoulder stretch": "stand + arm_cross_stretch(hold=2)", "calf raises": "calf_raise(times=3)",
+    "child's pose": "childs_pose(hold=2)", "cat cow": "cat_cow(times=2)", "bird dog": "bird_dog(times=2)",
+    "downward dog": "downward_dog(hold=2)", "cobra stretch": "cobra(hold=2)", "forearm plank": "forearm_plank(hold=2)",
+    "side plank": "side_plank(hold=2)", "dead bug": "dead_bug(times=2)", "glute bridge": "glute_bridge(times=2)",
+    "sit and reach": "seated_forward_fold(hold=2)", "butterfly stretch": "butterfly_stretch(hold=2)",
+    "kneeling hip flexor stretch": "hip_flexor_stretch(hold=2)", "half kneeling": "half_kneel(hold=1)",
+    "tall kneeling": "kneel(hold=1)", "hands and knees": "table_top(hold=1)", "lying down rest": "lie_on_back(hold=2)",
+    "get up off the floor": "get_up_from_floor", "inchworm walkout": "inchworm", "superman hold": "superman(hold=2)",
 }
 
 COVERAGE = {

@@ -226,3 +226,22 @@ Each phrase is also an instant request (no model call). Regenerate: `python spor
 | quad stretch | `quad_stretch(hold=2)` | 2.4 |
 | shoulder stretch | `stand + arm_cross_stretch(hold=2)` | 2.4 |
 | calf raises | `calf_raise(times=3)` | 5.2 |
+| child's pose | `childs_pose(hold=2)` | 2.4 |
+| cat cow | `cat_cow(times=2)` | 6.4 |
+| bird dog | `bird_dog(times=2)` | 6.8 |
+| downward dog | `downward_dog(hold=2)` | 2.4 |
+| cobra stretch | `cobra(hold=2)` | 2.4 |
+| forearm plank | `forearm_plank(hold=2)` | 2.4 |
+| side plank | `side_plank(hold=2)` | 2.4 |
+| dead bug | `dead_bug(times=2)` | 6.4 |
+| glute bridge | `glute_bridge(times=2)` | 4.4 |
+| sit and reach | `seated_forward_fold(hold=2)` | 2.4 |
+| butterfly stretch | `butterfly_stretch(hold=2)` | 2.4 |
+| kneeling hip flexor stretch | `hip_flexor_stretch(hold=2)` | 2.4 |
+| half kneeling | `half_kneel(hold=1)` | 1.4 |
+| tall kneeling | `kneel(hold=1)` | 1.4 |
+| hands and knees | `table_top(hold=1)` | 1.4 |
+| lying down rest | `lie_on_back(hold=2)` | 2.4 |
+| get up off the floor | `get_up_from_floor` | 2.5 |
+| inchworm walkout | `inchworm` | 4.8 |
+| superman hold | `superman(hold=2)` | 2.4 |
