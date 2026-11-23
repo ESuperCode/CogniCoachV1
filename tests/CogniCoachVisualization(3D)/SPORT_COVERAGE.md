@@ -245,3 +245,111 @@ Each phrase is also an instant request (no model call). Regenerate: `python spor
 | get up off the floor | `get_up_from_floor` | 2.5 |
 | inchworm walkout | `inchworm` | 4.8 |
 | superman hold | `superman(hold=2)` | 2.4 |
+
+## Football positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| receiver two point stance | `two_point_stance(hold=1)` | 1.4 |
+| lineman four point stance | `four_point_stance(hold=1)` | 1.4 |
+| quarterback under center | `crouch_hands_low(hold=1)` | 1.4 |
+| field goal holder | `one_knee_hands_ready(hold=1)` | 1.4 |
+| fair catch | `stand + one_arm_up(hold=1)` | 1.4 |
+| pass protection set | `pass_block_set(hold=1)` | 1.4 |
+| huddle | `hands_on_knees(hold=1)` | 1.4 |
+| touchdown signal | `stand + arms_overhead(hold=1)` | 1.4 |
+
+## Basketball positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| post up | `post_up(hold=1)` | 1.4 |
+| denial | `denial_stance(hold=1)` | 1.4 |
+| help side | `help_side_stance(hold=1)` | 1.4 |
+| jump ball | `tip_off_ready(hold=1)` | 1.4 |
+| call for the ball | `stance(depth=0.3) + hands_target(hold=1)` | 1.4 |
+
+## Soccer positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| goalkeeper set position | `goalkeeper_set(hold=1)` | 1.4 |
+| jockey | `jockey_stance(hold=1)` | 1.4 |
+| free kick wall | `defensive_wall(hold=1)` | 1.4 |
+| goal celebration | `jump + arms_overhead / stand + fist_pump` | 3.3 |
+
+## Tennis positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| trophy position | `trophy_position(hold=1)` | 1.4 |
+| forehand unit turn | `unit_turn_right(hold=1)` | 1.4 |
+| backhand unit turn | `unit_turn_left(hold=1)` | 1.4 |
+| overhead ready | `overhead_ready(hold=1)` | 1.4 |
+
+## Baseball positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| batting stance | `hitting_stance(hold=1)` | 1.4 |
+| pitcher set position | `set_position(hold=1)` | 1.4 |
+| pitcher leg lift | `balance_point(hold=1)` | 1.4 |
+| infielder ready | `fielder_ready(hold=1)` | 1.4 |
+| first base stretch | `long_stretch_reach(hold=1)` | 1.4 |
+| headfirst slide | `run(times=2) / prone_reach(hold=1)` | 2.73 |
+
+## Volleyball positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| blocker ready | `stance(depth=0.4) + hands_up_ready(hold=1)` | 1.4 |
+| dig ready | `platform_ready(hold=1)` | 1.4 |
+| approach load | `jump_load(hold=1)` | 1.4 |
+| pancake save | `side_dive / prone_reach(hold=1)` | 3.03 |
+
+## Cricket positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| batting stance | `side_on_batting_stance(hold=1)` | 1.4 |
+| backlift | `backlift(hold=1)` | 1.4 |
+| slip catching stance | `slip_catch_stance(hold=1)` | 1.4 |
+| bowling delivery stride | `delivery_stride(hold=1)` | 1.4 |
+| umpire out signal | `stand + one_arm_up(hold=1)` | 1.4 |
+| umpire wide signal | `stand + arms_out(hold=1)` | 1.4 |
+| umpire six signal | `stand + arms_overhead(hold=1)` | 1.4 |
+
+## Rugby positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| lineout lifter | `overhead_lift_hold(hold=1)` | 1.4 |
+| jackal over the ball | `jackal_position(hold=1)` | 1.4 |
+| hands target for a pass | `stance(depth=0.3) + hands_target(hold=1)` | 1.4 |
+
+## Golf positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| top of backswing | `swing_top(hold=1)` | 1.4 |
+| finish position | `swing_finish(hold=1)` | 1.4 |
+| read the green | `low_crouch(hold=1)` | 1.4 |
+
+## Swimming positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| on the blocks | `on_the_blocks(hold=1)` | 1.4 |
+| sculling | `sculling(times=3)` | 3.4 |
+| open turn | `front_crawl / open_turn` | 3.0 |
+
+## Rest / sideline positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| hands on hips | `stand + hands_on_hips(hold=1)` | 1.4 |
+| arms crossed | `stand + arms_crossed(hold=1)` | 1.4 |
+| hands on head | `stand + hands_on_head(hold=1)` | 1.4 |
+| time out | `stand + t_signal(hold=1)` | 1.4 |
+| high five | `stand + high_five` | 1.2 |
+| fist pump | `stand + fist_pump` | 1.7 |

@@ -2520,6 +2520,366 @@ def _get_up():
             k(2.1, **stance_legs("normal", 0.05), spine=S(4), right_arm=HANG, left_arm=HANG, neck=N())]
 
 
+# =============================================================================
+# 23. ATHLETIC POSITIONS - core team / field / racket / water sports (general names)
+# =============================================================================
+FULL = LEGS + ARMS + ["spine", "pelvis"]
+
+
+def grip2(x: float, y: float, z: float, el: str = "down") -> Dict[str, Dict[str, float]]:
+    """Both hands together on one implement at (x, y, z) from the middle of the shoulder line."""
+    return {"right_arm": arm_at(x, y, z, el, "right"), "left_arm": arm_at(-x, y, z, el, "left")}
+
+
+def both(x: float, y: float, z: float, el: str = "down") -> Dict[str, Dict[str, float]]:
+    """Both hands mirrored at (x out, y, z) - e.g. hands up in front, palms forward."""
+    return {"right_arm": arm_at(x, y, z, el, "right"), "left_arm": arm_at(x, y, z, el, "left")}
+
+
+@motion("two_point_stance", "Two-point (standing) start stance: staggered feet with the left foot forward, knees "
+        "bent, weight on the front foot, trunk leaning forward, right arm forward and left arm back, ready to "
+        "explode forward (receivers, sprint standing start, ready to chase).", "pose", FULL, ["neck"])
+def _two_point():
+    return [k(0.0, **stance_legs("narrow", 0.5, "left", 10), spine=S(32), pelvis=P(8), right_arm=A(45, 5, -15, 80),
+              left_arm=A(35, 175, 10, 70), neck=N(-15))]
+
+
+@motion("four_point_stance", "Four-point stance: both hands on the ground in front, hips high and level with the "
+        "shoulders, weight forward on hands and toes (lineman, wrestler down stance).", "pose",
+        ["body"] + FULL, ["neck"])
+def _four_point():
+    return [k(0.0, **fit_pose("four_point", {"body.pitch": 55, "legs.raise": 70, "legs.knee": 110, "arms.raise": 80},
+                               {"legs": {"dir": 0.0, "twist": 12.0}, "arms": {"dir": 5.0, "twist": 0.0, "elbow": 3.0},
+                                "spine": {"lean": 10.0}, "neck": {"nod": -30.0}},
+                               [("right_foot", "floor", 0, 3), ("right_hand", "floor", 0, 3), ("pelvis", "y", 0.62, 1),
+                                ("right_hand", "z", 0.55, 1)]))]
+
+
+@motion("hands_on_knees", "Bent over with the hands resting on the knees (huddle, catching breath, back stance "
+        "of a running back).", "pose", FULL, ["neck"])
+def _hands_on_knees():
+    return [k(0.0, **fit_pose("hands_on_knees", {"spine.lean": 45, "arms.raise": 40, "arms.elbow": 15},
+                               {**stance_legs("normal", 0.45), "arms": {"dir": 5.0, "twist": 0.0}, "pelvis": {"tilt": 10.0}},
+                               [("right_hand", "y", 0.50, 3), ("right_hand", "z", 0.20, 2), ("neck", "y", 1.05, 1)]))]
+
+
+@motion("crouch_hands_low", "Low crouch with both hands together low in front, palms down, ready to receive a "
+        "ball snapped or rolled to them (quarterback under centre, holder, scrum-half at the base).", "pose",
+        FULL, ["neck"])
+def _crouch_hands_low():
+    return [k(0.0, **stance_legs("normal", 0.7), spine=S(35), pelvis=P(10), **grip2(0.05, -0.45, 0.38, "out"), neck=N(-10))]
+
+
+@motion("one_knee_hands_ready", "Kneeling on the right knee with the left foot forward, hands out in front ready to "
+        "catch and place a ball (holder, ball placement, kneeling catch).", "pose", FULL, ["neck"])
+def _one_knee_ready():
+    return [k(0.0, left_leg=Lg(88, 0, 4, 90), right_leg=Lg(0, 0, 0, 90), spine=S(20), **both(0.18, -0.25, 0.42, "out"))]
+
+
+@motion("one_arm_up", "One arm raised straight up overhead (fair catch, signal, asking for the ball, point to the "
+        "sky, umpire 'out' with the finger up).", "pose", ["right_arm"], ["left_arm"])
+def _one_arm_up():
+    return [k(0.0, right_arm=A(172, 15, 0, 3), left_arm=HANG)]
+
+
+@motion("post_up", "Post-up position: wide low stance with the back to the defender, the left forearm held "
+        "horizontal as a bar, the right hand up as a target, chest up.", "pose", FULL, ["neck"])
+def _post_up():
+    return [k(0.0, **stance_legs("very_wide", 0.7), spine=S(20), pelvis=P(10), left_arm=A(80, 40, 90, 95),
+              right_arm=A(120, 20, 0, 40), neck=N(0, -40))]
+
+
+@motion("denial_stance", "Denial stance: low and side-on, the lead (right) arm stretched out into the passing lane "
+        "with the palm out, head turned to see the ball.", "pose", FULL, ["neck"])
+def _denial():
+    return [k(0.0, **stance_legs("wide", 0.7), spine=S(25, 30), pelvis=P(8, 20), right_arm=A(80, 70, 0, 8),
+              left_arm=A(40, 60, -10, 70), neck=N(0, 45))]
+
+
+@motion("help_side_stance", "Help-side defense ('pistols'): open stance, one hand pointing at the ball and the other "
+        "at the opponent.", "pose", FULL, ["neck"])
+def _pistols():
+    return [k(0.0, **stance_legs("wide", 0.55), spine=S(20), pelvis=P(6), right_arm=A(75, 60, 0, 5),
+              left_arm=A(75, 60, 0, 5), neck=N(0, 20))]
+
+
+@motion("goalkeeper_set", "Goalkeeper set position: wide and low on the balls of the feet, hands up in front at "
+        "chest height with the palms forward and elbows bent, ready to react.", "pose", FULL, ["neck"])
+def _gk_set():
+    return [k(0.0, **stance_legs("wide", 0.65), spine=S(25), pelvis=P(8), **both(0.28, -0.12, 0.30, "down"))]
+
+
+@motion("jockey_stance", "Side-on low defending stance (jockeying): staggered feet, knees bent, weight on the "
+        "balls of the feet, arms slightly out for balance, staying between opponent and goal.", "pose", FULL, ["neck"])
+def _jockey():
+    return [k(0.0, **stance_legs("normal", 0.6, "left", 20), spine=S(20, 30), pelvis=P(8, 25), right_arm=A(35, 70, 0, 40),
+              left_arm=A(35, 70, 0, 40))]
+
+
+@motion("defensive_wall", "Standing in a wall: feet together, body straight and braced, both hands crossed in front "
+        "of the groin.", "pose", FULL, ["neck"])
+def _wall():
+    return [k(0.0, right_leg=Lg(2, 0, 4, 3), left_leg=Lg(2, 0, 4, 3), spine=S(3),
+              right_arm=arm_at(-0.05, -0.62, 0.18, "out", "right"), left_arm=arm_at(-0.05, -0.60, 0.20, "out", "left"))]
+
+
+@motion("trophy_position", "Serve trophy position: knees bent, the left (toss) arm straight up, the right (hitting) "
+        "arm bent with the elbow at shoulder height and the hand behind the head, back arched.", "pose", FULL, ["neck"])
+def _trophy():
+    return [k(0.0, **stance_legs("normal", 0.6, "left", 30), spine=S(-12, 45), pelvis=P(-4, 30), right_arm=A(95, 120, 80, 100),
+              left_arm=A(165, 10, 0, 5), neck=N(-30, -10))]
+
+
+@motion("unit_turn_right", "Unit turn to the right (forehand side): shoulders and hips turned, both hands back on the "
+        "right side, left arm across, ready to swing.", "pose", FULL, ["neck"])
+def _unit_turn_r():
+    return [k(0.0, **stance_legs("wide", 0.45), right_arm=A(70, 140, 30, 70), left_arm=A(85, -10, 0, 15), spine=S(10, 62),
+              pelvis=P(3, 30), neck=N(5, -45))]
+
+
+@motion("unit_turn_left", "Unit turn to the left (backhand side): shoulders turned left with both hands back by the "
+        "left hip.", "pose", FULL, ["neck"])
+def _unit_turn_l():
+    return [k(0.0, **stance_legs("wide", 0.45), **grip2(-0.30, -0.35, 0.22), spine=S(12, -70), pelvis=P(3, -35), neck=N(5, 45))]
+
+
+@motion("overhead_ready", "Ready to hit an overhead: side-on, the left arm pointing up at the ball, the right hand "
+        "cocked behind the head with the elbow up.", "pose", FULL, ["neck"])
+def _overhead_ready():
+    return [k(0.0, **stance_legs("normal", 0.35, "left", 30), spine=S(-6, 50), pelvis=P(0, 35), left_arm=A(150, 10, 0, 5),
+              right_arm=A(100, 130, 80, 110), neck=N(-30, -30))]
+
+
+@motion("hitting_stance", "Batting / hitting stance: side-on, feet wider than the shoulders, knees flexed, both "
+        "hands up by the rear (right) shoulder holding the bat, head turned to the pitcher.", "pose", FULL, ["neck"])
+def _hitting():
+    return [k(0.0, **stance_legs("wide", 0.35), **grip2(0.22, 0.05, 0.16), spine=S(12, 25), pelvis=P(4, 15), neck=N(5, -60))]
+
+
+@motion("set_position", "Pitcher's set / stretch position: side-on, feet narrow, hands together at the chest, "
+        "head turned to the target.", "pose", FULL, ["neck"])
+def _set_pos():
+    return [k(0.0, **stance_legs("narrow", 0.15), **grip2(0.0, -0.18, 0.25, "down"), spine=S(5, 70), pelvis=P(0, 60), neck=N(0, -70))]
+
+
+@motion("balance_point", "Balance point of a throw: side-on, standing on the right leg with the left knee lifted "
+        "high, hands together at the chest.", "pose", FULL, ["neck"])
+def _balance_pt():
+    return [k(0.0, right_leg=leg_at(0.0, 0.14, 0.08, 0, 30, "right"), left_leg=Lg(85, 10, 8, 100),
+              **grip2(0.0, -0.18, 0.25, "down"), spine=S(0, 70), pelvis=P(0, 60), neck=N(0, -70))]
+
+
+@motion("fielder_ready", "Infield / fielding ready position: wide stance, knees bent, hips back, both hands low "
+        "out in front with the glove open.", "pose", FULL, ["neck"])
+def _fielder_ready():
+    return [k(0.0, **stance_legs("wide", 0.75), spine=S(40), pelvis=P(12), **both(0.18, -0.50, 0.38, "out"), neck=N(-15))]
+
+
+@motion("long_stretch_reach", "Long stretch toward a throw: a big split with the left leg reaching forward, the "
+        "right foot staying back, the glove arm stretched far forward (first-base stretch, long reach).", "pose",
+        FULL, ["neck"])
+def _long_stretch():
+    return [k(0.0, left_leg=leg_at(0.55, 0.14, 0.36, 0, 10, "left"), right_leg=Lg(35, 180, 4, 15), spine=S(30),
+              left_arm=A(85, 0, 0, 5), right_arm=A(30, 120, 0, 30))]
+
+
+@motion("prone_reach", "Lying face down with one arm stretched long overhead along the floor (head-first slide "
+        "finish, sprawl / pancake save).", "pose", ["body"] + FULL, ["neck"])
+def _prone_reach():
+    return [k(0.0, body=B(90), right_leg=Lg(0, 0, 0, 0), left_leg=Lg(5, 0, 0, 20), spine=S(0), pelvis=P(),
+              right_arm=A(172, 8, 0, 3), left_arm=A(150, 20, 0, 10), neck=N(-15))]
+
+
+@motion("hands_up_ready", "Standing with both hands up in front at shoulder height, palms forward (blocker ready, "
+        "ready to catch, hands up to defend).", "pose", [], ARMS)
+def _hands_up():
+    return [k(0.0, **both(0.26, 0.02, 0.28, "down"))]
+
+
+@motion("jump_load", "Loaded take-off position: deep knee bend, hips back, chest forward, both arms swung back "
+        "behind the hips.", "pose", FULL, ["neck"])
+def _jump_load():
+    return [k(0.0, **stance_legs("normal", 0.9), spine=S(40), pelvis=P(10), right_arm=A(50, 175, 10, 12), left_arm=A(50, 175, 10, 12))]
+
+
+@motion("platform_ready", "Low ready with the forearms together in a platform below the waist (dig / pass "
+        "ready).", "pose", FULL, ["neck"])
+def _platform_ready():
+    return [k(0.0, **stance_legs("wide", 0.75), spine=S(30), pelvis=P(10), **grip2(0.0, -0.55, 0.34, "out"), neck=N(-10))]
+
+
+@motion("side_on_batting_stance", "Side-on stance with the bat grounded behind the back foot: feet shoulder width, "
+        "knees flexed, hands together low, head turned to face the bowler.", "pose", FULL, ["neck"])
+def _cricket_stance():
+    return [k(0.0, **stance_legs("normal", 0.35), **grip2(0.10, -0.42, 0.18), spine=S(18, 35), pelvis=P(5, 30), neck=N(5, -65))]
+
+
+@motion("backlift", "Backlift / bat raised: side-on stance with both hands lifting the bat high behind the right "
+        "shoulder, ready to swing down.", "pose", FULL, ["neck"])
+def _backlift():
+    return [k(0.0, **stance_legs("normal", 0.35), **grip2(0.30, 0.30, 0.22, "out"), spine=S(12, 40), pelvis=P(4, 30), neck=N(5, -60))]
+
+
+@motion("slip_catch_stance", "Close-catching stance: crouched low, hands together cupped at knee height in front, "
+        "eyes forward.", "pose", FULL, ["neck"])
+def _slip():
+    return [k(0.0, **stance_legs("wide", 0.85), spine=S(40), pelvis=P(12), **grip2(0.0, -0.58, 0.30, "out"), neck=N(-20))]
+
+
+@motion("delivery_stride", "Delivery stride / coil before a throw: side-on, front (left) arm pointing up high, the "
+        "right hand back by the hip, front knee lifted.", "pose", FULL, ["neck"])
+def _coil():
+    return [k(0.0, right_leg=leg_at(0.0, 0.14, 0.10, 0, 40, "right"), left_leg=Lg(70, 15, 10, 90), spine=S(-8, 60),
+              pelvis=P(0, 40), left_arm=A(150, 20, 0, 10), right_arm=A(40, 165, 0, 15), neck=N(0, -60))]
+
+
+@motion("t_signal", "Hands forming a T in front of the chest (time-out signal).", "pose", ARMS, [])
+def _t_signal():
+    return [k(0.0, right_arm=arm_at(0.0, 0.10, 0.40, "down", "right"), left_arm=arm_at(0.0, -0.08, 0.30, "out", "left"))]
+
+
+@motion("arms_crossed", "Arms folded across the chest (waiting, listening, resting).", "pose", ARMS, [])
+def _arms_crossed():
+    return [k(0.0, right_arm=arm_at(-0.12, -0.20, 0.22, "down", "right"), left_arm=arm_at(-0.12, -0.16, 0.25, "down", "left"))]
+
+
+@motion("hands_on_head", "Hands resting on top of the head (exhausted, disbelief, recovering).", "pose", ARMS, [])
+def _hands_on_head():
+    return [k(0.0, right_arm=A(130, 80, 90, 120), left_arm=A(130, 80, 90, 120))]
+
+
+@motion("overhead_lift_hold", "Lifting position: half squat with both arms straight up overhead and the hands close "
+        "together, supporting a teammate or a weight above the head (lineout lifter, overhead hold).", "pose", FULL, ["neck"])
+def _overhead_lift():
+    return [k(0.0, **stance_legs("normal", 0.45), spine=S(5), **both(0.12, 0.62, 0.10, "out"))]
+
+
+@motion("jackal_position", "Over-the-ball position: feet wide, hips low and back flat over the ball, both hands "
+        "reaching down to the ground in front (jackal, pick up from the ground, ruck).", "pose", FULL, ["neck"])
+def _jackal():
+    return [k(0.0, **stance_legs("very_wide", 0.8), spine=S(60), pelvis=P(15), right_arm=A(70, 5, 0, 5), left_arm=A(70, 5, 0, 5),
+              neck=N(-20))]
+
+
+@motion("hands_target", "Hands up and open as a target at chest height, fingers spread, calling for the ball.",
+        "pose", [], ARMS)
+def _hands_target():
+    return [k(0.0, **both(0.14, -0.05, 0.42, "out"))]
+
+
+@motion("swing_top", "Top of a full two-hand backswing: shoulders turned fully, hands high over the right shoulder.",
+        "pose", FULL, ["neck"])
+def _swing_top():
+    return [k(0.0, **stance_legs("wide", 0.2), **grip2(0.30, 0.05, 0.14), spine=S(32, 88), pelvis=P(10, 40), neck=N(25, -65))]
+
+
+@motion("swing_finish", "Balanced high finish of a two-hand swing: chest facing the target, hands high over the "
+        "left shoulder, weight on the left foot with the right heel up.", "pose", FULL, ["neck"])
+def _swing_finish():
+    return [k(0.0, left_leg=leg_at(0.0, 0.20, 0.03, 0, 30, "left"), right_leg=Lg(18, -20, 40, 40), **grip2(-0.28, 0.12, 0.12),
+              spine=S(5, -85), pelvis=P(2, -55), neck=N(0, 60))]
+
+
+@motion("low_crouch", "Deep crouch on the heels with the forearms resting on the knees (reading the green, "
+        "waiting low, catcher at rest).", "pose", FULL, ["neck"])
+def _low_crouch():
+    return [k(0.0, **stance_legs("normal", 1.3), spine=S(35), pelvis=P(12), right_arm=A(45, 10, -20, 70),
+              left_arm=A(45, 10, -20, 70), neck=N(-5))]
+
+
+@motion("on_the_blocks", "Crouched on a starting block / edge: knees bent, trunk folded forward, both hands "
+        "gripping at the toes, head down (swimming start, ready to dive).", "pose", FULL, ["neck"])
+def _on_blocks():
+    return [k(0.0, right_leg=Lg(60, 0, 8, 100), left_leg=Lg(60, 0, 8, 100), spine=S(85), pelvis=P(20),
+              right_arm=A(85, 5, 0, 5), left_arm=A(85, 5, 0, 5), neck=N(-20))]
+
+
+@motion("sculling", "Sculling in the water: body horizontal face up, hands at the hips sweeping in and out in a "
+        "figure-eight to stay afloat.", "cycle", ["body"] + FULL, ["neck"], period=1.0)
+def _sculling():
+    body = B(pitch=-86, air=1.0, root=0.0)
+    return [k(0.0, body=body, right_leg=Lg(0, 0, 0, 0), left_leg=Lg(0, 0, 0, 0), spine=S(0), right_arm=A(25, 60, 60, 20),
+              left_arm=A(25, 60, 60, 20), neck=N(10)),
+            k(0.5, right_arm=A(25, 20, 30, 20), left_arm=A(25, 20, 30, 20))]
+
+
+@motion("open_turn", "Open (touch) turn at a wall: both hands touch, knees tuck to the chest, the body turns "
+        "sideways, one arm goes over, feet plant and push off into a streamline.", "action",
+        ["body"] + FULL + ["neck"], [])
+def _open_turn():
+    return [k(0.0, body=SWIM_BODY, right_arm=A(170, 8, 0, 10), left_arm=A(170, 8, 0, 10), right_leg=Lg(0, 0, 0, 0),
+              left_leg=Lg(0, 0, 0, 0), spine=S(0), neck=N(-15)),
+            k(0.4, body=B(pitch=40, air=1.0), right_arm=A(110, 10, 0, 60), left_arm=A(110, 10, 0, 60), right_leg=Lg(110, 0, 0, 130),
+              left_leg=Lg(110, 0, 0, 130), spine=S(30)),
+            k(0.8, body=B(pitch=30, turn=-90, air=1.0), right_arm=A(170, 30, 0, 20)),
+            k(1.2, body=B(pitch=86, turn=-180, air=1.0, root=-0.15), right_leg=Lg(0, 0, 0, 0), left_leg=Lg(0, 0, 0, 0),
+              right_arm=A(172, 8, 0, 4), left_arm=A(172, 8, 0, 4), spine=S(0), neck=N(-10))]
+
+
+@motion("pass_block_set", "Pass-protection set: wide base, knees bent, back straight, both hands up at chest "
+        "height ready to punch, weight on the insides of the feet.", "pose", FULL, ["neck"])
+def _pass_set():
+    return [k(0.0, **stance_legs("wide", 0.65), spine=S(15), pelvis=P(8), **both(0.16, -0.18, 0.30, "down"))]
+
+
+@motion("tip_off_ready", "Jump-ball / contest-ready: knees bent, the right arm raised, eyes up.", "pose", FULL, ["neck"])
+def _tip_off():
+    return [k(0.0, **stance_legs("normal", 0.6), spine=S(10), pelvis=P(4), right_arm=A(150, 20, 0, 20), left_arm=A(30, 60, 0, 30),
+              neck=N(-25))]
+
+
+@motion("fist_pump", "Celebration fist pump: the right fist pulled down hard from above the head to the chest.",
+        "action", ["right_arm"], ["left_arm", "spine"])
+def _fist_pump():
+    return [k(0.0, right_arm=HANG, spine=S(3)), k(0.3, right_arm=A(150, 30, 0, 60)), k(0.5, right_arm=A(45, 30, -40, 130), spine=S(12)),
+            k(0.7, right_arm=A(150, 30, 0, 60), spine=S(3)), k(0.9, right_arm=A(45, 30, -40, 130), spine=S(12)), k(1.3, right_arm=HANG, spine=S(3))]
+
+
+@motion("high_five", "High five: the right arm swings up and forward to slap hands at head height.", "action",
+        ["right_arm"], ["spine"])
+def _high_five():
+    return [k(0.0, right_arm=HANG), k(0.35, right_arm=A(140, 15, 0, 25)), k(0.45, right_arm=A(130, 10, 0, 10)), k(0.8, right_arm=HANG)]
+
+
+_POS_ALIASES = {
+    "two point stance": "two_point_stance(hold=1.5)", "standing start": "two_point_stance(hold=1.5)",
+    "receiver stance": "two_point_stance(hold=1.5)", "four point stance": "four_point_stance(hold=1.5)",
+    "lineman stance": "four_point_stance(hold=1.5)", "hands on knees": "hands_on_knees(hold=1.5)", "huddle": "hands_on_knees(hold=1.5)",
+    "under center": "crouch_hands_low(hold=1.5)", "quarterback under center": "crouch_hands_low(hold=1.5)",
+    "holder": "one_knee_hands_ready(hold=1.5)", "fair catch": "stand + one_arm_up(hold=1.5)", "fair catch signal": "stand + one_arm_up(hold=1.5)",
+    "post up": "post_up(hold=1.5)", "denial stance": "denial_stance(hold=1.5)", "deny the pass": "denial_stance(hold=1.5)",
+    "help side": "help_side_stance(hold=1.5)", "pistols": "help_side_stance(hold=1.5)",
+    "goalkeeper set": "goalkeeper_set(hold=1.5)", "goalkeeper set position": "goalkeeper_set(hold=1.5)",
+    "goalie stance": "goalkeeper_set(hold=1.5)", "jockey": "jockey_stance(hold=1.5)", "jockeying": "jockey_stance(hold=1.5)",
+    "wall": "defensive_wall(hold=1.5)", "free kick wall": "defensive_wall(hold=1.5)",
+    "trophy position": "trophy_position(hold=1.5)", "serve trophy position": "trophy_position(hold=1.5)",
+    "unit turn": "unit_turn_right(hold=1.5)", "forehand unit turn": "unit_turn_right(hold=1.5)",
+    "backhand unit turn": "unit_turn_left(hold=1.5)", "overhead ready": "overhead_ready(hold=1.5)",
+    "batting stance": "hitting_stance(hold=1.5)", "hitting stance": "hitting_stance(hold=1.5)",
+    "set position": "set_position(hold=1.5)", "pitcher set position": "set_position(hold=1.5)", "stretch position": "set_position(hold=1.5)",
+    "balance point": "balance_point(hold=1.5)", "leg lift": "balance_point(hold=1.5)",
+    "infield ready": "fielder_ready(hold=1.5)", "fielding position": "fielder_ready(hold=1.5)", "ready position fielding": "fielder_ready(hold=1.5)",
+    "first base stretch": "long_stretch_reach(hold=1.5)", "head first slide": "run(times=2)\nprone_reach(hold=1)",
+    "headfirst slide": "run(times=2)\nprone_reach(hold=1)", "pancake": "prone_reach(hold=1.5)",
+    "blocker ready": "stance(depth=0.4) + hands_up_ready(hold=1.5)", "block ready": "stance(depth=0.4) + hands_up_ready(hold=1.5)",
+    "jump load": "jump_load(hold=1.5)", "dig ready": "platform_ready(hold=1.5)", "passing ready": "platform_ready(hold=1.5)",
+    "cricket batting stance": "side_on_batting_stance(hold=1.5)", "backlift": "backlift(hold=1.5)",
+    "slip fielder": "slip_catch_stance(hold=1.5)", "slips": "slip_catch_stance(hold=1.5)",
+    "delivery stride": "delivery_stride(hold=1.5)", "time out signal": "stand + t_signal(hold=1.5)", "timeout": "stand + t_signal(hold=1.5)",
+    "arms crossed": "stand + arms_crossed(hold=1.5)", "hands on head": "stand + hands_on_head(hold=1.5)",
+    "lineout lift": "overhead_lift_hold(hold=1.5)", "lifting in the lineout": "overhead_lift_hold(hold=1.5)",
+    "jackal": "jackal_position(hold=1.5)", "over the ball": "jackal_position(hold=1.5)",
+    "call for the ball": "stance(depth=0.3) + hands_target(hold=1.5)", "hands target": "stance(depth=0.3) + hands_target(hold=1.5)",
+    "top of backswing": "swing_top(hold=1.5)", "top of the backswing": "swing_top(hold=1.5)", "golf finish": "swing_finish(hold=1.5)",
+    "swing finish": "swing_finish(hold=1.5)", "read the green": "low_crouch(hold=1.5)", "crouch": "low_crouch(hold=1.5)",
+    "on the blocks": "on_the_blocks(hold=1.5)", "swimming starting position": "on_the_blocks(hold=1.5)",
+    "sculling": "sculling(times=3)", "open turn": "front_crawl\nopen_turn", "touch turn": "front_crawl\nopen_turn",
+    "pass set": "pass_block_set(hold=1.5)", "pass protection": "pass_block_set(hold=1.5)",
+    "jump ball": "tip_off_ready(hold=1.5)", "tip off": "tip_off_ready(hold=1.5)", "fist pump": "stand + fist_pump",
+    "high five": "stand + high_five", "celebrate": "jump + arms_overhead", "touchdown signal": "stand + arms_overhead(hold=1.5)",
+}
+
+
 ALIASES: Dict[str, str] = {
     "childs pose": "childs_pose(hold=2)", "child pose": "childs_pose(hold=2)", "childs pose stretch": "childs_pose(hold=2)",
     "kneeling": "kneel(hold=1)", "kneel": "kneel(hold=1)", "half kneeling": "half_kneel(hold=1)",
@@ -2664,6 +3024,7 @@ for _a, _script in list(ALIASES.items()):
         _script = re.sub(rf"\b{_old}\b", _new, _script)
     ALIASES[_a] = _script
 
+ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES.items() if k_ not in ALIASES})
 try:   # every movement in the sport coverage map is also an instant request
     import sport_coverage as _cov
     for _sport, _phrase, _script in _cov.all_entries():

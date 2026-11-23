@@ -126,12 +126,45 @@ COVERAGE = {
 }
 
 
+POSITIONS = {
+    "Football": {"receiver two point stance": "two_point_stance(hold=1)", "lineman four point stance": "four_point_stance(hold=1)",
+                 "quarterback under center": "crouch_hands_low(hold=1)", "field goal holder": "one_knee_hands_ready(hold=1)",
+                 "fair catch": "stand + one_arm_up(hold=1)", "pass protection set": "pass_block_set(hold=1)",
+                 "huddle": "hands_on_knees(hold=1)", "touchdown signal": "stand + arms_overhead(hold=1)"},
+    "Basketball": {"post up": "post_up(hold=1)", "denial": "denial_stance(hold=1)", "help side": "help_side_stance(hold=1)",
+                   "jump ball": "tip_off_ready(hold=1)", "call for the ball": "stance(depth=0.3) + hands_target(hold=1)"},
+    "Soccer": {"goalkeeper set position": "goalkeeper_set(hold=1)", "jockey": "jockey_stance(hold=1)",
+               "free kick wall": "defensive_wall(hold=1)", "goal celebration": "jump + arms_overhead\nstand + fist_pump"},
+    "Tennis": {"trophy position": "trophy_position(hold=1)", "forehand unit turn": "unit_turn_right(hold=1)",
+               "backhand unit turn": "unit_turn_left(hold=1)", "overhead ready": "overhead_ready(hold=1)"},
+    "Baseball": {"batting stance": "hitting_stance(hold=1)", "pitcher set position": "set_position(hold=1)",
+                 "pitcher leg lift": "balance_point(hold=1)", "infielder ready": "fielder_ready(hold=1)",
+                 "first base stretch": "long_stretch_reach(hold=1)", "headfirst slide": "run(times=2)\nprone_reach(hold=1)"},
+    "Volleyball": {"blocker ready": "stance(depth=0.4) + hands_up_ready(hold=1)", "dig ready": "platform_ready(hold=1)",
+                   "approach load": "jump_load(hold=1)", "pancake save": "side_dive\nprone_reach(hold=1)"},
+    "Cricket": {"batting stance": "side_on_batting_stance(hold=1)", "backlift": "backlift(hold=1)",
+                "slip catching stance": "slip_catch_stance(hold=1)", "bowling delivery stride": "delivery_stride(hold=1)",
+                "umpire out signal": "stand + one_arm_up(hold=1)", "umpire wide signal": "stand + arms_out(hold=1)",
+                "umpire six signal": "stand + arms_overhead(hold=1)"},
+    "Rugby": {"lineout lifter": "overhead_lift_hold(hold=1)", "jackal over the ball": "jackal_position(hold=1)",
+              "hands target for a pass": "stance(depth=0.3) + hands_target(hold=1)"},
+    "Golf": {"top of backswing": "swing_top(hold=1)", "finish position": "swing_finish(hold=1)", "read the green": "low_crouch(hold=1)"},
+    "Swimming": {"on the blocks": "on_the_blocks(hold=1)", "sculling": "sculling(times=3)", "open turn": "front_crawl\nopen_turn"},
+    "Rest / sideline": {"hands on hips": "stand + hands_on_hips(hold=1)", "arms crossed": "stand + arms_crossed(hold=1)",
+                        "hands on head": "stand + hands_on_head(hold=1)", "time out": "stand + t_signal(hold=1)",
+                        "high five": "stand + high_five", "fist pump": "stand + fist_pump"},
+}
+
+
 def all_entries():
     for sport, moves in COVERAGE.items():
         for phrase, script in moves.items():
             yield sport, phrase, script
     for phrase, script in WARMUPS.items():
         yield "Warm-ups (all sports)", phrase, script
+    for sport, moves in POSITIONS.items():
+        for phrase, script in moves.items():
+            yield sport + " positions", phrase, script
 
 
 if __name__ == "__main__":

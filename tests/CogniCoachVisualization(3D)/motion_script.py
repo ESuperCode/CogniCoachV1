@@ -511,7 +511,8 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
                     cur, cur_hard = owners[part]
                     if hard and not cur_hard:
                         owners[part] = (tr, hard)
-                    elif hard == cur_hard and KIND_RANK[tr.kind] > KIND_RANK[cur.kind]:
+                    elif hard == cur_hard and (KIND_RANK[tr.kind], -len(tr.owned())) > (KIND_RANK[cur.kind], -len(cur.owned())):
+                        # tie: the more specific motion (fewer body parts) wins - "stand + ready_arms" shows the arms
                         owners[part] = (tr, hard)
             built.append((tracks, line["repeat"], line["no"], owners))
     if errors:
