@@ -19,6 +19,8 @@ motion_database.py           THE MOTION DATABASE (680 motions: sport skills, pos
 sport_coverage.py            351 sport movements as scripts (instant phrases + model recipes); writes SPORT_COVERAGE.md.
 validate_motion_database.py  Checks every motion (arm/body contact, abrupt joint changes).
                              Run after adding or editing motions.
+sweep_drills.py              Runs invented drills through the real model + compiler and prints the
+                             time, script and warnings for each (python sweep_drills.py [drills.txt]).
 motion_script.py             The language: parser + compiler.
 motion_engine.py             Model prompt, HTTP API, the older beat-grammar pipeline, shared math.
 motion_grammar.py            The older beat-grammar pipeline (engine="grammar").
