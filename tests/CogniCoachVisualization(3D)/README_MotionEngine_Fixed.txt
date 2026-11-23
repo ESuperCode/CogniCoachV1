@@ -13,7 +13,7 @@ How it works (default pipeline: "script")
 
 Files
 -----
-motion_database.py           THE MOTION DATABASE (317 motions: skills, drills, positions, floor/yoga/fitness). Every stored motion: name, comment, kind (action /
+motion_database.py           THE MOTION DATABASE (589 motions: sport skills, positions, gym, bodyweight, mobility, floor/yoga). Every stored motion: name, comment, kind (action /
                              cycle / pose), the body parts it drives (hard) or offers (soft),
                              parameters, and its keyframes in anatomical angles.
 sport_coverage.py            351 sport movements as scripts (instant phrases + model recipes); writes SPORT_COVERAGE.md.
@@ -65,5 +65,5 @@ POST /script   {"script": "...", "dominant_side": "right"}  compile a script dir
 GET  /motions  the database catalog
 GET  /health   engine_version, model, key configured
 
-Cost / speed: one model call (~5k tokens in), typically 15-30 s; a compile error adds one repair call.
+Cost / speed: common phrases compile instantly with no model call; otherwise one gpt-5-mini call, typically 2-8 s (logged per request).
 Results are cached per prompt.
