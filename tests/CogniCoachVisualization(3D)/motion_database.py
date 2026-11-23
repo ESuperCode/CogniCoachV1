@@ -2170,6 +2170,15 @@ def _dolphin():
             k(0.3, spine=S(-4), pelvis=P(6), right_leg=Lg(6, 180, 0, 0), left_leg=Lg(6, 180, 0, 0))]
 
 
+@motion("back_dolphin_kick", "Dolphin kick on the back: lying face up in a tight streamline with the arms overhead, both "
+        "legs together whip up and down in a wave from the chest through the hips (backstroke underwater kick).",
+        "cycle", ["body"] + ARMS + LEGS + ["spine", "neck", "pelvis"], [], period=0.6)
+def _back_dolphin():
+    return [k(0.0, body=B(pitch=-86, air=1.0, root=0.0), right_arm=A(172, 8, 0, 4), left_arm=A(172, 8, 0, 4), neck=N(10), spine=S(-6),
+              pelvis=P(8), right_leg=Lg(6, 180, 0, 45), left_leg=Lg(6, 180, 0, 45)),
+            k(0.3, spine=S(4), pelvis=P(-6), right_leg=Lg(18, 0, 0, 0), left_leg=Lg(18, 0, 0, 0))]
+
+
 @motion("tread_water", "Treading water: upright in the water, hands sculling side to side at waist height, legs "
         "circling in an eggbeater kick.", "cycle", ["body"] + ARMS + LEGS + ["spine"], [], period=1.0)
 def _tread():
@@ -3555,9 +3564,9 @@ def _side_leg():
 @motion("crab_walk", "Crab walk: face up on the hands and feet with the hips lifted, stepping the opposite hand and "
         "foot forward together.", "cycle", ["body"] + FULL, ["neck"], period=1.0)
 def _crab():
-    base = fit_pose("crab", {"body.pitch": -90, "legs.raise": 85, "legs.knee": 95, "arms.raise": 35},
-                    {"legs": {"dir": 0.0, "twist": 10.0}, "arms": {"dir": 175.0, "twist": 0.0, "elbow": 3.0}, "spine": {"lean": 0.0}},
-                    [("right_foot", "floor", 0, 3), ("right_hand", "floor", 0, 3), ("pelvis", "y", 0.45, 1)])
+    # hand-tuned (grid search): hands under the shoulders, hips lifted to knee height, shins vertical
+    base = {"body": B(-80), "spine": S(0), "right_leg": Lg(0, 0, 10, 90), "left_leg": Lg(0, 0, 10, 90),
+            "right_arm": A(112, 178, 0, 3), "left_arm": A(112, 178, 0, 3)}
     a, b = dict(base), dict(base)
     a["right_arm"] = full("right_arm", **{**base["right_arm"], "raise": base["right_arm"]["raise"] + 15})
     a["left_leg"] = full("left_leg", **{**base["left_leg"], "raise": base["left_leg"]["raise"] + 12})
@@ -7214,7 +7223,8 @@ _MORE_ALIASES3 = {
     "speed skating start": "speed_skating_start\nskating_stride(times=2)", "j stroke": "kneel + single_blade_paddle(times=3)",
     "canoe j stroke": "kneel + single_blade_paddle(times=3)", "canoe stroke": "kneel + single_blade_paddle(times=3)",
     "triple jump hop step jump": "triple_jump", "kayak stroke": "paddling(times=3)", "kayak forward stroke": "paddling(times=3)", "kayak paddling": "paddling(times=3)",
-    "double blade paddle": "paddling(times=3)", "hop step and jump": "triple_jump", "hop step jump": "triple_jump",
+    "double blade paddle": "paddling(times=3)", "dolphin kick on the back": "back_dolphin_kick(times=6)", "butterfly kick on the back": "back_dolphin_kick(times=6)",
+    "back dolphin kick": "back_dolphin_kick(times=6)", "underwater dolphin on back": "back_dolphin_kick(times=6)", "supine dolphin kick": "back_dolphin_kick(times=6)", "hop step and jump": "triple_jump", "hop step jump": "triple_jump",
 }
 
 
