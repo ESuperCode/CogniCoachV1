@@ -4006,6 +4006,518 @@ _POS_ALIASES4 = {
 }
 
 
+# =============================================================================
+# 27. ATHLETICS THROWS/JUMPS, GYMNASTICS APPARATUS, CHEER, SKATING, SLIDING, CURLING, SHOOTING,
+#     COMBAT (judo, jiu-jitsu, sumo, taekwondo, kendo), STRENGTH (strongman, CrossFit, bodybuilding)
+# =============================================================================
+def _spin_keys(turns: float, t0: float, t1: float, n: int = 6):
+    return [k(t0 + (t1 - t0) * i / n, body=B(turn=-360.0 * turns * i / n)) for i in range(n + 1)]
+
+
+@motion("discus_spin", "Rotational discus-style throw: wind the throwing arm back at shoulder height, spin one and a "
+        "half turns across the circle on the balls of the feet, then sling the long arm through to release.",
+        "action", FULL + ["body"], ["neck"])
+def _discus():
+    base = stance_legs("wide", 0.45)
+    keys = [k(0.0, **base, body=B(turn=0), spine=S(10, 60), pelvis=P(5, 30), right_arm=A(85, 160, 0, 5), left_arm=A(80, 40, 0, 20))]
+    keys += _spin_keys(1.5, 0.3, 1.2)
+    keys += [k(0.75, right_leg=Lg(30, 90, 20, 60), left_leg=leg_at(0.0, 0.14, 0.2, 0, 30, "left")), k(1.15, **base),
+             k(1.3, spine=S(10, -40), pelvis=P(5, -30), right_arm=A(90, 0, 0, 5), left_arm=A(40, 140, 0, 30)),
+             k(1.7, spine=S(15, -60), right_arm=A(60, -40, 0, 10))]
+    return keys
+
+
+@motion("hammer_throw", "Hammer-style throw: two-hand winds circling the implement over the head, then three fast "
+        "turns with the arms long, and a release up over the left shoulder.", "action", FULL + ["body"], ["neck"])
+def _hammer():
+    keys = grip_keys([(0.0, 0.0, -0.45, 0.30, "down"), (0.3, 0.32, 0.40, 0.34, "out"), (0.45, 0.0, 0.58, 0.32, "out"), (0.6, -0.32, 0.40, 0.34, "out"),
+                      (0.9, 0.0, -0.45, 0.35, "down"), (2.1, 0.0, -0.45, 0.40, "down"), (2.4, -0.25, 0.45, 0.20, "out"),
+                      (2.8, -0.25, 0.45, 0.20, "out")], step=0.1)
+    keys += [k(0.0, **stance_legs("wide", 0.45), body=B(turn=0), spine=S(15), pelvis=P(5))] + _spin_keys(3, 0.9, 2.1, 9)
+    keys += [k(2.4, spine=S(-10, -30)), k(2.8, hold=True)]
+    return keys
+
+
+@motion("triple_jump", "Triple jump: from a run, a hop (take off and land on the same right foot), a step (land on "
+        "the left), and a final jump with both legs reaching forward into a sitting landing.", "action",
+        LEGS + ["body"], ARMS + ["spine", "pelvis"])
+def _triple():
+    keys = [k(0.0, **RUN_A, body=B(), spine=S(10))]
+    t = 0.25
+    for i, (h, lead) in enumerate(((0.18, "right"), (0.16, "left"), (0.35, "both"))):
+        pts, T = _flight(t, h)
+        if lead == "right":
+            pose = {"right_leg": Lg(70, 0, 6, 90), "left_leg": Lg(30, 180, 6, 30)}
+        elif lead == "left":
+            pose = {"left_leg": Lg(80, 0, 6, 30), "right_leg": Lg(35, 180, 6, 60)}
+        else:
+            pose = {"right_leg": Lg(90, 0, 6, 15), "left_leg": Lg(90, 0, 6, 15)}
+        keys.append(k(t, body=B(air=1.0), **pose, right_arm=A(100, 10, 0, 30), left_arm=A(100, 10, 0, 30)))
+        for tt, r in pts[1:-1]:
+            keys.append(k(tt, body=B(air=1.0, root=r)))
+        t = pts[-1][0]
+        keys.append(k(t, body=B(air=1.0, root=0.0)))
+        if lead != "both":
+            keys.append(k(t + 0.03, body=B(air=0.0)))
+            t += 0.12
+    keys += [k(t + 0.03, body=B(air=0.0)), k(t + 0.4, **stance_legs("normal", 1.3), spine=S(40), right_arm=A(80, 5, 0, 10),
+                                                left_arm=A(80, 5, 0, 10)), k(t + 0.8, hold=True)]
+    return keys
+
+
+@motion("pole_vault", "Pole vault: run holding the pole high, plant it with both arms up, swing the legs up and over "
+        "upside down, turn and push off the pole, clear the bar face down and fall back onto the mat.", "action",
+        ["body"] + FULL, ["neck"])
+def _pole_vault():
+    carry = {"right_arm": arm_at(0.22, -0.30, 0.10, "down", "right"), "left_arm": arm_at(0.10, -0.25, 0.30, "down", "left")}
+    legs_a = {kk: v for kk, v in RUN_A.items() if kk.endswith("leg")}
+    legs_b = {kk: v for kk, v in RUN_B.items() if kk.endswith("leg")}
+    return [k(0.0, **legs_a, **carry, body=B(), spine=S(10)), k(0.3, **legs_b), k(0.6, **legs_a),
+            k(0.85, right_arm=A(172, 10, 0, 5), left_arm=A(150, 10, 0, 20), left_leg=Lg(5, 180, 6, 5), right_leg=Lg(70, 0, 6, 90),
+              body=B(air=1.0, root=0.2)),
+            k(1.3, body=B(pitch=-150, air=1.0, root=0.9), right_leg=Lg(100, 0, 6, 10), left_leg=Lg(100, 0, 6, 10), spine=S(40)),
+            k(1.6, body=B(pitch=-180, turn=180, air=1.0, root=1.3), right_leg=Lg(5, 0, 6, 5), left_leg=Lg(5, 0, 6, 5), spine=S(0)),
+            k(1.9, body=B(pitch=-260, turn=180, air=1.0, root=1.2), right_arm=A(120, 60, 0, 10), left_arm=A(120, 60, 0, 10), spine=S(30)),
+            k(2.4, body=B(pitch=-270, turn=180, air=1.0, root=0.1)), k(2.5, body=B(pitch=-270, turn=180, air=0.0)), k(2.9, hold=True)]
+
+
+@motion("iron_cross", "Iron cross on the rings: hanging in the air with both arms straight out to the sides, body "
+        "straight and vertical, legs together.", "pose", ["body"] + FULL, ["neck"])
+def _iron_cross():
+    return [k(0.0, body=B(air=1.0, root=0.35), right_arm=A(90, 90, 0, 2), left_arm=A(90, 90, 0, 2), right_leg=Lg(0, 0, 0, 0),
+              left_leg=Lg(0, 0, 0, 0), spine=S(0))]
+
+
+@motion("support_hold", "Support hold (parallel bars, dip bars, pommel horse): body held up on straight arms with "
+        "the hands beside the hips, legs together hanging or held out front.", "pose", ["body"] + FULL, ["neck"])
+def _support_hold():
+    return [k(0.0, body=B(air=1.0, root=0.25), right_arm=A(5, 175, 0, 2), left_arm=A(5, 175, 0, 2), right_leg=Lg(0, 0, 0, 0),
+              left_leg=Lg(0, 0, 0, 0), spine=S(3))]
+
+
+@motion("pommel_circles", "Pommel horse circles: supporting on straight arms, the straight legs held together sweep "
+        "around in a horizontal circle, the body leaning opposite.", "cycle", ["body"] + FULL, ["neck"], period=1.2)
+def _pommel():
+    sup = {"right_arm": A(5, 175, 0, 2), "left_arm": A(5, 175, 0, 2)}
+    return [k(0.0, body=B(air=1.0, root=0.25, pitch=40), **sup, right_leg=Lg(80, 0, 0, 2), left_leg=Lg(80, 0, 0, 2), spine=S(-20)),
+            k(0.3, body=B(air=1.0, root=0.25, roll=-40, pitch=0), right_leg=Lg(80, 90, 0, 2), left_leg=Lg(70, -90, 0, 2)),
+            k(0.6, body=B(air=1.0, root=0.25, pitch=-40), right_leg=Lg(60, 180, 0, 2), left_leg=Lg(60, 180, 0, 2), spine=S(20)),
+            k(0.9, body=B(air=1.0, root=0.25, roll=40, pitch=0), right_leg=Lg(70, -90, 0, 2), left_leg=Lg(80, 90, 0, 2))]
+
+
+@motion("front_handspring", "Front handspring / vault: from a run, reach both arms forward and down, hands on the "
+        "floor or table, the body flips over upside down with straight arms and lands on the feet.", "action",
+        ["body"] + FULL, ["neck"])
+def _front_handspring():
+    up = {"right_arm": A(170, 8, 0, 3), "left_arm": A(170, 8, 0, 3)}
+    return [k(0.0, **RUN_A, body=B(), spine=S(10)), k(0.3, **RUN_B),
+            k(0.55, body=B(pitch=60), **up, right_leg=Lg(30, 180, 6, 5), left_leg=Lg(40, 0, 6, 20), spine=S(10)),
+            k(0.8, body=B(pitch=180), right_leg=Lg(10, 180, 6, 5), left_leg=Lg(10, 180, 6, 5), spine=S(-15)),
+            k(1.05, body=B(pitch=290, air=1.0, root=0.25), spine=S(-25)),
+            k(1.3, body=B(pitch=360, air=0.0, root=0.0), **stance_legs("normal", 0.5), spine=S(10)),
+            k(1.7, **stance_legs("normal", 0.1), spine=S(3), **up)]
+
+
+@motion("back_handspring", "Back handspring: sit back as if into a chair, swing the arms back overhead and jump "
+        "backward onto the hands, snap the legs over and land on the feet.", "action", ["body"] + FULL, ["neck"])
+def _back_handspring():
+    up = {"right_arm": A(170, 8, 0, 3), "left_arm": A(170, 8, 0, 3)}
+    return [k(0.0, **stance_legs("narrow", 0.1), body=B(), **up, spine=S(3)),
+            k(0.35, **stance_legs("narrow", 0.8), spine=S(25), right_arm=A(40, 175, 0, 5), left_arm=A(40, 175, 0, 5)),
+            k(0.6, body=B(pitch=-90, air=1.0, root=0.3), right_leg=Lg(10, 0, 6, 20), left_leg=Lg(10, 0, 6, 20), spine=S(-35), **up),
+            k(0.8, body=B(pitch=-180, air=0.0), right_leg=Lg(20, 0, 6, 10), left_leg=Lg(20, 0, 6, 10)),
+            k(1.0, body=B(pitch=-290, air=1.0, root=0.15), right_leg=Lg(60, 0, 6, 40), left_leg=Lg(60, 0, 6, 40), spine=S(20)),
+            k(1.2, body=B(pitch=-360, air=0.0, root=0.0), **stance_legs("narrow", 0.6), spine=S(15)),
+            k(1.6, **stance_legs("narrow", 0.1), spine=S(3))]
+
+
+@motion("round_off", "Round-off: run, hurdle, hands go down one after the other like a cartwheel, the legs snap "
+        "together overhead and the body lands on both feet facing back the way it came.", "action", ["body"] + FULL, ["neck"])
+def _round_off():
+    spread = {"right_arm": A(170, 85, 0, 3), "left_arm": A(170, 85, 0, 3), "right_leg": Lg(35, 90, 8, 3), "left_leg": Lg(35, 90, 8, 3)}
+    return [k(0.0, **RUN_A, body=B(), spine=S(10)), k(0.3, **spread, body=B(roll=0)),
+            k(0.55, body=B(roll=-90)), k(0.8, body=B(roll=-180, turn=90), right_leg=Lg(3, 0, 8, 3), left_leg=Lg(3, 0, 8, 3)),
+            k(1.05, body=B(roll=-300, turn=180)), k(1.25, body=B(roll=-360, turn=180), **stance_legs("normal", 0.6), spine=S(15)),
+            k(1.6, **stance_legs("normal", 0.1), spine=S(3), right_arm=A(170, 15, 0, 3), left_arm=A(170, 15, 0, 3))]
+
+
+@motion("toe_touch_jump", "Toe-touch jump (cheer): arms in a high V, swing the arms down, jump and kick the straight "
+        "legs up and wide into a straddle with the arms punched out to the sides in a T, land feet together.",
+        "action", LEGS + ARMS + ["body", "spine"], ["pelvis"])
+def _toe_touch():
+    return _air_shape({"right_leg": Lg(95, 65, 10, 3), "left_leg": Lg(95, 65, 10, 3), "spine": S(15),
+                       "right_arm": A(90, 88, 0, 3), "left_arm": A(90, 88, 0, 3)}, h=0.32)
+
+
+@motion("high_v", "High V motion (cheer): both arms straight up and out in a V above the head, fists tight.", "pose",
+        ARMS, [])
+def _high_v():
+    return [k(0.0, right_arm=A(150, 60, 0, 2), left_arm=A(150, 60, 0, 2))]
+
+
+@motion("stunt_base", "Stunt base position: wide squat with a flat back, both hands up at shoulder height palms up "
+        "to hold a flyer's foot.", "pose", FULL, ["neck"])
+def _stunt_base():
+    return [k(0.0, **stance_legs("wide", 0.7), spine=S(15), pelvis=P(8), **both(0.15, 0.0, 0.25, "down"), neck=N(-20))]
+
+
+@motion("liberty_pose", "Liberty (flyer pose): balanced on the straight right leg, the left foot drawn up to the right "
+        "knee, arms in a high V.", "pose", FULL, ["neck"])
+def _liberty():
+    return [k(0.0, right_leg=Lg(0, 0, 10, 2), left_leg=Lg(50, 75, 70, 120), spine=S(0), right_arm=A(150, 60, 0, 2), left_arm=A(150, 60, 0, 2))]
+
+
+@motion("seat_drop", "Trampoline seat drop: bounce, land sitting with the legs straight out in front and the hands "
+        "beside the hips, rebound back up to standing.", "action", ["body"] + FULL, ["neck"])
+def _seat_drop():
+    return [k(0.0, **stance_legs("narrow", 0.1), body=B(air=1.0, root=0.5), right_arm=A(160, 10, 0, 5), left_arm=A(160, 10, 0, 5)),
+            k(0.4, body=B(air=1.0, root=0.0), right_leg=Lg(85, 0, 4, 3), left_leg=Lg(85, 0, 4, 3), spine=S(0),
+              right_arm=A(20, 170, 0, 5), left_arm=A(20, 170, 0, 5)),
+            k(0.45, body=B(air=0.0)), k(0.6, hold=True),
+            k(0.9, body=B(air=1.0, root=0.4), **stance_legs("narrow", 0.1), right_arm=A(160, 10, 0, 5), left_arm=A(160, 10, 0, 5)),
+            k(1.2, body=B(air=1.0, root=0.0)), k(1.24, body=B(air=0.0))]
+
+
+@motion("camel_spin", "Camel spin (skating): gliding on the left leg with the free right leg and trunk horizontal in "
+        "an arabesque line, arms out, spinning.", "action", FULL + ["body"], ["neck"])
+def _camel_spin():
+    pose = dict(left_leg=Lg(3, 0, 10, 8), right_leg=Lg(85, 180, 10, 3), spine=S(70), pelvis=P(15), right_arm=A(90, 80, 0, 5),
+                left_arm=A(90, 80, 0, 5))
+    return [k(0.0, **pose, body=B(turn=0))] + _spin_keys(2, 0.0, 1.6, 8) + [k(1.6, hold=True)]
+
+
+@motion("sit_spin", "Sit spin (skating): a deep one-leg squat on the left leg with the right leg stretched forward, "
+        "arms forward, spinning.", "action", FULL + ["body"], ["neck"])
+def _sit_spin():
+    pose = dict(left_leg=leg_at(0.10, 0.12, 0.42, 0, 10, "left"), right_leg=Lg(80, 0, 10, 5), spine=S(35), pelvis=P(12),
+                right_arm=A(80, 20, 0, 10), left_arm=A(80, 20, 0, 10))
+    return [k(0.0, **pose, body=B(turn=0))] + _spin_keys(2, 0.0, 1.6, 8) + [k(1.6, hold=True)]
+
+
+@motion("skating_jump", "Figure-skating jump: glide, take off from one edge with the arms swinging, pull the arms in "
+        "tight to the chest and rotate one to two turns in the air, land on the right leg gliding backward with the "
+        "free leg extended behind and the arms out.", "action", ["body"] + FULL, ["neck"])
+def _skate_jump():
+    pts, T = _flight(0.45, 0.35)
+    keys = [k(0.0, right_leg=Lg(3, 0, 10, 15), left_leg=Lg(30, 180, 10, 10), body=B(turn=0), spine=S(10), right_arm=A(60, 40, 0, 20),
+              left_arm=A(60, 100, 0, 20)),
+            k(0.35, right_leg=Lg(5, 0, 10, 40), left_leg=Lg(50, 0, 10, 60), spine=S(20)),
+            k(0.45, body=B(air=1.0, turn=0), right_leg=Lg(3, 0, 10, 3), left_leg=Lg(10, 30, 10, 20),
+              **both(0.05, -0.12, 0.18, "down"))]
+    for i, (t, r) in enumerate(pts[1:-1]):
+        keys.append(k(t, body=B(air=1.0, root=r, turn=-540.0 * (i + 1) / (len(pts) - 1))))
+    tl = pts[-1][0]
+    keys += [k(tl, body=B(air=1.0, root=0.0, turn=-540), right_leg=Lg(3, 0, 10, 15), left_leg=Lg(45, 180, 10, 5),
+               right_arm=A(85, 85, 0, 5), left_arm=A(85, 85, 0, 5), spine=S(20)),
+             k(tl + 0.04, body=B(air=0.0, turn=-540)), k(tl + 0.7, hold=True)]
+    return keys
+
+
+@motion("ski_jump_inrun", "Ski-jump in-run position: deep tuck with the trunk flat over the thighs and the arms held "
+        "back alongside the body.", "pose", FULL, ["neck"])
+def _inrun():
+    return [k(0.0, **stance_legs("narrow", 1.1), spine=S(75), pelvis=P(18), right_arm=A(20, 175, 0, 5), left_arm=A(20, 175, 0, 5),
+              neck=N(-30))]
+
+
+@motion("ski_jump_flight", "Ski-jump flight: body straight and leaning far forward over the skis, arms held back "
+        "close to the sides, legs straight and slightly apart.", "pose", ["body"] + FULL, ["neck"])
+def _ski_flight():
+    return [k(0.0, body=B(pitch=55, air=1.0, root=0.5), right_leg=Lg(15, 60, 10, 3), left_leg=Lg(15, 60, 10, 3), spine=S(5),
+              right_arm=A(25, 170, 0, 5), left_arm=A(25, 170, 0, 5), neck=N(-30))]
+
+
+@motion("sled_push", "Bobsled-style push start: bent low, both hands forward on the push bar, driving with fast "
+        "sprinting steps.", "cycle", LEGS + ARMS + ["spine", "pelvis"], ["neck"], period=0.6)
+def _sled_push():
+    arms = both(0.18, -0.40, 0.42, "down")
+    return [k(0.0, right_leg=Lg(60, 0, 6, 90), left_leg=Lg(25, 180, 6, 20), spine=S(55), pelvis=P(15), **arms, neck=N(-30)),
+            k(0.3, left_leg=Lg(60, 0, 6, 90), right_leg=Lg(25, 180, 6, 20))]
+
+
+@motion("prone_sled_ride", "Skeleton ride: lying face down head first on the sled, arms tight along the sides, legs "
+        "straight and together, head just lifted.", "pose", ["body"] + FULL, ["neck"])
+def _skeleton():
+    return [k(0.0, body=B(90), right_leg=Lg(0, 0, 0, 0), left_leg=Lg(0, 0, 0, 0), spine=S(-5), right_arm=A(10, 175, 0, 3),
+              left_arm=A(10, 175, 0, 3), neck=N(-25))]
+
+
+@motion("supine_sled_ride", "Luge ride: lying on the back feet first, legs straight and together, arms along the sides, "
+        "head lifted just enough to see.", "pose", ["body"] + FULL, ["neck"])
+def _luge():
+    return [k(0.0, body=B(-90), right_leg=Lg(0, 0, 0, 0), left_leg=Lg(0, 0, 0, 0), spine=S(8), right_arm=A(10, 30, 0, 3),
+              left_arm=A(10, 30, 0, 3), neck=N(25))]
+
+
+@motion("curling_delivery", "Curling-style sliding delivery: a long low lunge sliding forward on the bent left leg, "
+        "the right leg trailing straight behind on the ice, the right arm reaching forward releasing the stone.",
+        "pose", FULL, ["neck"])
+def _curling():
+    return [k(0.0, left_leg=leg_at(0.30, 0.10, 0.50, 0, 10, "left"), right_leg=Lg(70, 180, 20, 5), spine=S(45), pelvis=P(15),
+              right_arm=A(70, 5, 0, 5), left_arm=A(45, 70, 0, 10), neck=N(-20))]
+
+
+@motion("sweeping", "Sweeping the ice (curling): bent over with both hands on the broom low in front, scrubbing it "
+        "fast side to side while walking.", "cycle", ARMS + ["spine"], LEGS, period=0.4)
+def _sweeping():
+    return grip_keys([(0.0, 0.15, -0.55, 0.40, "down"), (0.2, -0.10, -0.58, 0.42, "down"), (0.4, 0.15, -0.55, 0.40, "down")], step=0.05) + \
+        [k(0.0, spine=S(45))]
+
+
+@motion("prone_aim", "Prone shooting position: lying face down, chest raised on the elbows, both hands up at the face "
+        "holding a rifle aimed forward, legs apart.", "pose", ["body"] + FULL, ["neck"])
+def _prone_aim():
+    return [k(0.0, body=B(88), right_leg=Lg(8, 90, 30, 3), left_leg=Lg(8, 90, 0, 3), spine=S(-30), pelvis=P(),
+              right_arm=A(110, 30, 0, 110), left_arm=A(130, 5, 0, 90), neck=N(-10))]
+
+
+@motion("rifle_aim_standing", "Standing rifle aim: side-on, the left elbow tucked against the side supporting the "
+        "rifle, the right hand and cheek at the stock, eye along the barrel.", "pose", FULL, ["neck"])
+def _rifle_stand():
+    return [k(0.0, **stance_legs("normal", 0.05), spine=S(0, 70, -8), pelvis=P(0, 60), right_arm=arm_at(0.05, 0.12, 0.15, "out", "right"),
+              left_arm=arm_at(0.10, 0.05, 0.35, "down", "left"), neck=N(10, -70))]
+
+
+@motion("pistol_aim", "One-hand pistol / target aim: side-on, the right arm straight out at eye level, the left hand "
+        "in the pocket or on the hip.", "pose", FULL, ["neck"])
+def _pistol():
+    return [k(0.0, **stance_legs("normal", 0.05), spine=S(0, 70), pelvis=P(0, 60), right_arm=A(90, 0, 0, 2),
+              left_arm=arm_at(0.26, -0.47, 0.02, "out", "left"), neck=N(0, -70))]
+
+
+@motion("shotgun_mount", "Shotgun mount: staggered stance leaning slightly forward, both hands holding the gun up at "
+        "the right shoulder, cheek down on the stock, tracking forward.", "pose", FULL, ["neck"])
+def _shotgun():
+    return [k(0.0, **stance_legs("normal", 0.2, "left", 20), spine=S(12, 20), pelvis=P(4, 20),
+              right_arm=arm_at(0.10, 0.10, 0.12, "out", "right"), left_arm=arm_at(-0.05, 0.10, 0.45, "down", "left"), neck=N(15, -15))]
+
+
+@motion("kneeling_aim", "Kneeling aim: the right knee down, sitting back on the right heel, the left knee up with the "
+        "left elbow resting on it, rifle at the right shoulder.", "pose", FULL, ["neck"])
+def _kneel_aim():
+    return [k(0.0, left_leg=Lg(80, 0, 4, 100), right_leg=Lg(10, 0, 0, 130), spine=S(15, 30), right_arm=arm_at(0.05, 0.10, 0.15, "out", "right"),
+              left_arm=arm_at(0.05, -0.05, 0.40, "down", "left"), neck=N(10, -30))]
+
+
+@motion("hip_throw", "Hip throw (judo / wrestling): grip and pull with both hands, step across and pivot so the back "
+        "turns into the partner, drop the hips low, then bend forward and turn, pulling the arms down around.",
+        "action", FULL + ["body"], ["neck"])
+def _hip_throw():
+    grip = both(0.20, -0.05, 0.45, "down")
+    return [k(0.0, **stance_legs("normal", 0.3), body=B(turn=0), spine=S(10), **grip),
+            k(0.4, right_leg=leg_at(0.25, -0.05, 0.2, 0, 0, "right"), body=B(turn=-90), right_arm=A(80, -40, 0, 60),
+              left_arm=A(70, 40, 0, 40)),
+            k(0.7, **stance_legs("normal", 0.7), body=B(turn=-180), spine=S(20)),
+            k(1.1, spine=S(65, -30), right_arm=A(40, -20, 0, 50), left_arm=A(55, -20, 0, 35), **stance_legs("normal", 0.4)),
+            k(1.5, hold=True)]
+
+
+@motion("shoulder_throw", "Shoulder throw: pull, turn the back in under the partner while dropping low with the right "
+        "arm hooked up under their armpit, then pitch forward over the bent knees.", "action", FULL + ["body"], ["neck"])
+def _shoulder_throw():
+    grip = both(0.20, -0.05, 0.45, "down")
+    return [k(0.0, **stance_legs("normal", 0.3), body=B(turn=0), spine=S(10), **grip),
+            k(0.45, body=B(turn=-180), **stance_legs("normal", 1.0), spine=S(25), right_arm=A(100, 30, 90, 120), left_arm=A(60, -20, 0, 40)),
+            k(0.85, spine=S(75, -20), **stance_legs("normal", 0.7), right_arm=A(70, -10, 60, 90), left_arm=A(40, -30, 0, 40)),
+            k(1.3, hold=True)]
+
+
+@motion("back_breakfall", "Back breakfall: squat down, roll back onto the rounded back with the chin tucked, and slap "
+        "both arms flat on the floor at 45 degrees as the back lands.", "action", ["body"] + FULL, ["neck"])
+def _breakfall():
+    return [k(0.0, **stance_legs("normal", 0.1), body=B(), spine=S(3), right_arm=A(90, 5, 0, 5), left_arm=A(90, 5, 0, 5), neck=N()),
+            k(0.4, **stance_legs("normal", 1.3), spine=S(30), neck=N(35)),
+            k(0.75, body=B(-70), right_leg=Lg(70, 0, 8, 60), left_leg=Lg(70, 0, 8, 60), spine=S(30),
+              right_arm=A(130, 45, 0, 5), left_arm=A(130, 45, 0, 5)),
+            k(0.9, right_arm=A(40, 45, 0, 3), left_arm=A(40, 45, 0, 3)), k(1.4, hold=True)]
+
+
+@motion("closed_guard", "Guard position (jiu-jitsu): lying on the back with the knees bent and apart up in the air as "
+        "if wrapped around an opponent, hands up in front gripping.", "pose", ["body"] + FULL, ["neck"])
+def _guard_pos():
+    return [k(0.0, body=B(-80), right_leg=Lg(80, 50, 30, 100), left_leg=Lg(80, 50, 30, 100), spine=S(15), right_arm=A(80, 10, 0, 60),
+              left_arm=A(80, 10, 0, 60), neck=N(20))]
+
+
+@motion("mount_position", "Mount position: kneeling astride with the knees wide on the floor, hips sitting up tall, "
+        "hands posted forward or up in a guard.", "pose", FULL, ["neck"])
+def _mount():
+    return [k(0.0, right_leg=Lg(10, 65, 60, 100), left_leg=Lg(10, 65, 60, 100), spine=S(10), **both(0.18, -0.25, 0.35, "down"))]
+
+
+@motion("side_control", "Side control (top): chest low and heavy across, both knees and the toes on the floor, hips "
+        "low, arms wrapped around low in front.", "pose", ["body"] + FULL, ["neck"])
+def _side_control():
+    return [k(0.0, **fit_pose("side_control", {"body.pitch": 75, "legs.raise": 70, "legs.knee": 110, "arms.raise": 60, "arms.elbow": 60},
+                               {"legs": {"dir": 30.0, "twist": 30.0}, "arms": {"dir": 10.0, "twist": 0.0}, "spine": {"lean": 10.0}},
+                               [("right_knee", "floor", 0, 3), ("left_foot", "floor", 0, 2), ("neck", "y", 0.35, 2), ("right_hand", "floor", 0, 1)]))]
+
+
+@motion("shiko_stomp", "Leg stomp (sumo shiko): wide deep squat with the hands on the knees, shift onto the left leg and "
+        "lift the straight right leg high to the side, then stomp it down back into the squat.", "action", FULL, ["neck"])
+def _shiko():
+    base = {**stance_legs("very_wide", 1.0, toe=35), "spine": S(15), "pelvis": P(10), **both(0.35, -0.55, 0.20, "out")}
+    return [k(0.0, **base), k(0.6, left_leg=leg_at(0.0, 0.20, 0.08, 0, 30, "left"), right_leg=Lg(80, 80, 20, 5), spine=S(5, 0, 20)),
+            k(0.9, hold=True), k(1.15, **base), k(1.5, hold=True)]
+
+
+@motion("charge_from_crouch", "Explosive charge from a crouch (sumo tachiai, three-point start): low crouch with the "
+        "fists down, explode forward and up with both hands thrusting out.", "action", ["body"] + FULL, ["neck"])
+def _tachiai():
+    return [k(0.0, **stance_legs("very_wide", 1.1, toe=30), body=B(pitch=20), spine=S(45), pelvis=P(12), right_arm=A(65, 5, 0, 5),
+              left_arm=A(65, 5, 0, 5), neck=N(-20)),
+            k(0.5, hold=True),
+            k(0.8, body=B(pitch=15), right_leg=leg_at(0.25, 0.20, 0.30, 0, 10, "right"), left_leg=Lg(35, 180, 10, 20), spine=S(30),
+              **both(0.18, 0.0, 0.58, "out")),
+            k(1.2, hold=True)]
+
+
+@motion("axe_kick", "Axe kick: raise the straight right leg up high in front, then chop the heel straight down.",
+        "action", LEGS + ["pelvis"], ["spine", "right_arm", "left_arm"])
+def _axe():
+    base = stance_legs("normal", 0.25, "left", 18)
+    return [k(0.0, **base, pelvis=P(2, 15), spine=S(6, 10), right_arm=GUARD_R, left_arm=GUARD_L),
+            k(0.4, right_leg=Lg(130, 10, 8, 5), left_leg=leg_at(0.0, 0.14, 0.08, 0, 20, "left"), spine=S(-10), pelvis=P(-15)),
+            k(0.6, right_leg=Lg(35, 0, 8, 5), spine=S(10)), k(0.95, **base, pelvis=P(2, 15), spine=S(6, 10))]
+
+
+@motion("spinning_back_kick", "Spinning back kick: turn the back to the target, look over the shoulder and thrust the "
+        "right heel straight back at waist height, recoil and turn back.", "action", LEGS + ["body", "pelvis", "spine"], ARMS)
+def _spin_back():
+    base = stance_legs("normal", 0.25, "left", 18)
+    return [k(0.0, **base, body=B(turn=0), spine=S(6, 10), right_arm=GUARD_R, left_arm=GUARD_L),
+            k(0.3, body=B(turn=-150), right_leg=Lg(60, 0, 8, 120), left_leg=leg_at(0.0, 0.12, 0.08, 0, 40, "left")),
+            k(0.5, body=B(turn=-180), right_leg=Lg(70, 180, 8, 5), spine=S(40)),
+            k(0.7, right_leg=Lg(60, 0, 8, 120), spine=S(10)), k(1.1, **base, body=B(turn=-360), spine=S(6, 10))]
+
+
+@motion("overhead_two_hand_strike", "Overhead two-hand strike (kendo, axe chop): both hands raise the sword high "
+        "overhead, step forward and cut straight down to head height in front, arms extended.", "action", FULL, ["neck"])
+def _kendo():
+    keys = grip_keys([(0.0, 0.0, -0.20, 0.40, "down"), (0.4, 0.0, 0.55, 0.10, "out"), (0.65, 0.0, 0.10, 0.60, "down"),
+                      (0.75, 0.0, 0.02, 0.62, "down"), (1.2, 0.0, -0.20, 0.40, "down")], step=0.06)
+    keys += [k(0.0, **stance_legs("normal", 0.2, "right", 0), spine=S(3)),
+             k(0.65, right_leg=leg_at(0.35, 0.14, 0.18, 0, 0, "right"), left_leg=Lg(25, 180, 0, 10), spine=S(8)),
+             k(1.2, **stance_legs("normal", 0.2, "right", 0), spine=S(3))]
+    return keys
+
+
+@motion("muscle_up", "Muscle-up: from a dead hang, pull explosively, turn the wrists over and push the body up above "
+        "the bar to straight-arm support.", "action", ["body"] + FULL, ["neck"])
+def _muscle_up():
+    return [k(0.0, body=B(air=1.0, root=0.25), right_leg=Lg(5, 0, 4, 10), left_leg=Lg(5, 0, 4, 10), spine=S(0),
+              right_arm=A(172, 20, 0, 3), left_arm=A(172, 20, 0, 3)),
+            k(0.5, body=B(air=1.0, root=0.55), right_arm=A(110, 30, 60, 140), left_arm=A(110, 30, 60, 140), spine=S(15),
+              right_leg=Lg(30, 0, 4, 40), left_leg=Lg(30, 0, 4, 40)),
+            k(0.8, body=B(air=1.0, root=0.8), right_arm=A(30, 120, 30, 120), left_arm=A(30, 120, 30, 120), spine=S(25)),
+            k(1.2, body=B(air=1.0, root=0.95), right_arm=A(5, 175, 0, 2), left_arm=A(5, 175, 0, 2), spine=S(3),
+              right_leg=Lg(3, 0, 4, 3), left_leg=Lg(3, 0, 4, 3)), k(1.5, hold=True)]
+
+
+@motion("toes_to_bar", "Toes-to-bar: hanging from a bar, swing and lift both straight legs up until the toes touch the "
+        "bar, lower under control.", "cycle", ["body"] + FULL, ["neck"], period=1.6)
+def _ttb():
+    return [k(0.0, body=B(air=1.0, root=0.25), right_leg=Lg(5, 0, 4, 3), left_leg=Lg(5, 0, 4, 3), spine=S(-5),
+              right_arm=A(172, 20, 0, 3), left_arm=A(172, 20, 0, 3)),
+            k(0.6, right_leg=Lg(150, 0, 4, 3), left_leg=Lg(150, 0, 4, 3), spine=S(30)), k(0.8, hold=True)]
+
+
+@motion("handstand_push_up", "Handstand push-up: from a handstand, bend the elbows to lower the head toward the "
+        "floor, press back up to straight arms.", "cycle", ["body"] + FULL, ["neck"], period=2.0)
+def _hspu():
+    return [k(0.0, body=B(pitch=180), right_arm=A(178, 8, 0, 2), left_arm=A(178, 8, 0, 2), right_leg=Lg(0, 0, 0, 0),
+              left_leg=Lg(0, 0, 0, 0), spine=S(0), neck=N(-20)),
+            k(0.9, right_arm=A(150, 60, 0, 90), left_arm=A(150, 60, 0, 90)), k(1.1, hold=True)]
+
+
+@motion("wall_ball", "Wall ball shot: squat holding a ball at the chest, drive up and throw it up high to a target "
+        "with both hands, arms finishing overhead.", "action", FULL, ["neck"])
+def _wall_ball():
+    hold = grip2(0.0, -0.20, 0.28, "down")
+    return [k(0.0, **stance_legs("wide", 0.05), spine=S(4), **hold),
+            k(0.8, **stance_legs("wide", 1.0), spine=S(25), pelvis=P(10)),
+            k(1.2, **stance_legs("wide", 0.05), spine=S(-3), pelvis=P(), right_arm=A(160, 15, 0, 5), left_arm=A(160, 15, 0, 5)),
+            k(1.5, hold=True), k(1.9, **hold, spine=S(4))]
+
+
+@motion("tire_flip", "Tire flip: deep squat with the chest against the tire and the hands under its edge, drive up "
+        "with the legs, flip the hands over and push it forward with straight arms.", "action", FULL, ["neck"])
+def _tire_flip():
+    return [k(0.0, **stance_legs("wide", 1.2), spine=S(45), pelvis=P(15), right_arm=A(55, 5, 0, 10), left_arm=A(55, 5, 0, 10)),
+            k(0.7, **stance_legs("wide", 0.5), spine=S(20), right_arm=A(60, 10, -30, 100), left_arm=A(60, 10, -30, 100)),
+            k(1.0, right_leg=leg_at(0.25, 0.16, 0.15, 0, 10, "right"), left_leg=Lg(20, 180, 8, 15), spine=S(25),
+              **both(0.12, 0.10, 0.58, "out")), k(1.4, hold=True)]
+
+
+@motion("stone_lift", "Atlas stone / heavy object lift: deep squat wrapping both arms around a round load, lap it "
+        "onto the thighs, then stand and extend the hips to lift it up to chest height.", "action", FULL, ["neck"])
+def _stone():
+    hug = both(0.05, -0.35, 0.38, "out")
+    return [k(0.0, **stance_legs("wide", 1.1), spine=S(55), pelvis=P(15), **both(0.10, -0.55, 0.30, "out")),
+            k(0.6, **stance_legs("wide", 0.9), spine=S(30), **hug), k(0.9, hold=True),
+            k(1.5, **stance_legs("wide", 0.05), spine=S(-8), pelvis=P(-5), **both(0.05, -0.12, 0.35, "out")), k(1.9, hold=True)]
+
+
+@motion("front_double_biceps", "Front double-biceps pose: facing forward, both arms raised out to the sides with the "
+        "elbows at shoulder height and the fists curled up beside the head, flexing.", "pose", ARMS + ["spine"], ["neck"])
+def _fdb():
+    return [k(0.0, right_arm=A(95, 88, 90, 125), left_arm=A(95, 88, 90, 125), spine=S(-3))]
+
+
+@motion("lat_spread", "Front lat spread: fists on the waist with the elbows pushed forward and the back muscles flared "
+        "wide.", "pose", ARMS + ["spine"], ["neck"])
+def _lat_spread():
+    return [k(0.0, right_arm=arm_at(0.24, -0.45, 0.10, "out", "right"), left_arm=arm_at(0.24, -0.45, 0.10, "out", "left"), spine=S(-2))]
+
+
+@motion("most_muscular", "Most-muscular pose: leaning slightly forward, the hands brought together low in front of "
+        "the belly with the arms rounded, everything flexed.", "pose", ARMS + ["spine"], ["neck"])
+def _most_muscular():
+    return [k(0.0, right_arm=arm_at(0.02, -0.40, 0.28, "out", "right"), left_arm=arm_at(0.02, -0.40, 0.28, "out", "left"), spine=S(18))]
+
+
+@motion("side_chest", "Side chest pose: turned side-on, the front arm bent across the body with the fist held by the "
+        "other hand, chest lifted.", "pose", ARMS + ["spine"], ["neck"])
+def _side_chest():
+    return [k(0.0, spine=S(-5, 50), right_arm=arm_at(-0.05, -0.30, 0.30, "down", "right"), left_arm=arm_at(0.10, -0.32, 0.25, "out", "left"),
+              neck=N(0, -40))]
+
+
+_POS_ALIASES5 = {
+    "discus": "discus_spin", "discus throw": "discus_spin", "hammer throw": "hammer_throw", "triple jump": "triple_jump",
+    "hop step and jump": "triple_jump", "pole vault": "pole_vault", "steeplechase": "run(times=2)\nhurdle_step", "iron cross": "iron_cross(hold=2)",
+    "rings": "iron_cross(hold=2)", "parallel bars": "support_hold(hold=2)", "dip bars": "support_hold(hold=2)", "pommel horse": "pommel_circles(times=3)",
+    "vault": "front_handspring", "front handspring": "front_handspring", "back handspring": "back_handspring", "round off": "round_off",
+    "round off back handspring": "round_off\nback_handspring", "balance beam": "arabesque(hold=1)\npirouette",
+    "floor routine": "round_off\nback_handspring\nstand + arms_overhead(hold=1)",
+    "toe touch": "toe_touch_jump", "cheer jump": "toe_touch_jump", "high v": "stand + high_v(hold=1.5)", "cheer motions": "stand + high_v(hold=0.6)\nstand + arms_out(hold=0.6)\nstand + t_signal(hold=0.6)",
+    "stunt base": "stunt_base(hold=2)", "liberty": "liberty_pose(hold=2)", "flyer": "liberty_pose(hold=2)", "seat drop": "seat_drop",
+    "trampoline": "jump(height=high)\nseat_drop\ntuck_jump", "camel spin": "camel_spin", "sit spin": "sit_spin", "figure skating jump": "skating_jump",
+    "axel": "skating_jump", "figure skating spin": "camel_spin", "ski jump": "ski_jump_inrun(hold=1)\nski_jump_flight(hold=1.5)",
+    "ski jumping": "ski_jump_inrun(hold=1)\nski_jump_flight(hold=1.5)", "bobsled push": "sled_push(times=4)", "bobsled": "sled_push(times=4)",
+    "skeleton": "sled_push(times=2)\nprone_sled_ride(hold=2)", "luge": "supine_sled_ride(hold=2)", "curling": "curling_delivery(hold=2)",
+    "curling delivery": "curling_delivery(hold=2)", "curling sweeping": "sweeping(times=6)", "sweeping": "sweeping(times=6)",
+    "biathlon prone": "prone_aim(hold=2)", "prone shooting": "prone_aim(hold=2)", "shooting standing": "rifle_aim_standing(hold=2)",
+    "rifle shooting": "rifle_aim_standing(hold=2)", "biathlon standing": "rifle_aim_standing(hold=2)", "pistol shooting": "pistol_aim(hold=2)",
+    "target shooting": "pistol_aim(hold=2)", "trap shooting": "shotgun_mount(hold=2)", "skeet shooting": "shotgun_mount(hold=2)",
+    "kneeling shooting": "kneeling_aim(hold=2)", "biathlon": "ski_diagonal_stride(times=2)\nprone_aim(hold=1.5)",
+    "judo throw": "hip_throw", "hip throw": "hip_throw", "o goshi": "hip_throw", "shoulder throw": "shoulder_throw", "seoi nage": "shoulder_throw",
+    "breakfall": "back_breakfall", "ukemi": "back_breakfall", "closed guard": "closed_guard(hold=2)", "guard position": "closed_guard(hold=2)",
+    "mount": "mount_position(hold=2)", "mount position": "mount_position(hold=2)", "side control": "side_control(hold=2)",
+    "shiko": "shiko_stomp", "sumo stomp": "shiko_stomp", "sumo": "charge_from_crouch", "tachiai": "charge_from_crouch",
+    "axe kick": "axe_kick", "spinning back kick": "spinning_back_kick", "back kick": "spinning_back_kick", "taekwondo kick": "fighting_stance\nroundhouse_kick",
+    "kendo": "overhead_two_hand_strike", "kendo strike": "overhead_two_hand_strike", "sword strike": "overhead_two_hand_strike",
+    "axe throw": "stance(depth=0.2) + two_hand_overhead_throw", "muscle up": "muscle_up", "toes to bar": "toes_to_bar(times=2)",
+    "handstand push up": "handstand_push_up(times=2)", "wall ball": "wall_ball\nwall_ball", "wall balls": "wall_ball\nwall_ball",
+    "tire flip": "tire_flip", "atlas stone": "stone_lift", "stone lift": "stone_lift", "farmers carry": "walk(times=3) + arms_hang",
+    "farmer carry": "walk(times=3) + arms_hang", "yoke carry": "walk(times=3) + front_rack", "front double biceps": "stand + front_double_biceps(hold=2)",
+    "double biceps": "stand + front_double_biceps(hold=2)", "lat spread": "stand + lat_spread(hold=2)", "most muscular": "stance(depth=0.2) + most_muscular(hold=2)",
+    "side chest": "stand + side_chest(hold=2)", "bodybuilding poses": "stand + front_double_biceps(hold=1)\nstand + lat_spread(hold=1)\nstand + side_chest(hold=1)\nstance(depth=0.2) + most_muscular(hold=1)",
+    "posing": "stand + front_double_biceps(hold=1)\nstand + lat_spread(hold=1)", "powerlifting squat": "back_squat",
+    "powerlifting bench": "bench_press(times=1)", "powerlifting deadlift": "deadlift",
+}
+
+
 ALIASES: Dict[str, str] = {
     "childs pose": "childs_pose(hold=2)", "child pose": "childs_pose(hold=2)", "childs pose stretch": "childs_pose(hold=2)",
     "kneeling": "kneel(hold=1)", "kneel": "kneel(hold=1)", "half kneeling": "half_kneel(hold=1)",
@@ -4167,6 +4679,7 @@ ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES.items() if k_ not in ALIASES})
 ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES2.items() if k_ not in ALIASES})
 ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES3.items() if k_ not in ALIASES})
 ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES4.items() if k_ not in ALIASES})
+ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES5.items() if k_ not in ALIASES})
 try:   # every movement in the sport coverage map is also an instant request
     import sport_coverage as _cov
     for _sport, _phrase, _script in _cov.all_entries():
