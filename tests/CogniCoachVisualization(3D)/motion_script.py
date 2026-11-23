@@ -183,6 +183,7 @@ class Track:
         parts = self.hard + self.soft
         state = {p: dict(NEUTRAL[p]) for p in parts}
         per_part: Dict[str, List[Tuple[float, Dict[str, float]]]] = {p: [] for p in parts}
+        keys = sorted(keys, key=lambda tk: tk[0])   # stable: keys added out of order still play in time order
         for idx, (t, kv) in enumerate(keys):
             mentioned = set()
             for p, vals in kv.items():
