@@ -343,6 +343,120 @@ Each phrase is also an instant request (no model call). Regenerate: `python spor
 | sculling | `sculling(times=3)` | 3.4 |
 | open turn | `front_crawl / open_turn` | 3.0 |
 
+## Hockey positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| ready stance | `stick_ready(hold=1)` | 1.4 |
+| stickhandling | `stance(width=wide, depth=0.6) + stickhandling(times=3)` | 2.5 |
+| wrist shot | `stance(width=wide, depth=0.5) + wrist_shot` | 1.7 |
+| goalie butterfly save | `goalkeeper_set / butterfly_block(hold=1)` | 2.0 |
+| skating | `skating_stride(times=3)` | 4.0 |
+| slapshot | `stance(width=wide, depth=0.3) + two_hand_ground_strike` | 1.9 |
+
+## Lacrosse positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| cradling | `run(pace=jog) + stick_cradle` | 1.17 |
+| shot | `stride_step + overhand_throw(delay=0.2)` | 2.2 |
+
+## Track and field positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| on your marks | `blocks_on_your_marks(hold=1)` | 1.4 |
+| sprint start from blocks | `blocks_on_your_marks(hold=1) / blocks_set(hold=0.8) / sprint_start` | 3.7 |
+| long jump | `long_jump` | 2.7 |
+| high jump flop | `back_arch_flight(hold=1)` | 1.4 |
+| relay exchange | `run + relay_hand_back` | 1.07 |
+| hurdles | `run(times=2) / hurdle_step` | 2.77 |
+| shot put | `stance(depth=0.3) + push_throw` | 1.8 |
+| javelin | `run(times=2) / long_arm_throw` | 2.93 |
+
+## Gymnastics positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| handstand | `handstand(hold=1)` | 1.4 |
+| cartwheel | `cartwheel` | 2.1 |
+| bridge | `back_bridge(hold=1)` | 1.4 |
+| splits | `front_split(hold=1)` | 1.4 |
+| l-sit | `l_sit(hold=1)` | 1.4 |
+| hollow hold | `hollow_hold(hold=1)` | 1.4 |
+| arabesque | `arabesque(hold=1)` | 1.4 |
+| forward roll | `forward_roll` | 2.6 |
+
+## Martial arts positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| horse stance | `horse_stance(hold=1)` | 1.4 |
+| front stance punch | `front_stance(hold=1)` | 1.4 |
+| high block | `stance(width=wide, depth=0.5, stagger=left) + high_block(hold=1)` | 1.4 |
+| front kick | `front_kick` | 1.33 |
+| roundhouse kick | `roundhouse_kick` | 1.6 |
+| side kick | `side_kick` | 1.53 |
+
+## Wrestling positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| stance | `grappling_stance(hold=1)` | 1.4 |
+| sprawl | `sprawl` | 1.6 |
+| double leg shot | `level_change_shot` | 1.5 |
+
+## Winter sports positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| ski tuck | `downhill_tuck(hold=1)` | 1.4 |
+| carving turns | `carving_turns(times=3)` | 5.2 |
+| snowboard stance | `board_stance(hold=1)` | 1.4 |
+
+## Water and board positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| surf pop-up | `pop_up / board_stance(hold=1)` | 2.33 |
+| rowing | `rowing_stroke(times=3)` | 6.4 |
+| kayaking | `paddling(times=3)` | 4.6 |
+
+## Cycling positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| riding | `cycling(times=4)` | 3.6 |
+| descending tuck | `downhill_tuck(hold=1)` | 1.4 |
+
+## Weightlifting positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| back squat | `back_squat` | 2.5 |
+| front rack | `stand + front_rack(hold=1)` | 1.4 |
+| power clean | `power_clean` | 2.0 |
+| overhead squat | `overhead_squat_hold(hold=1)` | 1.4 |
+| bench press | `bench_press(times=2)` | 4.4 |
+| deadlift | `deadlift` | 2.7 |
+| biceps curl | `stand + biceps_curl(times=3)` | 5.8 |
+| bent-over row | `bent_over_row(times=3)` | 5.8 |
+| kettlebell swing | `kettlebell_swing(times=3)` | 4.6 |
+
+## Climbing positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| climbing | `climbing(times=3)` | 4.6 |
+
+## Archery and fencing positions
+
+| Movement | Script | Seconds |
+|---|---|---|
+| archery draw | `archery_draw(hold=1)` | 1.4 |
+| en garde | `en_garde(hold=1)` | 1.4 |
+| fencing lunge | `en_garde / fencing_lunge` | 2.3 |
+
 ## Rest / sideline positions
 
 | Movement | Script | Seconds |
