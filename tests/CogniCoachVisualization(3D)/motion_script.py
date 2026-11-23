@@ -476,8 +476,16 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
             tr = Track(db[name], args)
             target = sublines[-1]
             clash = [o for o in target if {p for p, h in o.owned() if h} & {p for p, h in tr.owned() if h}]
+            new_hard = {p for p, h in tr.owned() if h}
+
+            def overlay(o: Track) -> bool:
+                old_hard = {p for p, h in o.owned() if h}
+                if tr.name in GENERIC_POSES or o.name in GENERIC_POSES:
+                    return False     # generic poses have their own rule: they give way
+                return ((new_hard < old_hard and o.kind in ("pose", "cycle")) or
+                        (old_hard < new_hard and tr.kind in ("pose", "cycle")))
             if clash:
-                if strict:
+                if strict and not all(overlay(o) for o in clash):
                     for o in clash:
                         parts = sorted({p for p, h in o.owned() if h} & {p for p, h in tr.owned() if h})
                         errors.append(f"line {line['no']}: '{tr.name}' and '{o.name}' both drive {', '.join(parts)}; "
@@ -502,12 +510,6 @@ def compile_script(script: str, db: Dict[str, Dict[str, Any]], dominant_side: st
                 # Base + overlay: a pose / cycle (board_stance, tread_water) and a motion that drives only
                 # some of its parts (single_blade_paddle, a shot) play TOGETHER - the more specific motion
                 # takes the shared parts (the owner ranking below), the base keeps the rest.
-                new_hard = {p for p, h in tr.owned() if h}
-
-                def overlay(o: Track) -> bool:
-                    old_hard = {p for p, h in o.owned() if h}
-                    return ((new_hard < old_hard and o.kind in ("pose", "cycle")) or
-                            (old_hard < new_hard and tr.kind in ("pose", "cycle")))
                 if all(overlay(o) for o in clash):
                     # ...except a posture pose (sit_on_bench, kneel) inside a moving motion that already has
                     # its own posture (paddling is seated): the pose is dropped, the motion plays as stored.

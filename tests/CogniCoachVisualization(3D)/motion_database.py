@@ -7092,6 +7092,131 @@ _MORE_ALIASES2 = {
 }
 
 
+# =============================================================================
+# 36. GAP FILLERS FOUND BY THE MODEL SWEEP (track, combat, hockey, water)
+# =============================================================================
+@motion("spinning_hook_kick", "Spinning hook kick (taekwondo / kickboxing): spin backward turning the back to the "
+        "target, the right leg swings up straight and extended across, then the heel hooks back through at head "
+        "height as the spin completes.", "action", LEGS + ["body", "pelvis", "spine"], ARMS)
+def _spin_hook():
+    base = stance_legs("normal", 0.25, "left", 18)
+    return [k(0.0, **base, body=B(turn=0), spine=S(6, 10), right_arm=GUARD_R, left_arm=GUARD_L),
+            k(0.25, body=B(turn=-120), right_leg=Lg(35, 150, 8, 40), left_leg=leg_at(0.0, 0.12, 0.08, 0, 40, "left")),
+            k(0.45, body=B(turn=-200), right_leg=Lg(85, 120, 8, 10), spine=S(25, 0, -15)),
+            k(0.6, body=B(turn=-280), right_leg=Lg(90, 60, 8, 70), spine=S(30, 0, -20)),
+            k(0.8, body=B(turn=-330), right_leg=Lg(40, 30, 8, 90), spine=S(10)), k(1.15, **base, body=B(turn=-360), spine=S(6, 10))]
+
+
+@motion("guard_pass", "Standing guard pass (torreando, jiu-jitsu): bent over the opponent's legs, both hands grip and "
+        "push the knees to one side while stepping around to the other side, ending low beside them.", "action", FULL, ["neck"])
+def _guard_pass():
+    reach = {"right_arm": A(60, 10, 0, 20), "left_arm": A(60, 10, 0, 20)}
+    return [kk(0.0, reach, stance_legs("wide", 0.5), spine=S(45), pelvis=P(12)),
+            kk(0.5, spine=S(45, 30), pelvis=P(12, 15), right_arm=A(45, -20, 0, 15), left_arm=A(55, 30, 0, 20)),
+            kk(0.9, right_leg=leg_at(0.25, 0.35, 0.40, 0, 30, "right"), left_leg=Lg(25, 160, 10, 60), spine=S(55, 35), pelvis=P(15, 25)),
+            kk(1.4, stance_legs("wide", 0.9), spine=S(50, 10), pelvis=P(15), right_arm=A(70, 10, 0, 40), left_arm=A(70, 10, 0, 40)), k(1.8, hold=True)]
+
+
+@motion("saucer_pass", "Saucer pass (hockey): from the blade on the right side, sweep the stick across and roll the "
+        "wrists so the blade opens and flicks the puck up off the ice, follow-through low toward the target.",
+        "action", ARMS + ["spine"], ["pelvis", "neck"])
+def _saucer():
+    return grip_keys([(0.0, 0.32, -0.48, 0.38, "down"), (0.45, 0.05, -0.50, 0.42, "down"), (0.7, -0.15, -0.30, 0.48, "out"),
+                      (1.1, -0.15, -0.30, 0.48, "out")]) + \
+        [k(0.0, spine=S(30, 30), pelvis=P(8, 15)), k(0.45, spine=S(30, 5)), k(0.7, spine=S(25, -20), pelvis=P(6, -15)), k(1.1, hold=True)]
+
+
+@motion("backhand_stick_pass", "Backhand pass / shot with a stick: the blade starts on the LEFT side, the bottom hand "
+        "pulls and the top hand pushes as the stick sweeps forward across the body, follow-through up on the left.",
+        "action", ARMS + ["spine"], ["pelvis", "neck"])
+def _backhand_stick():
+    return grip_keys([(0.0, -0.30, -0.46, 0.36, "down"), (0.45, -0.05, -0.50, 0.42, "down"), (0.75, 0.15, -0.25, 0.48, "out"),
+                      (1.1, 0.15, -0.25, 0.48, "out")]) + \
+        [k(0.0, spine=S(30, -30), pelvis=P(8, -15)), k(0.45, spine=S(30, -5)), k(0.75, spine=S(25, 20), pelvis=P(6, 15)), k(1.1, hold=True)]
+
+
+@motion("kick_save", "Goalie kick save: from the goalie stance, the right leg shoots out to the side along the ice with "
+        "the pad, the left knee bends deep and the glove reaches toward the same side.", "action", FULL, ["neck"])
+def _kick_save():
+    ready = {"right_arm": A(45, 60, 0, 40), "left_arm": A(55, 70, 0, 30)}
+    return [kk(0.0, ready, stance_legs("wide", 0.6), spine=S(20), pelvis=P(8)),
+            kk(0.3, right_leg=Lg(60, 90, 10, 5), left_leg=leg_at(0.0, 0.10, 0.45, 0, 20, "left"), spine=S(20, 0, -15), right_arm=A(70, 85, 0, 20)),
+            k(0.8, hold=True), kk(1.3, ready, stance_legs("wide", 0.6), spine=S(20))]
+
+
+@motion("hurdle_trail_leg", "Hurdle trail-leg drill: standing tall beside the hurdle, the left (trail) leg lifts out to "
+        "the side with the knee bent and flat, then pulls through forward high and steps down; arms opposite.",
+        "cycle", LEGS + ARMS, ["spine", "pelvis"], period=1.6)
+def _trail_leg():
+    return [k(0.0, right_leg=Lg(3, 0, 8, 5), left_leg=Lg(20, 180, 8, 40), right_arm=A(45, 10, 0, 90), left_arm=A(30, 170, 0, 80)),
+            k(0.4, left_leg=Lg(60, 95, 75, 100)), k(0.8, left_leg=Lg(85, 30, 30, 110), right_arm=A(30, 170, 0, 80), left_arm=A(45, 10, 0, 90)),
+            k(1.2, left_leg=Lg(30, 0, 8, 30))]
+
+
+@motion("shot_put_glide", "Shot put glide: start facing the back of the circle, crouched on the right leg with the "
+        "shot at the neck, kick the left leg back and glide across, turn into the power position and drive up, "
+        "pushing the shot out at 40 degrees.", "action", FULL + ["body"], ["neck"])
+def _sp_glide():
+    shot = A(70, 60, -60, 140)                      # shot tucked against the neck, elbow high
+    return [kk(0.0, body=B(turn=170), right_leg=Lg(45, 0, 8, 80), left_leg=Lg(30, 175, 8, 60), spine=S(55), pelvis=P(15), right_arm=shot,
+               left_arm=A(80, 30, 0, 10)),
+            kk(0.4, left_leg=Lg(55, 180, 8, 10), right_leg=Lg(50, 0, 8, 95), spine=S(60)),
+            kk(0.8, body=B(turn=160), right_leg=Lg(40, 0, 8, 90), left_leg=Lg(45, 160, 8, 20), spine=S(45)),
+            kk(1.15, stance_legs("wide", 0.5), body=B(turn=90), spine=S(20, 50, 15), pelvis=P(5, 30)),
+            kk(1.5, stance_legs("wide", 0.05), body=B(turn=0), spine=S(-5, -20), pelvis=P(0, -20), right_arm=A(140, 20, 0, 5), left_arm=A(40, 120, 0, 40)),
+            k(1.9, hold=True)]
+
+
+@motion("freestyle_sighting", "Open-water sighting: during freestyle, lift the eyes forward just above the water "
+        "(crocodile eyes) for one stroke, then drop the face back down.", "action", ["neck"], [])
+def _sighting():
+    return [k(0.0, neck=N(-15)), k(0.3, neck=N(-60)), k(0.6, hold=True), k(0.9, neck=N(-15))]
+
+
+@motion("breaststroke_pullout", "Breaststroke pullout (underwater): glide in a streamline, pull both arms all the way "
+        "down to the thighs, one dolphin kick, glide, then recover the hands close under the body back to streamline.",
+        "action", ["body"] + FULL + ["neck"], [])
+def _pullout():
+    body = B(pitch=86, air=1.0, root=0.0)
+    legs = {"right_leg": Lg(0, 0, 0, 3), "left_leg": Lg(0, 0, 0, 3)}
+    stream = {"right_arm": A(178, 5, 0, 3), "left_arm": A(178, 5, 0, 3)}
+    return [kk(0.0, legs, stream, body=body, spine=S(0), pelvis=P(), neck=N(0)), k(0.5, hold=True),
+            k(1.0, right_arm=A(95, 30, 0, 60), left_arm=A(95, 30, 0, 60)),
+            k(1.4, right_arm=A(5, 20, 0, 5), left_arm=A(5, 20, 0, 5), right_leg=Lg(15, 0, 0, 40), left_leg=Lg(15, 0, 0, 40)),
+            k(1.6, right_leg=Lg(0, 0, 0, 3), left_leg=Lg(0, 0, 0, 3)), k(2.1, hold=True),
+            k(2.6, right_arm=A(60, 5, 0, 120), left_arm=A(60, 5, 0, 120)), k(3.0, **stream)]
+
+
+@motion("speed_skating_start", "Speed-skating start: deep crouch side-on to the line, then explosive running steps on "
+        "the toes with the feet turned out in a V, arms driving hard, gradually rising into the skating stride.",
+        "action", FULL + ["body"], ["neck"])
+def _ss_start():
+    return [kk(0.0, right_leg=leg_at(0.25, 0.25, 0.55, 0, 40, "right"), left_leg=leg_at(-0.20, 0.25, 0.55, 0, 50, "left"),
+               spine=S(45, 25), pelvis=P(12, 20), right_arm=A(30, 160, 0, 40), left_arm=A(60, 10, 0, 60)),
+            kk(0.35, right_leg=Lg(60, 30, 40, 90), left_leg=Lg(30, 170, 40, 20), spine=S(50, 0), pelvis=P(15), right_arm=A(70, 10, 0, 70),
+               left_arm=A(30, 160, 0, 40)),
+            kk(0.7, left_leg=Lg(60, 30, 40, 90), right_leg=Lg(30, 170, 40, 20), left_arm=A(70, 10, 0, 70), right_arm=A(30, 160, 0, 40)),
+            kk(1.05, right_leg=Lg(60, 30, 40, 90), left_leg=Lg(30, 170, 40, 20), spine=S(55), right_arm=A(70, 10, 0, 70), left_arm=A(30, 160, 0, 40)),
+            kk(1.4, left_leg=Lg(55, 40, 40, 90), right_leg=Lg(35, 150, 40, 20), spine=S(60), left_arm=A(60, 10, 0, 60), right_arm=A(35, 160, 0, 30))]
+
+
+_MORE_ALIASES3 = {
+    "spinning hook kick": "fighting_stance + guard\nspinning_hook_kick", "spin hook kick": "fighting_stance + guard\nspinning_hook_kick",
+    "spinning heel kick": "fighting_stance + guard\nspinning_hook_kick", "hook kick": "fighting_stance + guard\nspinning_hook_kick",
+    "guard pass": "guard_pass", "torreando": "guard_pass", "torreando pass": "guard_pass", "bullfighter pass": "guard_pass",
+    "saucer pass": "stance(width=wide, depth=0.5) + saucer_pass", "hockey saucer pass": "stance(width=wide, depth=0.5) + saucer_pass",
+    "backhand pass": "stance(width=wide, depth=0.5) + backhand_stick_pass", "backhand shot": "stance(width=wide, depth=0.5) + backhand_stick_pass",
+    "hockey backhand": "stance(width=wide, depth=0.5) + backhand_stick_pass", "kick save": "kick_save", "pad save": "kick_save",
+    "goalie kick save": "kick_save", "trail leg drill": "hurdle_trail_leg(times=3)", "hurdle trail leg": "hurdle_trail_leg(times=3)",
+    "trail leg": "hurdle_trail_leg(times=3)", "shot put glide": "shot_put_glide", "glide shot put": "shot_put_glide",
+    "sighting": "front_crawl(times=2)\nfront_crawl + freestyle_sighting\nfront_crawl", "open water sighting": "front_crawl(times=2)\nfront_crawl + freestyle_sighting\nfront_crawl",
+    "breaststroke pullout": "breaststroke_pullout", "pullout": "breaststroke_pullout", "underwater pullout": "breaststroke_pullout",
+    "speed skating start": "speed_skating_start\nskating_stride(times=2)", "j stroke": "kneel + single_blade_paddle(times=3)",
+    "canoe j stroke": "kneel + single_blade_paddle(times=3)", "canoe stroke": "kneel + single_blade_paddle(times=3)",
+    "triple jump hop step jump": "triple_jump", "hop step and jump": "triple_jump", "hop step jump": "triple_jump",
+}
+
+
 ALIASES: Dict[str, str] = {
     "childs pose": "childs_pose(hold=2)", "child pose": "childs_pose(hold=2)", "childs pose stretch": "childs_pose(hold=2)",
     "kneeling": "kneel(hold=1)", "kneel": "kneel(hold=1)", "half kneeling": "half_kneel(hold=1)",
@@ -7264,7 +7389,7 @@ ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES7.items() if k_ not in ALIASES}
 ALIASES.update({k_: v_ for k_, v_ in _POS_ALIASES8.items() if k_ not in ALIASES})
 ALIASES.update(_GYM_ALIASES)   # gym names map to the dedicated gym motions
 ALIASES.update(_GYM_ALIASES2)
-for _p, _sc in list(_GYM_ALIASES3.items()) + list(_MORE_ALIASES.items()) + list(_MORE_ALIASES2.items()):
+for _p, _sc in list(_GYM_ALIASES3.items()) + list(_MORE_ALIASES.items()) + list(_MORE_ALIASES2.items()) + list(_MORE_ALIASES3.items()):
     ALIASES.setdefault(_p, _sc)   # never override a phrase that already maps somewhere
 try:   # every movement in the sport coverage map is also an instant request
     import sport_coverage as _cov
