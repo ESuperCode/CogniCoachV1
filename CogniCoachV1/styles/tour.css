@@ -1,5 +1,6 @@
-/* First-visit tour (scripts/tour.js): dimmed page with a gliding spotlight, a 3D tooltip card,
-   a holographic intro scene and confetti at the end. */
+/* Guided tour (scripts/tour.js): dimmed page with a gliding spotlight, a tooltip card, and a 3D
+   stage on the welcome / finale cards. The stage is posed at an oblique angle with shaded faces,
+   so its depth reads even when nothing moves; it is decorative (no pointer interaction). */
 
 .tour-root { position: fixed; inset: 0; z-index: 1900; pointer-events: none; opacity: 0; transition: opacity 0.35s ease; }
 .tour-root.show { opacity: 1; }
@@ -10,7 +11,6 @@ html.tour-on site-nav { z-index: 1800; }
     border-radius: 18px;
     box-shadow: 0 0 0 200vmax rgba(15, 23, 42, 0.58);
     outline: 2px solid rgba(255, 255, 255, 0.85);
-    outline-offset: 0;
     transition: left 0.55s cubic-bezier(0.22, 1, 0.36, 1), top 0.55s cubic-bezier(0.22, 1, 0.36, 1),
         width 0.55s cubic-bezier(0.22, 1, 0.36, 1), height 0.55s cubic-bezier(0.22, 1, 0.36, 1), border-radius 0.4s ease;
     pointer-events: none;
@@ -28,10 +28,10 @@ html.tour-on site-nav { z-index: 1800; }
 .tour-spot.center::after { display: none; }
 
 .tour-card {
-    --tilt-x: 0deg;
-    --tilt-y: 0deg;
     position: fixed;
-    width: min(360px, calc(100vw - 24px));
+    width: min(370px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+    overflow: auto;
     padding: 22px 22px 18px;
     border-radius: 22px;
     pointer-events: auto;
@@ -41,60 +41,156 @@ html.tour-on site-nav { z-index: 1800; }
         var(--surface-strong, #fff);
     border: 1px solid rgba(255, 255, 255, 0.7);
     box-shadow: 0 30px 70px rgba(15, 23, 42, 0.4), 0 0 0 1px var(--line, rgba(118, 140, 168, 0.24));
-    transform: perspective(900px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
-    transition: left 0.55s cubic-bezier(0.22, 1, 0.36, 1), top 0.55s cubic-bezier(0.22, 1, 0.36, 1), transform 0.15s ease-out;
-    transform-style: preserve-3d;
+    transition: left 0.55s cubic-bezier(0.22, 1, 0.36, 1), top 0.55s cubic-bezier(0.22, 1, 0.36, 1);
     text-align: left;
 }
-.tour-card.enter { animation: tourFlip 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.15); }
-.tour-card.centered { left: 50% !important; top: 50% !important; width: min(440px, calc(100vw - 24px)); text-align: center;
-    transform: translate(-50%, -50%) perspective(900px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y)); }
-.tour-card.centered.enter { animation: tourPop 0.65s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
-.tour-card.docked { left: 12px !important; right: 12px; top: auto !important; bottom: 12px; width: auto; transform: none; }
+.tour-card.enter { animation: tourIn 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.1); }
+.tour-card.centered { left: 50% !important; top: 50% !important; width: min(460px, calc(100vw - 24px)); text-align: center; transform: translate(-50%, -50%); }
+.tour-card.centered.enter { animation: tourPop 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.15); }
+.tour-card.docked { left: 12px !important; right: 12px; top: auto !important; bottom: 12px; width: auto; max-height: 55vh; }
 .tour-card.docked.enter { animation: tourUp 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.1); }
 
-/* holographic 3D scene (intro + finale only) */
-.tour-holo { display: none; position: relative; height: 150px; margin: -4px auto 8px; perspective: 600px; transform-style: preserve-3d; }
-.tour-card.hero .tour-holo { display: block; }
-.holo-cube { position: absolute; left: 50%; top: 38px; width: 56px; height: 56px; margin-left: -28px; transform-style: preserve-3d; animation: holoSpin 7s linear infinite; }
-.holo-cube i {
-    position: absolute; inset: 0; border-radius: 10px;
-    border: 1.5px solid rgba(255, 255, 255, 0.85);
-    background: linear-gradient(135deg, rgba(31, 122, 224, 0.75), rgba(255, 138, 52, 0.75));
-    box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.45), 0 0 18px rgba(31, 122, 224, 0.35);
+/* ------------------------------------------------------------------ 3D stage (hero cards only) */
+.tour-stage {
+    display: none;
+    position: relative;
+    height: 170px;
+    margin: -6px auto 6px;
+    perspective: 520px;
+    perspective-origin: 50% 30%;
+    pointer-events: none;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, #000 75%, transparent);
+    mask-image: linear-gradient(to bottom, #000 75%, transparent);
 }
-.holo-cube .f1 { transform: translateZ(28px); }
-.holo-cube .f2 { transform: rotateY(180deg) translateZ(28px); }
-.holo-cube .f3 { transform: rotateY(90deg) translateZ(28px); }
-.holo-cube .f4 { transform: rotateY(-90deg) translateZ(28px); }
-.holo-cube .f5 { transform: rotateX(90deg) translateZ(28px); }
-.holo-cube .f6 { transform: rotateX(-90deg) translateZ(28px); }
-.holo-ring {
-    position: absolute; left: 50%; top: 66px; border-radius: 50%;
-    border: 2px solid rgba(31, 122, 224, 0.55);
-    transform-style: preserve-3d;
-}
-.holo-ring.r1 { width: 150px; height: 150px; margin: -75px 0 0 -75px; animation: ringA 5s linear infinite; }
-.holo-ring.r2 { width: 118px; height: 118px; margin: -59px 0 0 -59px; border-color: rgba(255, 138, 52, 0.6); animation: ringB 4s linear infinite; }
-.holo-ring.r3 { width: 190px; height: 190px; margin: -95px 0 0 -95px; border-style: dashed; border-color: rgba(31, 122, 224, 0.3); animation: ringC 9s linear infinite; }
-.holo-floor {
-    position: absolute; left: 50%; top: 118px; width: 160px; height: 40px; margin-left: -80px;
-    border-radius: 50%;
-    background: radial-gradient(closest-side, rgba(31, 122, 224, 0.35), transparent);
-    animation: floorGlow 2.4s ease-in-out infinite;
-}
-.holo-p { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: var(--secondary-orange); box-shadow: 0 0 10px var(--secondary-orange); animation: particle 3s ease-in-out infinite; }
-.holo-p.p1 { left: 22%; top: 40%; }
-.holo-p.p2 { left: 74%; top: 30%; background: var(--primary-blue); box-shadow: 0 0 10px var(--primary-blue); animation-delay: -1s; }
-.holo-p.p3 { left: 30%; top: 75%; animation-delay: -2s; }
-.holo-p.p4 { left: 68%; top: 70%; background: var(--primary-blue); box-shadow: 0 0 10px var(--primary-blue); animation-delay: -1.5s; }
+.tour-card.hero .tour-stage { display: block; }
+.tour-card.hero.with-form .tour-stage { height: 138px; }
 
+/* checkerboard floor tilted away from the viewer */
+.stage-floor {
+    position: absolute;
+    left: 50%; top: 92px;
+    width: 300px; height: 300px;
+    margin-left: -150px;
+    transform: rotateX(76deg);
+    transform-origin: 50% 0;
+    background:
+        linear-gradient(rgba(31, 122, 224, 0.35) 1.5px, transparent 1.5px) 0 0 / 30px 30px,
+        linear-gradient(90deg, rgba(31, 122, 224, 0.35) 1.5px, transparent 1.5px) 0 0 / 30px 30px,
+        radial-gradient(closest-side, rgba(31, 122, 224, 0.16), transparent);
+    -webkit-mask-image: radial-gradient(closest-side, #000 40%, transparent);
+    mask-image: radial-gradient(closest-side, #000 40%, transparent);
+    animation: floorMove 4s linear infinite;
+}
+.tour-card.hero.with-form .stage-floor { top: 74px; }
+
+/* a solid cube with lit and shaded faces, seen from above at an angle */
+.stage-cube {
+    position: absolute;
+    left: 50%; top: 30px;
+    width: 64px; height: 64px;
+    margin-left: -32px;
+    transform-style: preserve-3d;
+    transform: rotateX(-26deg) rotateY(38deg);
+    animation: cubeTurn 14s linear infinite;
+}
+.tour-card.hero.with-form .stage-cube { top: 18px; }
+.stage-cube span {
+    position: absolute; inset: 0;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 0 14px rgba(255, 255, 255, 0.25);
+}
+.stage-cube .c-front  { transform: translateZ(32px); background: linear-gradient(135deg, #3d8ff0, #1f6fd0); }
+.stage-cube .c-back   { transform: rotateY(180deg) translateZ(32px); background: #134a8c; }
+.stage-cube .c-right  { transform: rotateY(90deg) translateZ(32px); background: linear-gradient(135deg, #ff9a4d, #e0701f); }
+.stage-cube .c-left   { transform: rotateY(-90deg) translateZ(32px); background: #a84f12; }
+.stage-cube .c-top    { transform: rotateX(90deg) translateZ(32px); background: linear-gradient(135deg, #ffffff, #cfe3ff); }
+.stage-cube .c-bottom { transform: rotateX(-90deg) translateZ(32px); background: #0d2f5a; }
+
+.stage-shadow {
+    position: absolute;
+    left: 50%; top: 112px;
+    width: 110px; height: 22px;
+    margin-left: -55px;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(15, 23, 42, 0.38), transparent);
+}
+.tour-card.hero.with-form .stage-shadow { top: 96px; }
+
+/* orbit rings lying in tilted planes, each carrying a glowing marker */
+.stage-orbit {
+    position: absolute;
+    left: 50%; top: 62px;
+    width: 150px; height: 150px;
+    margin: -75px 0 0 -75px;
+    border-radius: 50%;
+    border: 2px solid rgba(31, 122, 224, 0.55);
+    transform: rotateX(72deg) rotateY(-8deg);
+    transform-style: preserve-3d;
+    animation: orbitSpin 7s linear infinite;
+}
+.stage-orbit.o2 {
+    width: 120px; height: 120px; margin: -60px 0 0 -60px;
+    border-color: rgba(255, 138, 52, 0.65);
+    transform: rotateX(64deg) rotateY(28deg);
+    animation-name: orbitSpin2;
+    animation-duration: 5s;
+}
+.tour-card.hero.with-form .stage-orbit { top: 50px; }
+.stage-orbit i {
+    position: absolute; left: 50%; top: -6px;
+    width: 10px; height: 10px; margin-left: -5px;
+    border-radius: 50%;
+    background: var(--primary-blue);
+    box-shadow: 0 0 12px var(--primary-blue);
+}
+.stage-orbit.o2 i { background: var(--secondary-orange); box-shadow: 0 0 12px var(--secondary-orange); }
+
+/* ------------------------------------------------------------------ text, form, buttons */
 .tour-step-num { font-family: 'Orbitron', sans-serif; font-size: 0.66rem; letter-spacing: 2px; text-transform: uppercase; color: var(--secondary-orange); min-height: 0.9em; }
 .tour-title { font-family: 'Orbitron', sans-serif; font-size: 1.2rem; margin: 6px 0 8px; color: var(--text-white);
     background: linear-gradient(90deg, var(--primary-blue), var(--secondary-orange)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-.tour-card.hero .tour-title { font-size: 1.45rem; }
+.tour-card.hero .tour-title { font-size: 1.4rem; }
 .tour-text { color: var(--text-gray); font-size: 0.88rem; line-height: 1.65; }
-.tour-dots { display: flex; gap: 6px; margin: 14px 0 12px; }
+
+.tour-form { display: grid; gap: 10px; margin: 14px 0 4px; text-align: left; }
+.tour-field { display: grid; gap: 6px; margin: 0; text-transform: none; letter-spacing: 0; }
+.tour-field > span { font-family: 'Orbitron', sans-serif; font-size: 0.66rem; letter-spacing: 1px; text-transform: uppercase; color: var(--text-gray); }
+.tour-field em { font-style: normal; text-transform: none; letter-spacing: 0; opacity: 0.8; }
+.tour-form select, .tour-form input {
+    width: 100%;
+    padding: 11px 13px;
+    border-radius: 12px;
+    border: 1.5px solid var(--line, rgba(118, 140, 168, 0.3));
+    background: var(--surface-strong, #fff);
+    color: var(--text-white);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.9rem;
+    font-weight: 400;
+}
+.tour-form select:focus, .tour-form input:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 4px var(--glow-blue); }
+.tour-form select.need { border-color: #e67e22; box-shadow: 0 0 0 4px rgba(230, 126, 34, 0.2); animation: tourNudge 0.4s ease; }
+.tour-hint { margin: -2px 0 0; font-size: 0.72rem; color: var(--text-gray); }
+
+.tour-signin { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line, rgba(118, 140, 168, 0.24)); }
+.tour-or { display: block; font-size: 0.75rem; color: var(--text-gray); margin-bottom: 8px; }
+.tour-signin-row { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.tour-chip {
+    padding: 9px 16px;
+    border-radius: 999px;
+    border: 1.5px solid var(--primary-blue);
+    background: transparent;
+    color: var(--primary-blue);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.tour-chip:hover { background: rgba(31, 122, 224, 0.08); }
+.tour-google:empty { display: none; }
+
+.tour-dots { display: flex; gap: 6px; margin: 14px 0 12px; flex-wrap: wrap; }
 .tour-card.centered .tour-dots { justify-content: center; }
 .tour-dots i { width: 7px; height: 7px; border-radius: 99px; background: var(--light-gray, #dbe7f3); transition: width 0.3s ease, background 0.3s ease; }
 .tour-dots i.done { background: rgba(31, 122, 224, 0.45); }
@@ -104,36 +200,35 @@ html.tour-on site-nav { z-index: 1800; }
 .tour-skip, .tour-back {
     border: 0; background: transparent; cursor: pointer;
     font-family: 'Space Mono', monospace; font-size: 0.78rem; color: var(--text-gray);
-    padding: 8px 6px; border-radius: 8px;
+    padding: 8px 6px; border-radius: 8px; white-space: nowrap;
 }
 .tour-skip:hover, .tour-back:hover { color: var(--text-white); background: var(--medium-gray, #edf3fb); }
-.tour-next { padding: 11px 20px; font-size: 0.82rem; letter-spacing: 1px; }
-
-.tour-confetti { position: fixed; left: 0; right: 0; top: 55%; height: 0; pointer-events: none; }
-.tour-confetti i {
-    position: absolute; top: 0; width: 8px; height: 14px; border-radius: 2px;
-    animation: confetti 1.6s cubic-bezier(0.2, 0.6, 0.4, 1) forwards;
-}
+.tour-next { padding: 11px 20px; font-size: 0.82rem; letter-spacing: 1px; white-space: nowrap; }
+@media (max-width: 400px) { .tour-next { padding: 11px 14px; font-size: 0.74rem; } .tour-actions { gap: 4px; } }
 
 .tour-glow { animation: tourBtnGlow 1s ease-in-out 3; }
 
-@keyframes tourPulse { 0%, 100% { opacity: 0.55; transform: scale(1); } 50% { opacity: 1; transform: scale(1.015); } }
-@keyframes tourFlip { from { opacity: 0; transform: perspective(900px) rotateY(-28deg) rotateX(10deg) translateY(14px) scale(0.92); } to { opacity: 1; } }
-@keyframes tourPop { from { opacity: 0; transform: translate(-50%, -46%) perspective(900px) rotateX(24deg) scale(0.85); } to { opacity: 1; } }
+@keyframes tourPulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+@keyframes tourIn { from { opacity: 0; transform: translateY(12px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes tourPop { from { opacity: 0; transform: translate(-50%, -46%) scale(0.92); } to { opacity: 1; transform: translate(-50%, -50%); } }
 @keyframes tourUp { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: none; } }
-@keyframes holoSpin { from { transform: rotateX(-22deg) rotateY(0deg); } to { transform: rotateX(-22deg) rotateY(360deg); } }
-@keyframes ringA { from { transform: rotateX(72deg) rotateZ(0deg); } to { transform: rotateX(72deg) rotateZ(360deg); } }
-@keyframes ringB { from { transform: rotateY(68deg) rotateZ(0deg); } to { transform: rotateY(68deg) rotateZ(-360deg); } }
-@keyframes ringC { from { transform: rotateX(80deg) rotateZ(0deg); } to { transform: rotateX(80deg) rotateZ(-360deg); } }
-@keyframes floorGlow { 0%, 100% { opacity: 0.6; transform: scaleX(1); } 50% { opacity: 1; transform: scaleX(1.15); } }
-@keyframes particle { 0%, 100% { transform: translateY(0); opacity: 0.4; } 50% { transform: translateY(-14px); opacity: 1; } }
-@keyframes confetti {
-    0% { transform: translate(0, 0) rotate(0); opacity: 1; }
-    70% { opacity: 1; }
-    100% { transform: translate(var(--dx), calc(var(--dy) + 520px)) rotate(var(--rot)); opacity: 0; }
-}
+@keyframes cubeTurn { from { transform: rotateX(-26deg) rotateY(38deg); } to { transform: rotateX(-26deg) rotateY(398deg); } }
+@keyframes orbitSpin { from { transform: rotateX(72deg) rotateY(-8deg) rotateZ(0deg); } to { transform: rotateX(72deg) rotateY(-8deg) rotateZ(360deg); } }
+@keyframes orbitSpin2 { from { transform: rotateX(64deg) rotateY(28deg) rotateZ(0deg); } to { transform: rotateX(64deg) rotateY(28deg) rotateZ(-360deg); } }
+@keyframes floorMove { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 30px, 0 0, 0 0; } }
+@keyframes tourNudge { 0%, 100% { transform: none; } 30% { transform: translateX(-5px); } 60% { transform: translateX(4px); } }
 @keyframes tourBtnGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(31, 122, 224, 0.5); } 50% { box-shadow: 0 0 0 14px rgba(31, 122, 224, 0); } }
 
+@media (max-width: 640px) {
+    .tour-card.hero.with-form .tour-stage { height: 104px; transform: scale(0.78); transform-origin: 50% 20%; margin-bottom: -14px; }
+    .tour-card.hero .tour-title { font-size: 1.15rem; }
+    .tour-card.hero.with-form .tour-text { font-size: 0.8rem; }
+    .tour-form { gap: 8px; margin-top: 10px; }
+    .tour-signin { margin-top: 10px; padding-top: 10px; }
+}
+
+/* Reduced motion: no movement, but the stage keeps its 3D pose (it is still clearly a cube). */
 @media (prefers-reduced-motion: reduce) {
-    .tour-root *, .tour-card { animation: none !important; transition: none !important; }
+    .tour-card, .tour-spot::after, .stage-floor, .stage-cube, .stage-orbit { animation: none !important; }
+    .tour-spot, .tour-card { transition: none !important; }
 }

@@ -716,6 +716,45 @@ async function startSession() {
     saveState();
 }
 
+// ---- Drill prefetch --------------------------------------------------------
+// While the athlete works through drill N, drill N+1 is generated in the background, so "Next
+// Drill" is usually instant. Same request as before (including recentDrills, which by then holds
+// every drill shown so far), one drill ahead only, so quality and backend load are unchanged.
+const drillPrefetch = new Map();   // drills array index -> { drills, promise }
+
+function buildDrillRequest(drill) {
+    return {
+        sport: appState.setup.sport,
+        focus: appState.setup.focus,
+        "muscle group": appState.setup.muscleGroup,
+        level: appState.setup.level,
+        "drill time": drill.drillTime,
+        section: drill.sectionName,
+        location: appState.setup.location
+    };
+}
+
+function prefetchDrill(index) {
+    const drills = appState.session.drills;
+    const drill = drills && drills[index];
+    if (!drill || drill.generatedDrill || drillPrefetch.has(index)) return;
+    const entry = { drills, promise: null };
+    entry.promise = getDrill(buildDrillRequest(drill)).then((data) => {
+        // only keep it if this is still the same session
+        if (appState.session.drills === drills && drills[index] && !drills[index].generatedDrill) {
+            drills[index].generatedDrill = data;
+            saveState();
+        }
+        return data;
+    }).catch((error) => {
+        console.warn('Prefetching the next drill failed (it will load normally):', error);
+        drillPrefetch.delete(index);
+        throw error;
+    });
+    entry.promise.catch(() => {});
+    drillPrefetch.set(index, entry);
+}
+
 // Load current drill
 async function loadCurrentDrill() {
     const drill = appState.session.drills[appState.session.currentDrillIndex];
@@ -736,13 +775,20 @@ async function loadCurrentDrill() {
     };
 
     try {
+        const index = appState.session.currentDrillIndex;
+        const pending = drillPrefetch.get(index);
+        let prefetched = null;
+        if (!drill.generatedDrill && pending && pending.drills === appState.session.drills) {
+            prefetched = await pending.promise.catch(() => null);   // already on its way: wait for it
+        }
+        drillPrefetch.delete(index);
         const drillData = drill.generatedDrill
             ? normalizeDrillData(
                 typeof drill.generatedDrill === 'string'
                     ? parseDrillResponse(drill.generatedDrill)
                     : drill.generatedDrill
             )
-            : await getDrill(drillRequest);
+            : prefetched || await getDrill(drillRequest);
 
         if (!drill.generatedDrill) {
             appState.session.drills[appState.session.currentDrillIndex].generatedDrill = drillData;
@@ -750,6 +796,8 @@ async function loadCurrentDrill() {
         }
 
         renderDrill(drill, drillData);
+        // start on the next drill while this one is being done
+        setTimeout(() => prefetchDrill(appState.session.currentDrillIndex + 1), 300);
 
     } catch (error) {
         console.error('Error loading drill:', error);

@@ -200,7 +200,7 @@
     }
 
     function onReady(m) {
-        if (m.plan && state.activeDrill) { savePlan(state.activeDrill, m.plan, m.side || state.side); }
+        if (m.plan && state.activeDrill && !state.demo) { savePlan(state.activeDrill, m.plan, m.side || state.side); }
         clearInterval(state.stepTimer);
         state.generating = false;
         state.hasAnimation = true;
@@ -275,7 +275,7 @@
     function onDrillChanged() {
         var drill = currentDrill();
         var key = drill.name + '|' + drill.html;
-        if (key === state.drillKey || state.generating) { return; }
+        if (key === state.drillKey || state.generating || state.demo) { return; }
         state.drillKey = key;
         if (state.hasAnimation) { post('pause'); }
         state.hasAnimation = false;
@@ -414,6 +414,26 @@
         if (content && !content.classList.contains('hidden')) { onDrillChanged(); }
     }
 
-    window.CogniMotionViewer = { motionTextFor: motionTextFor, generate: generate };
+    // The tour's demo drill: play a ready-made plan (no model call, nothing saved).
+    function demo(plan) {
+        state.demo = true;
+        state.drillKey = 'demo';
+        restore(currentDrill(), { plan: plan, side: state.side });
+        loaderStep.textContent = 'Loading the 3D athlete';
+    }
+    function endDemo() {
+        if (!state.demo) { return; }
+        post('pause');
+        state.demo = false;
+        state.generating = false;
+        state.hasAnimation = false;
+        state.drillKey = '';
+        clearInterval(state.stepTimer);
+        clearInterval(state.frameTimer);
+        setMode('idle');
+    }
+
+    window.CogniMotionViewer = { motionTextFor: motionTextFor, generate: generate, demo: demo, endDemo: endDemo,
+        mode: function () { return root ? root.getAttribute('data-mode') : ''; } };
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', build); } else { build(); }
 })();

@@ -15,10 +15,15 @@
 //   PUT    /profile  {data, baseVersion}              -> {version, updatedAt}  | 409 {data, version}
 //   POST   /password {key, newKey}                    -> {token} (other sessions signed out)
 //   POST   /delete   {key}                            -> {ok}
+//   POST   /google   {credential}                     -> {token, username, provider}  (Sign in with Google)
+//   GET    /config                                    -> {googleClientId}
 // Access: the site's origins, or any origin with the X-Dev-Code header.
 
 const DEFAULT_ORIGINS = "https://cognicoachai.com,https://www.cognicoachai.com";
 const USERNAME_RE = /^[a-z0-9][a-z0-9_.-]{2,23}$/;
+const ACCOUNT_ID_RE = /^(?:[a-z0-9][a-z0-9_.-]{2,23}|google-\d{5,40})$/;   // password accounts + Google accounts
+const GOOGLE_CERTS = "https://www.googleapis.com/oauth2/v3/certs";
+let googleKeys = { at: 0, keys: {} };
 const KEY_RE = /^[0-9a-f]{64}$/;
 const SESSION_DAYS = 60;
 const MAX_SESSIONS = 20;
@@ -65,6 +70,13 @@ export class UserAccount {
       failed INTEGER DEFAULT 0, locked_until INTEGER DEFAULT 0)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, created_at INTEGER, expires_at INTEGER)`);
     this.sql.exec(`CREATE TABLE IF NOT EXISTS profile (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT, version INTEGER, updated_at INTEGER)`);
+    const cols = this.sql.exec("PRAGMA table_info(account)").toArray().map((c) => c.name);
+    if (!cols.includes("display")) this.sql.exec("ALTER TABLE account ADD COLUMN display TEXT");
+    if (!cols.includes("provider")) this.sql.exec("ALTER TABLE account ADD COLUMN provider TEXT");
+  }
+
+  displayName(acc) {
+    return (acc && (acc.display || acc.username)) || "";
   }
 
   account() {
@@ -93,7 +105,7 @@ export class UserAccount {
   }
 
   async fetch(request) {
-    const { action, username, key, newKey, secret, data, baseVersion } = await request.json();
+    const { action, username, key, newKey, secret, data, baseVersion, display } = await request.json();
     const acc = this.account();
     const now = Date.now();
 
@@ -105,7 +117,20 @@ export class UserAccount {
       return json({ secret: await this.newSession(), username });
     }
 
+    if (action === "google") {   // the Worker already verified Google's signed token
+      if (!acc) {
+        this.sql.exec("INSERT INTO account (id, username, salt, hash, created_at, display, provider) VALUES (1, ?, '', '', ?, ?, 'google')",
+          username, now, display || username);
+      } else if (display && display !== acc.display) {
+        this.sql.exec("UPDATE account SET display = ? WHERE id = 1", display);
+      }
+      return json({ secret: await this.newSession(), username, display: display || this.displayName(acc), provider: "google", created: !acc });
+    }
+
     if (!acc) return json({ detail: "Wrong username or password.", code: "bad_login" }, 401);
+    if (acc.provider === "google" && (action === "login" || action === "password" || action === "delete")) {
+      return json({ detail: "This account uses Sign in with Google.", code: "google_account" }, 401);
+    }
 
     if (action === "login" || action === "password" || action === "delete") {
       if (acc.locked_until > now) {
@@ -140,7 +165,7 @@ export class UserAccount {
       this.sql.exec("DELETE FROM sessions WHERE token_hash = ?", await sha256Hex(secret));
       return json({ ok: true });
     }
-    if (action === "me") return json({ username: acc.username, createdAt: acc.created_at });
+    if (action === "me") return json({ username: acc.username, display: this.displayName(acc), provider: acc.provider || "password", createdAt: acc.created_at });
     if (action === "get") {
       const row = this.sql.exec("SELECT data, version, updated_at FROM profile WHERE id = 1").toArray()[0];
       return json(row ? { data: JSON.parse(row.data), version: row.version, updatedAt: row.updated_at }
@@ -215,6 +240,50 @@ async function readJson(request) {
   }
 }
 
+// ---- Sign in with Google: verify the ID token (RS256 JWT) against Google's published keys ----
+function b64urlBytes(s) {
+  const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+
+async function googleKey(env, kid) {
+  if (Date.now() - googleKeys.at > 3600000 || !googleKeys.keys[kid]) {
+    const r = await fetch(env.GOOGLE_CERTS_URL || GOOGLE_CERTS);
+    if (!r.ok) throw Object.assign(new Error("Couldn't reach Google to check the sign-in."), { status: 502 });
+    const { keys } = await r.json();
+    googleKeys = { at: Date.now(), keys: Object.fromEntries((keys || []).map((k) => [k.kid, k])) };
+  }
+  const jwk = googleKeys.keys[kid];
+  if (!jwk) return null;
+  return crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+}
+
+async function verifyGoogleToken(env, credential) {
+  const bad = (m) => Object.assign(new Error(m || "Google sign-in could not be verified."), { status: 401 });
+  const parts = String(credential || "").split(".");
+  if (parts.length !== 3) throw bad();
+  let header, payload;
+  try {
+    header = JSON.parse(new TextDecoder().decode(b64urlBytes(parts[0])));
+    payload = JSON.parse(new TextDecoder().decode(b64urlBytes(parts[1])));
+  } catch (e) {
+    throw bad();
+  }
+  if (header.alg !== "RS256" || !header.kid) throw bad();
+  const key = await googleKey(env, header.kid);
+  if (!key) throw bad();
+  const ok = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, b64urlBytes(parts[2]), enc.encode(parts[0] + "." + parts[1]));
+  if (!ok) throw bad();
+  const now = Math.floor(Date.now() / 1000);
+  if (!["accounts.google.com", "https://accounts.google.com"].includes(payload.iss)) throw bad();
+  if (!env.GOOGLE_CLIENT_ID || payload.aud !== env.GOOGLE_CLIENT_ID) throw bad();
+  if (!(payload.exp > now - 60) || !(payload.iat < now + 300)) throw bad("That Google sign-in expired - please try again.");
+  if (!/^\d{5,40}$/.test(String(payload.sub || ""))) throw bad();
+  if (payload.email && payload.email_verified === false) throw bad("Please verify your Google email first.");
+  const display = String(payload.name || (payload.email || "").split("@")[0] || "Athlete").slice(0, 40);
+  return { id: "google-" + payload.sub, display };
+}
+
 function stub(env, username) {
   return env.USERS.get(env.USERS.idFromName(username));
 }
@@ -225,6 +294,7 @@ async function callUser(env, username, payload) {
   if (body.secret) {
     body.token = `${b64url(body.username)}.${body.secret}`;
     delete body.secret;
+    if (body.display) body.username = body.display;   // what the site shows
   }
   return json(body, resp.status);
 }
@@ -239,24 +309,34 @@ export default {
     };
     const path = new URL(request.url).pathname.replace(/\/+$/, "") || "/";
     try {
-      if (path === "/" || path === "/health") return withCors(json({ ok: true, service: "cognicoach-accounts" }));
+      if (path === "/" || path === "/health") return withCors(json({ ok: true, service: "cognicoach-accounts", google: !!env.GOOGLE_CLIENT_ID }));
+      if (path === "/config") {
+        return withCors(json({ googleClientId: env.GOOGLE_CLIENT_ID || "" }, 200, { "Cache-Control": "public, max-age=300" }));
+      }
       const routes = { "/signup": "POST", "/login": "POST", "/logout": "POST", "/me": "GET", "/profile": ["GET", "PUT"],
-        "/password": "POST", "/delete": "POST" };
+        "/password": "POST", "/delete": "POST", "/google": "POST" };
       const methods = routes[path];
       if (!methods) return withCors(json({ detail: "not found" }, 404));
       if (![].concat(methods).includes(request.method)) return withCors(json({ detail: "method not allowed" }, 405));
       if (!allowed(request, env)) return withCors(json({ detail: "Accounts only work on the CogniCoach site.", code: "origin" }, 403));
 
       const ip = request.headers.get("CF-Connecting-IP") || "local";
-      const sensitive = ["/signup", "/login", "/password", "/delete"].includes(path);
+      const sensitive = ["/signup", "/login", "/password", "/delete", "/google"].includes(path);
       if (rateLimited((sensitive ? "auth:" : "api:") + ip, sensitive ? 20 : 120)) {
         return withCors(json({ detail: "Too many requests - wait a minute and try again.", code: "rate" }, 429, { "Retry-After": "60" }));
+      }
+
+      if (path === "/google") {
+        if (!env.GOOGLE_CLIENT_ID) return withCors(json({ detail: "Google sign-in isn't set up yet.", code: "google_off" }, 503));
+        const body = await readJson(request);
+        const g = await verifyGoogleToken(env, body.credential);
+        return withCors(await callUser(env, g.id, { action: "google", username: g.id, display: g.display }));
       }
 
       if (sensitive && path !== "/password" && path !== "/delete") {
         const body = await readJson(request);
         const username = String(body.username || "").trim().toLowerCase();
-        if (!USERNAME_RE.test(username)) {
+        if (!USERNAME_RE.test(username) || username.startsWith("google-")) {
           return withCors(json({ detail: "Usernames are 3-24 characters: letters, numbers, dots, dashes or underscores.", code: "username" }, 422));
         }
         if (!KEY_RE.test(String(body.key || ""))) return withCors(json({ detail: "Invalid password data.", code: "key" }, 422));
@@ -264,7 +344,7 @@ export default {
       }
 
       const tok = parseToken(request);
-      if (!tok || !USERNAME_RE.test(tok.username)) return withCors(json({ detail: "Please sign in.", code: "signed_out" }, 401));
+      if (!tok || !ACCOUNT_ID_RE.test(tok.username)) return withCors(json({ detail: "Please sign in.", code: "signed_out" }, 401));
       if (path === "/logout") return withCors(await callUser(env, tok.username, { action: "logout", secret: tok.secret }));
       if (path === "/me") return withCors(await callUser(env, tok.username, { action: "me", secret: tok.secret }));
       if (path === "/profile" && request.method === "GET") {

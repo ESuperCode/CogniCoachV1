@@ -243,9 +243,33 @@ function sportOptionsHtml(selected) {
     ).join('') + `<option value="__other__">Other / not listed</option>`;
 }
 
+// Saves the first-run answers (shared by the tour's welcome card and the fallback modal below).
+function completeOnboarding(sport, dobVal) {
+    const p = loadProfile();
+    p.onboarded = true;
+    if (sport) {
+        p.defaultSport = sport;
+        ensureSportProfile(p, sport);
+    }
+    if (dobVal) {
+        p.dob = dobVal;
+        p.age = calcAge(dobVal);
+    }
+    saveProfile(p);
+    if (typeof refreshQuickStartUI === 'function') refreshQuickStartUI();
+}
+
 function maybeShowOnboarding() {
     const profile = loadProfile();
     if (profile.onboarded) return;
+
+    // On the app page the first-run questions live in the guided tour's welcome card
+    // (scripts/tour.js, loaded by nav.js); it may still be loading, so it picks this up itself.
+    if (document.getElementById('quickStartCard')) {
+        window.cognicoachOnboardingRequested = true;
+        if (window.CogniTour) window.CogniTour.start({ welcome: true });
+        return;
+    }
 
     const overlay = openProfileModal(`
         <h2 class="card-title">Welcome to CogniCoachAI</h2>

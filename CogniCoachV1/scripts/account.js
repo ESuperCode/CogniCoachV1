@@ -278,6 +278,83 @@
         s.token = res.token; saveSession(s);
     }
 
+    // ---------------------------------------------------------------- Sign in with Google
+    // The client ID comes from the accounts Worker (/config); no ID there = no Google button.
+    var configPromise = null;
+    function config() {
+        if (!configPromise) {
+            configPromise = (async function () {
+                try {
+                    var cached = sessionStorage.getItem('cognicoach-accounts-config');
+                    if (cached) { return JSON.parse(cached); }
+                } catch (e) {}
+                try {
+                    var c = await api('/config', { auth: false });
+                    try { sessionStorage.setItem('cognicoach-accounts-config', JSON.stringify(c)); } catch (e) {}
+                    return c;
+                } catch (e) { configPromise = null; return {}; }
+            })();
+        }
+        return configPromise;
+    }
+
+    var gsiPromise = null;
+    function loadGsi() {
+        if (!gsiPromise) {
+            gsiPromise = new Promise(function (resolve, reject) {
+                if (window.google && window.google.accounts && window.google.accounts.id) { resolve(window.google); return; }
+                var s = document.createElement('script');
+                s.src = 'https://accounts.google.com/gsi/client';
+                s.async = true;
+                s.onload = function () { resolve(window.google); };
+                s.onerror = function () { gsiPromise = null; reject(new Error('Google sign-in failed to load.')); };
+                document.head.appendChild(s);
+            });
+        }
+        return gsiPromise;
+    }
+
+    var gsiReadyFor = '';
+    async function renderGoogleButton(container, opts) {
+        if (!container) { return false; }
+        var cfg = await config();
+        if (!cfg.googleClientId || session()) { container.innerHTML = ''; return false; }
+        try {
+            var g = await loadGsi();
+            if (gsiReadyFor !== cfg.googleClientId) {
+                g.accounts.id.initialize({ client_id: cfg.googleClientId, callback: onGoogleCredential, ux_mode: 'popup',
+                    auto_select: false, cancel_on_tap_outside: true, itp_support: true });
+                gsiReadyFor = cfg.googleClientId;
+            }
+            container.innerHTML = '';
+            g.accounts.id.renderButton(container, { type: 'standard', theme: 'outline', size: 'large', shape: 'pill',
+                text: (opts && opts.text) || 'continue_with', logo_alignment: 'left',
+                width: Math.min(300, Math.max(200, container.clientWidth || 260)) });
+            return true;
+        } catch (e) {
+            container.innerHTML = '';
+            return false;
+        }
+    }
+
+    async function onGoogleCredential(resp) {
+        var gathered = localSummary();
+        try {
+            var res = await api('/google', { method: 'POST', auth: false, body: { credential: resp.credential } });
+            saveSession({ username: res.username, token: res.token, provider: 'google', version: 0, since: Date.now() });
+            closeModal();
+            render();
+            await syncNow();
+            window.dispatchEvent(new CustomEvent('cognicoach:account', { detail: { signedIn: true, username: res.username } }));
+            toast((res.created ? 'Account created - welcome, ' : 'Welcome back, ') + res.username + '. ' +
+                (gathered ? (res.created ? 'Added to your account from this device: ' : 'Merged into your account from this device: ') + gathered + '.' :
+                    'Your training will sync from now on.'), 'ok');
+        } catch (e) {
+            var err = document.querySelector('#accountModal .acct-error');
+            if (err) { err.textContent = e.message; } else { toast(e.message, 'warn'); }
+        }
+    }
+
     // ---------------------------------------------------------------- UI
     function esc(t) {
         return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
@@ -321,7 +398,7 @@
                 '    <div><div class="menu-user">' + esc(s.username) + '</div><div class="menu-status ' + status.state + '">' + esc(statusText()) + '</div></div></div>' +
                 '  <button type="button" data-act="sync" role="menuitem">Sync now</button>' +
                 '  <a href="dashboard.html" role="menuitem">My dashboard</a>' +
-                '  <button type="button" data-act="password" role="menuitem">Change password</button>' +
+                (s.provider === 'google' ? '' : '  <button type="button" data-act="password" role="menuitem">Change password</button>') +
                 '  <a href="index.html?tour=1" role="menuitem">Take the tour</a>' +
                 '  <button type="button" data-act="signout" class="danger" role="menuitem">Sign out</button>' +
                 '</div>';
@@ -359,11 +436,18 @@
             '    <div class="acct-error" role="alert"></div>' +
             '    <button type="submit" class="btn btn-primary acct-submit"><span class="label"></span><span class="acct-spin" aria-hidden="true"></span></button>' +
             '  </form>' +
+            (isPw ? '' : '  <div class="acct-google-wrap"><div class="acct-or"><span>or</span></div><div class="acct-google" id="acctGoogle"></div></div>') +
             (isPw ? '' : '  <p class="acct-note">Syncs your profile, training history, dashboard, Competition notes and saved animations. Anything you did before signing up is added to your account. Your password is scrambled on this device before it is sent.</p>') +
             '</div>';
         document.body.appendChild(wrap);
         requestAnimationFrame(function () { wrap.classList.add('show'); });
         setTab(wrap, isPw ? 'password' : (mode === 'signup' ? 'signup' : 'login'));
+        if (!isPw) {
+            var gw = wrap.querySelector('.acct-google-wrap');
+            gw.hidden = true;
+            renderGoogleButton(wrap.querySelector('#acctGoogle'), { text: mode === 'signup' ? 'signup_with' : 'signin_with' })
+                .then(function (ok) { gw.hidden = !ok; });
+        }
         var first = wrap.querySelector('input');
         setTimeout(function () { if (first) { first.focus(); } }, 120);
 
@@ -509,7 +593,7 @@
 
     window.CogniAccount = {
         api: API, session: session, syncNow: syncNow, status: function () { return status; }, statusText: statusText,
-        onStatus: function (fn) { listeners.push(fn); }, open: openModal, signOut: signOut, toast: toast, render: render, merge: merge
+        onStatus: function (fn) { listeners.push(fn); }, open: openModal, renderGoogleButton: renderGoogleButton, signOut: signOut, toast: toast, render: render, merge: merge
     };
 
     function start() {

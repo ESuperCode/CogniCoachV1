@@ -1,36 +1,81 @@
 // ==========================================================================
-// First-visit guided tour of the app page (index.html).
-// Runs once per device (localStorage 'cognicoach-tour-done'), after the welcome/onboarding modal,
-// and again with index.html?tour=1 (the account menu links there). Loaded on every page by nav.js;
-// does nothing on pages without the Quick Start card.
+// Guided tour of the app page (index.html), shown on a device's first visit.
+//
+// 1. Welcome card - also the first-run setup (main sport, date of birth) with sign in /
+//    Google sign in, replacing the old separate "Welcome" modal.
+// 2. Setup: Quick Start, its fields, the Start button, Advanced Setup.
+// 3. A demo first drill (nothing is generated or saved): the drill card, the muscle map, the 3D
+//    Motion Preview playing a ready-made animation, its controls, the timer.
+// 4. Dashboard + account in the nav, then a finale.
+// Replay: index.html?tour=1 (account menu -> Take the tour).
 // ==========================================================================
 (function () {
     'use strict';
     var DONE_KEY = 'cognicoach-tour-done';
     if (window.CogniTour) { return; }
 
+    // Ready-made demo drills (scripts compiled locally by the 3D viewer - no AI call).
+    var DEMOS = {
+        basketball: { name: 'Defensive Slide to Closeout', focus: 'Agility',
+            description: 'From a low defensive stance, slide three steps to your right, sprint forward and close out with high hands, then backpedal to the start.',
+            muscles: ['quads', 'glutes', 'calves', 'adductors'],
+            script: 'wide_defensive_stance(bounce=on, hold=0.4)\nshuffle(times=3)\nrun(pace=sprint, times=1)\njump + arms_up_block(hold=0.5)\nbackpedal(times=2)',
+            cues: ['Sits in a low defensive stance', 'Slides laterally with quick steps', 'Sprints forward into a closeout with hands high', 'Backpedals to the start'] },
+        soccer: { name: 'Cone Dribble and Finish', focus: 'Ball Control',
+            description: 'Dribble through the cones with small touches, accelerate past the last cone and strike the ball with your laces.',
+            muscles: ['quads', 'hamstrings', 'calves', 'abs'],
+            script: 'foot_dribble(times=3)\nrun(pace=sprint, times=1)\ninstep_kick(power=full)',
+            cues: ['Dribbles with quick close touches', 'Accelerates past the last cone', 'Strikes the ball with the laces'] },
+        tennis: { name: 'Split Step to Forehand', focus: 'Footwork',
+            description: 'Split step as the feed comes, move to your right and hit a forehand crosscourt, then shuffle back to the center.',
+            muscles: ['quads', 'obliques', 'deltoids', 'forearms'],
+            script: 'split_step\nshuffle(times=1)\nstance(width=wide, depth=0.4) + forehand_swing\nshuffle(side=left, times=1)',
+            cues: ['Split steps as the ball is fed', 'Moves right into a wide stance', 'Swings a forehand crosscourt', 'Shuffles back to the center'] },
+        swimming: { name: 'Freestyle with Streamline Kick', focus: 'Technique',
+            description: 'Swim two strokes of freestyle, then push into a tight streamline and flutter kick.',
+            muscles: ['lats', 'deltoids', 'triceps', 'abs', 'glutes'],
+            script: 'front_crawl(times=2)\nflutter_kick(times=2)\nstreamline(hold=0.6)',
+            cues: ['Swims freestyle strokes', 'Flutter kicks in a streamline', 'Holds a tight streamline glide'] },
+        other: { name: 'Sprint Start Acceleration', focus: 'Speed',
+            description: 'Set in a crouched start, drive out explosively for 10 meters and rise into an upright sprint.',
+            muscles: ['quads', 'hamstrings', 'glutes', 'calves'],
+            script: 'blocks_on_your_marks(hold=0.8)\nblocks_set(hold=0.6)\nsprint_start\nrun(pace=sprint, times=2)',
+            cues: ['Sets in a crouched start', 'Drives out low and explosively', 'Rises into an upright sprint'] }
+    };
+
     var STEPS = [
-        { kind: 'hero', title: 'Welcome to CogniCoachAI',
-          text: 'Your AI coach builds a full training session around your sport, your space and your time. Take a 30-second look around?' },
+        { kind: 'hero', id: 'welcome' },
         { target: '#quickStartCard', group: ['#quickStartCard .quick-start-header', '#sportSwitcher'], title: 'Quick Start',
           text: 'The fastest way to train. CogniCoach remembers your sport and level, so most days this is all you touch.' },
         { target: '#location', group: ['#location', '#workoutLength', '#focus'], title: 'Where, how long, what',
-          text: 'Tell it where you are, how many minutes you have and what you want to work on - the AI plans every drill to fit.' },
+          text: 'Tell it where you are, how many minutes you have and what to work on - the AI plans every drill to fit.' },
         { target: '#quickStartBtn', title: 'One tap to train',
-          text: 'Press Start and your drills appear one by one, each with a timer, the muscles it works and a 3D animation you can watch.' },
+          text: 'Press Start and the AI builds your session drill by drill. While you do one drill, the next is already being prepared.' },
         { target: '#advancedSetup', title: 'Full control',
-          text: 'Pick muscle groups, set your level, or drag drills into your own warm-up, main work and cool-down timeline.', open: false },
+          text: 'Pick muscle groups, set your level, or drag drills into your own warm-up, main work and cool-down timeline.' },
+        { demo: 'enter', target: '#drillContent .drill-display', title: 'Inside a session',
+          text: "Here's a sample first drill. Each one tells you exactly what to do, its focus, and where you are in the session." },
+        { demo: true, target: '#drillContent .muscle-groups', title: 'Muscles worked',
+          text: 'The muscles each drill trains light up on the body map. Tap any muscle to adjust it.' },
+        { demo: 'play', target: '#motionViewer .motion-stage', title: 'Watch it in 3D',
+          text: 'Generate Animation turns any drill into a 3D demonstration. Here is this drill - no waiting.' },
+        { demo: 'controls', target: '#motionViewer', group: ['#motionViewer .motion-controls', '#motionViewer .motion-help'], title: 'Make it yours',
+          text: 'Pause, scrub frame by frame, flip between right- and left-handed, and click the athlete then use the arrow keys to turn it.' },
+        { demo: true, target: '#drillContent .timer-container', title: 'Timed for you',
+          text: 'Start the timer when you are ready. Each drill is sized to fit your session, and Next Drill appears when it is done.' },
         { target: 'site-nav a[href="dashboard.html"]', nav: true, title: 'Your dashboard',
           text: 'Streaks, XP levels, personal records and charts of every session you finish.' },
         { target: '#navAccount', nav: true, title: 'Sync everywhere',
-          text: 'Create a free account to keep your profile and history on every device you sign in to.' },
-        { kind: 'finale', title: "You're all set",
-          text: 'Start a session, and during any drill press Generate Animation to watch it performed in 3D.' }
+          text: 'With a free account your profile and training follow you to every device you sign in on.' },
+        { kind: 'hero', id: 'finale', title: "You're all set",
+          text: 'Pick a sport, press Start, and your first drill is on its way.' }
     ];
 
-    var root, spot, card, idx = 0, active = false, repositionRaf = 0;
+    var plan = [];   // the tour's steps, fixed when it starts (targets hide during the demo)
+    var root, spot, card, idx = 0, active = false, repositionRaf = 0, inDemo = false, demoPlayed = false, needsSetup = false;
 
     function $(sel) { try { return document.querySelector(sel); } catch (e) { return null; } }
+    function esc(t) { return String(t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
     function visible(el) {
         if (!el) { return false; }
@@ -38,16 +83,29 @@
         return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
     }
 
-    function steps() {
-        return STEPS.filter(function (s) { return !s.target || visible($(s.target)); });
+    function profile() { try { return typeof loadProfile === 'function' ? loadProfile() : {}; } catch (e) { return {}; } }
+
+    function demoDrill() {
+        var sport = String(profile().defaultSport || '').toLowerCase();
+        return DEMOS[sport] || DEMOS.other;
+    }
+
+    // Steps whose target is missing are skipped (demo steps are checked after the demo opens).
+    function steps() { return plan; }
+
+    function computeSteps() {
+        return STEPS.filter(function (s) {
+            if (!s.target || s.demo || s.nav) { return true; }
+            return visible($(s.target));
+        });
     }
 
     function rectFor(step) {
         var els = (step.group || [step.target]).map($).filter(visible);
+        if (!els.length && step.group) { els = [$(step.target)].filter(visible); }
         if (!els.length) { return null; }
         var r = els.reduce(function (acc, el) {
             var b = el.getBoundingClientRect();
-            // a form field: highlight its whole form group
             var g = el.closest && el.closest('.form-group');
             if (g && step.group && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) { b = g.getBoundingClientRect(); }
             return acc ? { left: Math.min(acc.left, b.left), top: Math.min(acc.top, b.top),
@@ -58,21 +116,107 @@
         return { left: r.left - pad, top: r.top - pad, width: r.right - r.left + 2 * pad, height: r.bottom - r.top + 2 * pad };
     }
 
+    // ------------------------------------------------------------------ demo session
+    function enterDemo() {
+        if (inDemo) { return; }
+        var d = demoDrill();
+        inDemo = true;
+        var setup = $('#setupView'), intro = $('#marketingIntro'), session = $('#sessionView');
+        if (setup) { setup.style.display = 'none'; }
+        if (intro) { intro.classList.add('hidden'); }
+        if (session) { session.classList.add('active'); }
+        var loading = $('#loadingContainer'); if (loading) { loading.classList.remove('active'); }
+        var content = $('#drillContent'); if (content) { content.classList.remove('hidden'); }
+        var set = function (sel, text) { var el = $(sel); if (el) { el.textContent = text; } };
+        set('#currentDrill', '1');
+        set('#totalDrills', '6');
+        set('#drillName', d.name);
+        set('#drillFocus', 'Focus: ' + d.focus);
+        var desc = $('#drillDescription'); if (desc) { desc.textContent = d.description; }
+        set('#timerDisplay', '05:00');
+        set('#timerStatus', "Drill loaded. Start when you're ready.");
+        var bar = $('#timerProgressBar'); if (bar) { bar.style.width = '0%'; }
+        try { if (typeof highlightMuscles === 'function') { highlightMuscles(d.muscles); } } catch (e) {}
+        var next = $('#nextDrillContainer'); if (next) { next.style.display = 'none'; }
+    }
+
+    function playDemo() {
+        if (demoPlayed || !window.CogniMotionViewer || !window.CogniMotionViewer.demo) { return; }
+        demoPlayed = true;
+        var d = demoDrill();
+        window.CogniMotionViewer.demo({ script: d.script, title: d.name, coaching_cues: d.cues, camera_view: 'three_quarter', compile: 'client' });
+    }
+
+    function exitDemo() {
+        if (!inDemo) { return; }
+        inDemo = false;
+        demoPlayed = false;
+        if (window.CogniMotionViewer && window.CogniMotionViewer.endDemo) { window.CogniMotionViewer.endDemo(); }
+        try { if (typeof resetMuscleSelections === 'function') { resetMuscleSelections(); } } catch (e) {}
+        var session = $('#sessionView'), setup = $('#setupView'), intro = $('#marketingIntro'), content = $('#drillContent');
+        if (session) { session.classList.remove('active'); }
+        if (content) { content.classList.add('hidden'); }
+        if (setup) { setup.style.display = 'block'; }
+        if (intro) { intro.classList.remove('hidden'); }
+    }
+
+    // ------------------------------------------------------------------ welcome card (setup form)
+    function sportOptions(selected) {
+        var list = typeof PROFILE_SPORTS !== 'undefined' ? PROFILE_SPORTS :
+            ['Basketball', 'Soccer', 'Tennis', 'Football', 'Baseball', 'Volleyball', 'Swimming', 'Cricket', 'Rugby', 'Golf'];
+        return '<option value="">Choose your sport</option>' + list.map(function (s) {
+            return '<option value="' + esc(s) + '"' + (s === selected ? ' selected' : '') + '>' + esc(s) + '</option>';
+        }).join('') + '<option value="__other__">Other / not listed</option>';
+    }
+
+    function welcomeBody() {
+        var p = profile();
+        var signedIn = window.CogniAccount && window.CogniAccount.session();
+        if (!needsSetup) {
+            return '<h2 class="tour-title" id="tourTitle">Welcome to CogniCoachAI</h2>' +
+                '<p class="tour-text">Your AI coach builds a full training session around your sport, your space and your time. Take a quick look around?</p>';
+        }
+        return '<h2 class="tour-title" id="tourTitle">Welcome to CogniCoachAI</h2>' +
+            '<p class="tour-text">Two quick questions so your first workout fits you - change them any time.</p>' +
+            '<form class="tour-form" novalidate>' +
+            '  <label class="tour-field"><span>Main sport</span><select name="sport">' + sportOptions(p.defaultSport || '') + '</select></label>' +
+            '  <input class="tour-other" name="sportOther" placeholder="Enter your sport" hidden>' +
+            '  <label class="tour-field"><span>Date of birth <em>(optional)</em></span><input type="date" name="dob"></label>' +
+            '  <p class="tour-hint">Only used to suggest a starting level.</p>' +
+            '</form>' +
+            (signedIn ? '' :
+            '<div class="tour-signin">' +
+            '  <span class="tour-or">Already training with us?</span>' +
+            '  <div class="tour-signin-row"><button type="button" class="tour-chip" data-t="signin">Sign in</button>' +
+            '  <div class="tour-google" id="tourGoogle"></div></div>' +
+            '</div>');
+    }
+
+    function saveWelcome() {
+        var f = card.querySelector('.tour-form');
+        if (!f) { return; }
+        var sport = f.sport.value === '__other__' ? f.sportOther.value.trim() : f.sport.value;
+        if (typeof completeOnboarding === 'function') { completeOnboarding(sport, f.dob.value); }
+        needsSetup = false;
+    }
+
+    // ------------------------------------------------------------------ UI
     function build() {
         root = document.createElement('div');
         root.className = 'tour-root';
         root.innerHTML =
             '<div class="tour-spot"></div>' +
             '<div class="tour-card" role="dialog" aria-live="polite" aria-labelledby="tourTitle">' +
-            '  <div class="tour-holo" aria-hidden="true">' +
-            '    <div class="holo-ring r1"></div><div class="holo-ring r2"></div><div class="holo-ring r3"></div>' +
-            '    <div class="holo-cube"><i class="f1"></i><i class="f2"></i><i class="f3"></i><i class="f4"></i><i class="f5"></i><i class="f6"></i></div>' +
-            '    <div class="holo-floor"></div>' +
-            '    <span class="holo-p p1"></span><span class="holo-p p2"></span><span class="holo-p p3"></span><span class="holo-p p4"></span>' +
+            '  <div class="tour-stage" aria-hidden="true">' +
+            '    <div class="stage-floor"></div>' +
+            '    <div class="stage-orbit o1"><i></i></div>' +
+            '    <div class="stage-orbit o2"><i></i></div>' +
+            '    <div class="stage-cube"><span class="c-front"></span><span class="c-back"></span><span class="c-right"></span>' +
+            '      <span class="c-left"></span><span class="c-top"></span><span class="c-bottom"></span></div>' +
+            '    <div class="stage-shadow"></div>' +
             '  </div>' +
             '  <div class="tour-step-num"></div>' +
-            '  <h2 class="tour-title" id="tourTitle"></h2>' +
-            '  <p class="tour-text"></p>' +
+            '  <div class="tour-body"></div>' +
             '  <div class="tour-dots"></div>' +
             '  <div class="tour-actions">' +
             '    <button type="button" class="tour-skip" data-t="skip">Skip tour</button>' +
@@ -80,8 +224,7 @@
             '    <button type="button" class="tour-back" data-t="back">Back</button>' +
             '    <button type="button" class="btn btn-primary tour-next" data-t="next">Next</button>' +
             '  </div>' +
-            '</div>' +
-            '<div class="tour-confetti" aria-hidden="true"></div>';
+            '</div>';
         document.body.appendChild(root);
         spot = root.querySelector('.tour-spot');
         card = root.querySelector('.tour-card');
@@ -89,26 +232,34 @@
             var b = e.target.closest('[data-t]');
             if (!b) { return; }
             var t = b.getAttribute('data-t');
-            if (t === 'next') { go(idx + 1); } else if (t === 'back') { go(idx - 1); } else { finish(true); }
+            if (t === 'next') { next(); }
+            else if (t === 'back') { go(idx - 1); }
+            else if (t === 'signin') { if (window.CogniAccount) { window.CogniAccount.open('login'); } }
+            else { skip(); }
         });
-        // subtle 3D tilt that follows the pointer
-        card.addEventListener('pointermove', function (e) {
-            var r = card.getBoundingClientRect();
-            var x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
-            card.style.setProperty('--tilt-x', (-y * 6).toFixed(2) + 'deg');
-            card.style.setProperty('--tilt-y', (x * 8).toFixed(2) + 'deg');
+        root.addEventListener('change', function (e) {
+            if (e.target.name === 'sport') {
+                var other = card.querySelector('.tour-other');
+                if (other) { other.hidden = e.target.value !== '__other__'; if (!other.hidden) { other.focus(); } }
+            }
         });
-        card.addEventListener('pointerleave', function () { card.style.setProperty('--tilt-x', '0deg'); card.style.setProperty('--tilt-y', '0deg'); });
         document.addEventListener('keydown', onKey);
         window.addEventListener('resize', schedulePosition);
         window.addEventListener('scroll', schedulePosition, { passive: true });
+        window.addEventListener('cognicoach:account', function (e) {
+            if (!active || !e.detail || !e.detail.signedIn) { return; }
+            // signed in from the welcome card: their saved profile came with the account
+            if (profile().onboarded) { needsSetup = false; }
+            if (idx === 0) { go(0); }
+        });
     }
 
     function onKey(e) {
-        if (!active) { return; }
-        if (e.key === 'Escape') { finish(true); }
-        else if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); go(idx + 1); }
-        else if (e.key === 'ArrowLeft') { e.preventDefault(); go(idx - 1); }
+        if (!active || document.getElementById('accountModal')) { return; }
+        var typing = e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName);
+        if (e.key === 'Escape') { skip(); }
+        else if (!typing && (e.key === 'ArrowRight' || e.key === 'Enter')) { e.preventDefault(); next(); }
+        else if (!typing && e.key === 'ArrowLeft') { e.preventDefault(); go(idx - 1); }
     }
 
     function schedulePosition() {
@@ -125,6 +276,7 @@
             spot.classList.add('center');
             spot.style.cssText = 'left:50%;top:50%;width:0;height:0;';
             card.classList.add('centered');
+            card.classList.remove('docked');
             card.style.left = ''; card.style.top = '';
             return;
         }
@@ -139,16 +291,14 @@
         if (mobile) { card.style.left = ''; card.style.top = ''; card.classList.add('docked'); return; }
         card.classList.remove('docked');
         var cw = card.offsetWidth, ch = card.offsetHeight, gap = 18, vw = window.innerWidth, vh = window.innerHeight;
-        if (r.height > vh * 0.6) {   // a target taller than most of the screen: park the card in a corner
+        if (r.height > vh * 0.6) {
             card.style.left = (vw - cw - 20) + 'px';
             card.style.top = (vh - ch - 20) + 'px';
-            card.setAttribute('data-place', 'corner');
             return;
         }
-        var top = r.top + r.height + gap;
-        var place = 'below';
+        var top = r.top + r.height + gap, place = 'below';
         if (top + ch > vh - 12) { top = r.top - ch - gap; place = 'above'; }
-        if (top < 12) {   // no room above or below: beside the target, or over it
+        if (top < 12) {
             top = Math.max(12, Math.min(vh - ch - 12, r.top));
             place = r.left + r.width + gap + cw < vw ? 'right' : 'left';
         }
@@ -158,7 +308,30 @@
         else { left = Math.max(12, Math.min(vw - cw - 12, r.left + r.width / 2 - cw / 2)); }
         card.style.left = left + 'px';
         card.style.top = top + 'px';
-        card.setAttribute('data-place', place);
+    }
+
+    function next() {
+        var step = steps()[idx];
+        if (step && step.id === 'welcome' && needsSetup) {
+            var f = card.querySelector('.tour-form');
+            if (f && !f.sport.value) {
+                f.sport.focus();
+                f.sport.classList.add('need');
+                setTimeout(function () { f.sport.classList.remove('need'); }, 1200);
+                return;
+            }
+            saveWelcome();
+        }
+        go(idx + 1);
+    }
+
+    function skip() {
+        if (needsSetup) {   // skipping the welcome still finishes the first-run setup
+            var f = card && card.querySelector('.tour-form');
+            if (f && f.sport.value) { saveWelcome(); }
+            else if (typeof completeOnboarding === 'function') { completeOnboarding('', ''); }
+        }
+        finish(true);
     }
 
     function go(n) {
@@ -167,18 +340,31 @@
         if (n < 0) { return; }
         idx = n;
         var step = list[idx];
+        if (step.demo) { enterDemo(); } else if (inDemo) { exitDemo(); }
+        if (step.demo === 'play') { playDemo(); }
+
         card.classList.remove('enter');
         void card.offsetWidth;
         card.classList.add('enter');
-        card.classList.toggle('hero', step.kind === 'hero' || step.kind === 'finale');
-        card.querySelector('.tour-title').textContent = step.title;
-        card.querySelector('.tour-text').textContent = step.text;
-        card.querySelector('.tour-step-num').textContent = step.target ? ('Step ' + idx + ' of ' + (list.length - 2)) : '';
+        var hero = step.kind === 'hero';
+        card.classList.toggle('hero', hero);
+        card.classList.toggle('with-form', step.id === 'welcome' && needsSetup);
+        var body = card.querySelector('.tour-body');
+        body.innerHTML = step.id === 'welcome' ? welcomeBody() :
+            '<h2 class="tour-title" id="tourTitle">' + esc(step.title) + '</h2><p class="tour-text">' + esc(step.text) + '</p>';
+        if (step.id === 'welcome' && window.CogniAccount && window.CogniAccount.renderGoogleButton) {
+            var g = card.querySelector('#tourGoogle');
+            if (g) { window.CogniAccount.renderGoogleButton(g); }
+        }
+        var total = list.length - 2;
+        card.querySelector('.tour-step-num').textContent = hero ? '' : ('Step ' + idx + ' of ' + total);
         card.querySelector('.tour-dots').innerHTML = list.map(function (s, i) { return '<i class="' + (i === idx ? 'on' : i < idx ? 'done' : '') + '"></i>'; }).join('');
         card.querySelector('.tour-back').style.visibility = idx > 0 ? 'visible' : 'hidden';
-        card.querySelector('.tour-next').textContent = step.kind === 'hero' ? "Let's go" : step.kind === 'finale' ? 'Start training' : 'Next';
-        card.querySelector('.tour-skip').style.visibility = step.kind === 'finale' ? 'hidden' : 'visible';
-        if (step.kind === 'finale') { confetti(); }
+        card.querySelector('.tour-next').textContent = step.id === 'welcome' ? (needsSetup ? 'Start the tour' : "Let's go") :
+            step.id === 'finale' ? 'Start training' : 'Next';
+        card.querySelector('.tour-skip').textContent = step.id === 'welcome' && needsSetup ? 'Skip the tour' : 'Skip tour';
+        card.querySelector('.tour-skip').style.visibility = step.id === 'finale' ? 'hidden' : 'visible';
+
         if (step.target) {
             var el = $(step.target);
             if (step.nav) {
@@ -186,60 +372,56 @@
                 var nav = document.getElementById('siteNav');
                 if (nav) { nav.classList.remove('nav-hidden'); }
             } else if (el) {
-                var b = el.getBoundingClientRect();
+                var rr = rectFor(step);   // the highlighted area, which may be part of the element
+                var b = rr ? { top: rr.top, height: rr.height } : el.getBoundingClientRect();
                 var mobile = window.innerWidth < 640;
-                var want = mobile ? 90 : Math.max(90, (window.innerHeight - b.height) / 2 - 60);
+                var h = Math.min(b.height, window.innerHeight * 0.6);
+                var want = mobile ? 80 : Math.max(90, (window.innerHeight - h) / 2 - 70);
                 window.scrollTo({ top: Math.max(0, window.scrollY + b.top - want), behavior: 'smooth' });
             }
-            // follow the smooth scroll, then settle
             var t0 = performance.now();
             (function follow() {
                 position();
-                if (performance.now() - t0 < 900 && active) { requestAnimationFrame(follow); }
+                if (performance.now() - t0 < 1000 && active) { requestAnimationFrame(follow); }
             })();
         } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             position();
         }
-        card.querySelector('.tour-next').focus({ preventScroll: true });
-    }
-
-    function confetti() {
-        var box = root.querySelector('.tour-confetti');
-        box.innerHTML = '';
-        var colors = ['#1f7ae0', '#ff8a34', '#2ecc71', '#7fd0ff', '#ffd166'];
-        for (var i = 0; i < 46; i++) {
-            var p = document.createElement('i');
-            p.style.left = (50 + (Math.random() - 0.5) * 30) + '%';
-            p.style.background = colors[i % colors.length];
-            p.style.setProperty('--dx', ((Math.random() - 0.5) * 900).toFixed(0) + 'px');
-            p.style.setProperty('--dy', (-200 - Math.random() * 380).toFixed(0) + 'px');
-            p.style.setProperty('--rot', (Math.random() * 720 - 360).toFixed(0) + 'deg');
-            p.style.animationDelay = (Math.random() * 0.15).toFixed(2) + 's';
-            box.appendChild(p);
-        }
+        var focusEl = card.querySelector('.tour-form select') || card.querySelector('.tour-next');
+        if (focusEl) { focusEl.focus({ preventScroll: true }); }
     }
 
     function finish(skipped) {
         active = false;
+        exitDemo();
         try { localStorage.setItem(DONE_KEY, JSON.stringify({ at: Date.now(), skipped: !!skipped })); } catch (e) {}
-        root.classList.remove('show');
+        if (root) { root.classList.remove('show'); }
         document.documentElement.classList.remove('tour-on');
-        setTimeout(function () { if (root) { root.remove(); root = null; } }, 350);
+        var r = root;
+        root = null;
+        setTimeout(function () { if (r) { r.remove(); } }, 350);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         if (!skipped) {
             var btn = $('#quickStartBtn');
             if (btn && visible(btn)) {
-                btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                setTimeout(function () { btn.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 200);
                 btn.classList.add('tour-glow');
                 setTimeout(function () { btn.classList.remove('tour-glow'); }, 3200);
             }
         }
     }
 
-    function start() {
+    function start(opts) {
         if (active || !$('#quickStartCard')) { return; }
         var setup = $('#setupView');
-        if (setup && getComputedStyle(setup).display === 'none') { return; }   // mid-session: not now
-        if (!root) { build(); }
+        if (setup && getComputedStyle(setup).display === 'none') {   // mid-session: setup only, no tour
+            if (!profile().onboarded && typeof completeOnboarding === 'function') { /* answered next visit */ }
+            return;
+        }
+        needsSetup = !profile().onboarded;
+        plan = computeSteps();
+        build();
         active = true;
         idx = 0;
         document.documentElement.classList.add('tour-on');
@@ -248,7 +430,6 @@
 
     function seen() { try { return !!localStorage.getItem(DONE_KEY); } catch (e) { return true; } }
 
-    // Wait until the page is idle: no onboarding/profile modal and no account modal open.
     function startWhenClear(delay) {
         var tries = 0;
         (function wait() {
@@ -263,16 +444,16 @@
         })();
     }
 
-    window.CogniTour = { start: start, reset: function () { try { localStorage.removeItem(DONE_KEY); } catch (e) {} } };
+    window.CogniTour = { start: function () { startWhenClear(200); }, reset: function () { try { localStorage.removeItem(DONE_KEY); } catch (e) {} } };
 
     function init() {
         if (!$('#quickStartCard')) { return; }
         var forced = new URLSearchParams(location.search).get('tour') === '1';
         if (forced) {
             try { history.replaceState(null, '', location.pathname + location.search.replace(/([?&])tour=1(&|$)/, '$1').replace(/[?&]$/, '') + location.hash); } catch (e) {}
+            startWhenClear(400);
+        } else if (!seen() || window.cognicoachOnboardingRequested || !profile().onboarded) {
             startWhenClear(500);
-        } else if (!seen()) {
-            startWhenClear(900);
         }
     }
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { setTimeout(init, 0); }
