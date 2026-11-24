@@ -1,0 +1,432 @@
+/* 3D Motion Preview (scripts/motion-viewer.js) - sits between the muscle diagram and the timer. */
+.motion-viewer {
+    position: relative;
+    margin: 40px 0 10px;
+    padding: 22px;
+    border-radius: 18px;
+    background:
+        radial-gradient(120% 80% at 0% 0%, rgba(31, 122, 224, 0.07), transparent 60%),
+        radial-gradient(120% 80% at 100% 100%, rgba(255, 138, 52, 0.08), transparent 60%),
+        var(--surface-strong, #fff);
+    border: 1px solid var(--line, rgba(118, 140, 168, 0.24));
+    box-shadow: var(--soft-shadow, 0 22px 55px rgba(30, 50, 80, 0.13));
+    text-align: left;
+}
+
+.motion-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.motion-heading {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    background: linear-gradient(90deg, var(--primary-blue), var(--secondary-orange));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.motion-sub {
+    margin-top: 4px;
+    font-size: 0.85rem;
+    color: var(--text-gray);
+}
+
+.motion-side {
+    display: inline-flex;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--medium-gray, #edf3fb);
+    border: 1px solid var(--line, rgba(118, 140, 168, 0.24));
+    flex-shrink: 0;
+}
+
+.motion-side button {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-gray);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.motion-side button.active {
+    background: linear-gradient(135deg, var(--primary-blue), var(--secondary-orange));
+    color: var(--text-white);
+    box-shadow: 0 4px 14px var(--glow-blue);
+}
+
+/* Stage: the Unity iframe and the overlays share one rounded box. */
+.motion-stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    border-radius: 16px;
+    overflow: hidden;
+    background:
+        radial-gradient(55% 60% at 50% 42%, rgba(31, 122, 224, 0.12), transparent 70%),
+        linear-gradient(90deg, rgba(31, 122, 224, 0.07) 1px, transparent 1px),
+        linear-gradient(rgba(31, 122, 224, 0.07) 1px, transparent 1px),
+        linear-gradient(180deg, #f9fbff, #eaf1fb);
+    background-size: auto, 34px 34px, 34px 34px, auto;
+    border: 1px solid var(--line-strong, rgba(31, 122, 224, 0.34));
+    box-shadow: 0 14px 40px rgba(30, 50, 80, 0.12);
+    outline: none;
+    isolation: isolate;
+}
+
+.motion-stage:focus-visible {
+    box-shadow: 0 0 0 3px var(--glow-blue), 0 14px 40px rgba(30, 50, 80, 0.12);
+}
+
+.motion-frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    background: transparent;
+}
+
+.motion-viewer[data-mode="ready"] .motion-frame { opacity: 1; }
+
+.motion-idle, .motion-loader, .motion-error {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 24px;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+    z-index: 2;
+}
+
+.motion-viewer[data-mode="idle"] .motion-idle,
+.motion-viewer[data-mode="loading"] .motion-loader,
+.motion-viewer[data-mode="error"] .motion-error {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Idle: faint grid floor + the button */
+.motion-idle::before {
+    content: "";
+    position: absolute;
+    left: -10%;
+    right: -10%;
+    bottom: -30%;
+    height: 70%;
+    background-image:
+        linear-gradient(rgba(31, 122, 224, 0.22) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(31, 122, 224, 0.22) 1px, transparent 1px);
+    background-size: 40px 40px;
+    transform: perspective(300px) rotateX(60deg);
+    mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+    -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+    z-index: -1;
+}
+
+.motion-idle-figure {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background:
+        conic-gradient(from 0deg, var(--primary-blue), var(--secondary-orange), var(--primary-blue));
+    -webkit-mask: radial-gradient(circle, transparent 22px, #000 23px);
+    mask: radial-gradient(circle, transparent 22px, #000 23px);
+    animation: motionSpin 6s linear infinite;
+    opacity: 0.8;
+}
+
+.motion-idle .motion-generate { padding: 16px 34px; font-size: 1rem; }
+
+.motion-idle-note { font-size: 0.85rem; color: var(--text-gray); }
+
+/* Loader: running stick figure inside two counter-rotating rings */
+.motion-runner { width: 150px; height: 150px; overflow: visible; }
+.motion-runner .ring { fill: none; stroke-width: 3; stroke-linecap: round; transform-origin: 60px 60px; }
+.motion-runner .ring-a { stroke: var(--primary-blue); stroke-dasharray: 90 250; animation: motionSpin 1.6s linear infinite; filter: drop-shadow(0 2px 6px var(--glow-blue)); }
+.motion-runner .ring-b { stroke: var(--secondary-orange); stroke-dasharray: 60 220; animation: motionSpin 2.4s linear infinite reverse; filter: drop-shadow(0 2px 6px var(--glow-orange)); }
+.motion-runner .runner { stroke: var(--text-white, #172033); stroke-width: 4.5; stroke-linecap: round; fill: var(--text-white, #172033); animation: motionBob 0.5s ease-in-out infinite; }
+.motion-runner .torso { transform-origin: 60px 66px; transform: rotate(8deg); }
+.motion-runner .arm, .motion-runner .leg { transform-box: view-box; }
+.motion-runner .arm { transform-origin: 60px 44px; animation: motionSwing 0.5s ease-in-out infinite alternate; }
+.motion-runner .arm-r { animation-direction: alternate-reverse; }
+.motion-runner .leg { transform-origin: 60px 66px; animation: motionStride 0.5s ease-in-out infinite alternate; }
+.motion-runner .leg-r { animation-direction: alternate-reverse; }
+.motion-runner .floor { stroke: rgba(31, 122, 224, 0.55); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 6 6; animation: motionFloor 0.5s linear infinite; }
+
+.motion-loader-text {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.95rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-white);
+}
+
+.motion-loader-text .dots i {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background: var(--secondary-orange);
+    animation: motionDot 1.2s ease-in-out infinite;
+}
+.motion-loader-text .dots i:nth-child(2) { animation-delay: 0.15s; }
+.motion-loader-text .dots i:nth-child(3) { animation-delay: 0.3s; }
+
+.motion-loader-bar {
+    width: min(320px, 70%);
+    height: 6px;
+    border-radius: 999px;
+    background: var(--light-gray, #dbe7f3);
+    overflow: hidden;
+}
+
+.motion-loader-bar span {
+    display: block;
+    height: 100%;
+    width: 15%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--primary-blue), var(--secondary-orange));
+    box-shadow: 0 0 12px var(--glow-blue);
+    transition: width 0.6s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.motion-loader-bar span::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+    animation: motionShimmer 1.2s linear infinite;
+}
+
+.motion-error-text { color: #c0392b; max-width: 460px; line-height: 1.6; }
+
+/* Caption over the animation */
+.motion-caption {
+    position: absolute;
+    left: 14px;
+    top: 14px;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+.motion-viewer[data-mode="ready"] .motion-caption { opacity: 1; }
+
+.motion-title {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(6px);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #fff;
+}
+
+/* Controls: play/pause, smooth scrubber, time, regenerate */
+.motion-controls {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 14px;
+    opacity: 0.35;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.motion-viewer[data-mode="ready"] .motion-controls { opacity: 1; pointer-events: auto; }
+
+.motion-play, .motion-regen {
+    flex-shrink: 0;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 0;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.motion-play {
+    background: linear-gradient(135deg, var(--primary-blue), var(--secondary-orange));
+    box-shadow: 0 6px 18px var(--glow-blue);
+}
+
+.motion-play:hover, .motion-regen:hover { transform: scale(1.07); }
+
+.motion-play .icon-play {
+    width: 0;
+    height: 0;
+    margin-left: 4px;
+    border-style: solid;
+    border-width: 9px 0 9px 15px;
+    border-color: transparent transparent transparent #fff;
+}
+
+.motion-play .icon-pause {
+    display: none;
+    width: 14px;
+    height: 16px;
+    border-left: 5px solid #fff;
+    border-right: 5px solid #fff;
+}
+
+.motion-play.is-playing .icon-play { display: none; }
+.motion-play.is-playing .icon-pause { display: block; }
+
+.motion-regen {
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 109, 5, 0.15);
+    border: 2px solid var(--secondary-orange);
+    color: var(--secondary-orange);
+    font-size: 1.2rem;
+    line-height: 1;
+}
+
+.motion-regen:hover { background: var(--secondary-orange); color: #fff; box-shadow: 0 0 20px var(--glow-orange); }
+
+.motion-scrubber {
+    --fill: 0%;
+    flex: 1;
+    width: auto;
+    height: 8px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 999px;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    background:
+        linear-gradient(90deg, var(--primary-blue), var(--secondary-orange)) 0 0 / var(--fill) 100% no-repeat,
+        var(--light-gray, #dbe7f3);
+}
+
+.motion-scrubber::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(31, 122, 224, 0.25), 0 2px 8px rgba(30, 50, 80, 0.25);
+    transition: transform 0.15s ease;
+}
+
+.motion-scrubber::-webkit-slider-thumb:hover { transform: scale(1.15); }
+
+.motion-scrubber::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border: 0;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(31, 122, 224, 0.25), 0 2px 8px rgba(30, 50, 80, 0.25);
+}
+
+.motion-scrubber:focus { outline: none; }
+
+.motion-time {
+    flex-shrink: 0;
+    min-width: 96px;
+    text-align: right;
+    font-size: 0.85rem;
+    color: var(--text-gray);
+    font-variant-numeric: tabular-nums;
+}
+
+.motion-help {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 18px;
+    margin-top: 14px;
+    font-size: 0.8rem;
+    color: var(--text-gray);
+}
+
+.motion-viewer:not([data-mode="ready"]) .motion-help { display: none; }
+
+.motion-help kbd {
+    display: inline-grid;
+    place-items: center;
+    min-width: 24px;
+    height: 24px;
+    margin-right: 4px;
+    padding: 0 5px;
+    border-radius: 6px;
+    background: var(--surface-strong, #fff);
+    border: 1px solid var(--line-strong, rgba(31, 122, 224, 0.34));
+    border-bottom-width: 3px;
+    color: var(--text-white);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+}
+
+.motion-help-note { margin-left: auto; font-style: italic; opacity: 0.8; }
+
+.motion-cues {
+    margin: 14px 0 0;
+    padding: 12px 14px 12px 32px;
+    border-radius: 12px;
+    background: rgba(255, 138, 52, 0.07);
+    border: 1px solid rgba(255, 138, 52, 0.22);
+    color: var(--text-gray);
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+.motion-viewer:not([data-mode="ready"]) .motion-cues { display: none; }
+.motion-cues li::marker { color: var(--secondary-orange); }
+
+@keyframes motionSpin { to { transform: rotate(360deg); } }
+@keyframes motionBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes motionSwing { from { transform: rotate(-50deg); } to { transform: rotate(50deg); } }
+@keyframes motionStride { from { transform: rotate(-38deg); } to { transform: rotate(38deg); } }
+@keyframes motionFloor { to { stroke-dashoffset: -12; } }
+@keyframes motionDot { 0%, 100% { opacity: 0.2; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+@keyframes motionShimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+@media (max-width: 768px) {
+    .motion-viewer { padding: 14px; margin-top: 28px; }
+    .motion-head { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .motion-stage { aspect-ratio: 4 / 3.4; }
+    .motion-help-note { margin-left: 0; width: 100%; }
+    .motion-time { min-width: 80px; font-size: 0.75rem; }
+    .motion-idle .motion-generate { padding: 14px 24px; font-size: 0.85rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .motion-runner *, .motion-idle-figure, .motion-loader-bar span::after { animation: none !important; }
+}

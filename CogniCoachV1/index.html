@@ -32,6 +32,7 @@
     <link href="styles/style.css" rel="stylesheet">
     <link href="styles/nav.css" rel="stylesheet">
     <link href="styles/profile.css" rel="stylesheet">
+    <link href="styles/motion-viewer.css" rel="stylesheet">
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -325,6 +326,9 @@
                         <div class="muscle-diagram-container" id="muscleSvgHost"></div>
                     </div>
 
+                    <!-- 3D Motion Preview (scripts/motion-viewer.js) -->
+                    <div class="motion-viewer" id="motionViewer" data-mode="idle"></div>
+
                     <!-- Timer -->
                     <div class="timer-container">
                         <div class="timer-display" id="timerDisplay">00:00</div>
@@ -367,5 +371,6 @@
 <div id="competitionTurnstileContainer" style="display:none;"></div>
 <script src="scripts/competition.js"></script>
 <script src="scripts/script.js"></script>
+<script src="scripts/motion-viewer.js"></script>
 </body>
 </html>
