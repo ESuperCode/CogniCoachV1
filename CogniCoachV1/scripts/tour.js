@@ -54,7 +54,9 @@
         { target: '#advancedSetup', title: 'Full control',
           text: 'Pick muscle groups, set your level, or drag drills into your own warm-up, main work and cool-down timeline.' },
         { demo: 'enter', target: '#drillContent .drill-display', title: 'Inside a session',
-          text: "Here's a sample first drill. Each one tells you exactly what to do, its focus, and where you are in the session." },
+          text: "Here's a sample drill. Each one tells you exactly what to do and what it focuses on." },
+        { demo: true, target: '#sessionTimeline', title: 'Your whole session',
+          text: 'Your timeline from warm-up to cool-down: finished drills get a check, the one you are on fills up as its timer runs, and All drills lists everything ahead.' },
         { demo: true, target: '#drillContent .muscle-groups', title: 'Muscles worked',
           text: 'The muscles each drill trains light up on the body map. Tap any muscle to adjust it.' },
         { demo: 'play', target: '#motionViewer .motion-stage', title: 'Watch it in 3D',
@@ -128,8 +130,20 @@
         var loading = $('#loadingContainer'); if (loading) { loading.classList.remove('active'); }
         var content = $('#drillContent'); if (content) { content.classList.remove('hidden'); }
         var set = function (sel, text) { var el = $(sel); if (el) { el.textContent = text; } };
-        set('#currentDrill', '1');
-        set('#totalDrills', '6');
+        set('#currentDrill', '3');
+        set('#totalDrills', '8');
+        if (window.CogniSessionTimeline) {
+            var secs = (typeof appState !== 'undefined' && appState.setup && appState.setup.sections) ||
+                [{ name: 'Warm Up', color: '#FFD700' }, { name: 'Main Work', color: '#FF6347' }, { name: 'Cool Down', color: '#4682B4' }, { name: 'Recovery', color: '#32CD32' }];
+            var dd = function (section, min, name) {
+                return { section: section, sectionName: secs[section].name, drillTime: min * 60, generatedDrill: name ? { name: name } : null };
+            };
+            window.CogniSessionTimeline.demo({
+                sections: secs, index: 2, started: true, remaining: 190, total: 300,
+                drills: [dd(0, 4, 'Dynamic Warm-Up'), dd(0, 3, 'Activation Skips'), dd(1, 5, d.name), dd(1, 5, 'Reaction Sprints'),
+                    dd(1, 6, null), dd(1, 5, null), dd(2, 4, null), dd(3, 3, null)]
+            });
+        }
         set('#drillName', d.name);
         set('#drillFocus', 'Focus: ' + d.focus);
         var desc = $('#drillDescription'); if (desc) { desc.textContent = d.description; }
@@ -152,6 +166,7 @@
         inDemo = false;
         demoPlayed = false;
         if (window.CogniMotionViewer && window.CogniMotionViewer.endDemo) { window.CogniMotionViewer.endDemo(); }
+        if (window.CogniSessionTimeline) { window.CogniSessionTimeline.endDemo(); }
         try { if (typeof resetMuscleSelections === 'function') { resetMuscleSelections(); } } catch (e) {}
         var session = $('#sessionView'), setup = $('#setupView'), intro = $('#marketingIntro'), content = $('#drillContent');
         if (session) { session.classList.remove('active'); }

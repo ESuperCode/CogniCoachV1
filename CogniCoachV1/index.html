@@ -33,6 +33,7 @@
     <link href="styles/nav.css" rel="stylesheet">
     <link href="styles/profile.css" rel="stylesheet">
     <link href="styles/motion-viewer.css" rel="stylesheet">
+    <link href="styles/session-timeline.css" rel="stylesheet">
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -295,6 +296,9 @@
                         <p class="progress-text">Drill <span class="progress-number" id="currentDrill">1</span> of <span class="progress-number" id="totalDrills">8</span></p>
                     </div>
 
+                    <!-- Whole-session timeline (scripts/session-timeline.js) -->
+                    <div class="session-timeline" id="sessionTimeline" hidden></div>
+
                     <div class="drill-display">
                         <h2 class="drill-name" id="drillName">Loading...</h2>
                         <div class="drill-focus" id="drillFocus">Focus: Loading...</div>
@@ -372,5 +376,6 @@
 <script src="scripts/competition.js"></script>
 <script src="scripts/script.js"></script>
 <script src="scripts/motion-viewer.js"></script>
+<script src="scripts/session-timeline.js"></script>
 </body>
 </html>
