@@ -168,35 +168,236 @@
     z-index: -1;
 }
 
-.motion-idle-figure {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background:
-        conic-gradient(from 0deg, var(--primary-blue), var(--secondary-orange), var(--primary-blue));
-    -webkit-mask: radial-gradient(circle, transparent 22px, #000 23px);
-    mask: radial-gradient(circle, transparent 22px, #000 23px);
-    animation: motionSpin 6s linear infinite;
-    opacity: 0.8;
-}
-
 .motion-idle .motion-generate { padding: 16px 34px; font-size: 1rem; }
 
 .motion-idle-note { font-size: 0.85rem; color: var(--text-gray); }
 
-/* Loader: running stick figure inside two counter-rotating rings */
-.motion-runner { width: 150px; height: 150px; overflow: visible; }
-.motion-runner .ring { fill: none; stroke-width: 3; stroke-linecap: round; transform-origin: 60px 60px; }
-.motion-runner .ring-a { stroke: var(--primary-blue); stroke-dasharray: 90 250; animation: motionSpin 1.6s linear infinite; filter: drop-shadow(0 2px 6px var(--glow-blue)); }
-.motion-runner .ring-b { stroke: var(--secondary-orange); stroke-dasharray: 60 220; animation: motionSpin 2.4s linear infinite reverse; filter: drop-shadow(0 2px 6px var(--glow-orange)); }
-.motion-runner .runner { stroke: var(--text-white, #172033); stroke-width: 4.5; stroke-linecap: round; fill: var(--text-white, #172033); animation: motionBob 0.5s ease-in-out infinite; }
-.motion-runner .torso { transform-origin: 60px 66px; transform: rotate(8deg); }
-.motion-runner .arm, .motion-runner .leg { transform-box: view-box; }
-.motion-runner .arm { transform-origin: 60px 44px; animation: motionSwing 0.5s ease-in-out infinite alternate; }
-.motion-runner .arm-r { animation-direction: alternate-reverse; }
-.motion-runner .leg { transform-origin: 60px 66px; animation: motionStride 0.5s ease-in-out infinite alternate; }
-.motion-runner .leg-r { animation-direction: alternate-reverse; }
-.motion-runner .floor { stroke: rgba(31, 122, 224, 0.55); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 6 6; animation: motionFloor 0.5s linear infinite; }
+/* ===========================================================================
+   Loader: a jointed 3D-style mannequin sprinting on a moving motion-capture floor
+   (thigh -> shin -> foot and upper arm -> forearm are nested, so each joint swings
+   from its parent), with mocap joint markers, a ghost motion trail, speed streaks,
+   a scanning laser and HUD brackets.
+   =========================================================================== */
+.mc-scene {
+    --cycle: 0.72s;
+    --limb: linear-gradient(90deg, #2a8cf0, #6cc4ff 45%, #1f7ae0);
+    --limb-back: linear-gradient(90deg, #17589f, #3b8fe0 45%, #17589f);
+    position: relative;
+    width: 300px;
+    height: 230px;
+    border-radius: 14px;
+    overflow: hidden;
+    background:
+        radial-gradient(70% 60% at 50% 45%, rgba(31, 122, 224, 0.16), transparent 70%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(234, 241, 251, 0.6));
+    border: 1px solid rgba(31, 122, 224, 0.18);
+    box-shadow: 0 18px 40px rgba(30, 50, 80, 0.12), inset 0 0 30px rgba(31, 122, 224, 0.08);
+}
+
+/* HUD corner brackets */
+.mc-hud { position: absolute; width: 18px; height: 18px; border: 2px solid var(--primary-blue); opacity: 0.75; z-index: 6; animation: mcHud 1.6s ease-in-out infinite; }
+.mc-hud-tl { left: 10px; top: 10px; border-right: 0; border-bottom: 0; border-top-left-radius: 6px; }
+.mc-hud-tr { right: 10px; top: 10px; border-left: 0; border-bottom: 0; border-top-right-radius: 6px; }
+.mc-hud-bl { left: 10px; bottom: 10px; border-right: 0; border-top: 0; border-bottom-left-radius: 6px; border-color: var(--secondary-orange); }
+.mc-hud-br { right: 10px; bottom: 10px; border-left: 0; border-top: 0; border-bottom-right-radius: 6px; border-color: var(--secondary-orange); }
+
+.mc-rec, .mc-frame {
+    position: absolute;
+    top: 13px;
+    z-index: 6;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 1px;
+    color: var(--text-gray);
+}
+.mc-rec { left: 36px; display: flex; align-items: center; gap: 5px; font-weight: 700; color: #e0493a; }
+.mc-rec i { width: 7px; height: 7px; border-radius: 50%; background: #ff4b3a; box-shadow: 0 0 8px #ff4b3a; animation: mcBlink 1s steps(2, start) infinite; }
+.mc-frame { right: 36px; }
+.mc-frame b { color: var(--primary-blue); font-weight: 700; }
+
+/* Perspective grid floor rushing toward the back (the runner moves right) */
+.mc-floor {
+    position: absolute;
+    left: -50%;
+    right: -50%;
+    bottom: -40px;
+    height: 120px;
+    background-image:
+        linear-gradient(rgba(31, 122, 224, 0.45) 1.5px, transparent 1.5px),
+        linear-gradient(90deg, rgba(31, 122, 224, 0.45) 1.5px, transparent 1.5px);
+    background-size: 32px 32px;
+    transform: perspective(220px) rotateX(62deg);
+    transform-origin: 50% 0;
+    animation: mcFloor calc(var(--cycle) * 1) linear infinite;
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent);
+}
+
+/* Speed streaks */
+.mc-streaks i {
+    position: absolute;
+    right: -80px;
+    height: 2px;
+    width: 70px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, rgba(31, 122, 224, 0.55));
+    animation: mcStreak 0.9s linear infinite;
+}
+.mc-streaks i:nth-child(1) { top: 62px; animation-delay: -0.1s; }
+.mc-streaks i:nth-child(2) { top: 96px; width: 110px; animation-delay: -0.45s; background: linear-gradient(90deg, transparent, rgba(255, 138, 52, 0.55)); }
+.mc-streaks i:nth-child(3) { top: 128px; animation-delay: -0.7s; }
+.mc-streaks i:nth-child(4) { top: 150px; width: 50px; animation-delay: -0.25s; }
+.mc-streaks i:nth-child(5) { top: 80px; width: 40px; animation-delay: -0.6s; background: linear-gradient(90deg, transparent, rgba(255, 138, 52, 0.45)); }
+
+.mc-shadow {
+    position: absolute;
+    left: 50%;
+    top: 186px;
+    width: 70px;
+    height: 12px;
+    margin-left: -35px;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(23, 32, 51, 0.35), transparent);
+    animation: mcShadow calc(var(--cycle) / 2) ease-in-out infinite;
+}
+
+/* The mannequin. Body origin = hip joint. */
+.mc-runner { position: absolute; left: 50%; top: 104px; width: 0; height: 0; z-index: 3; }
+.mc-body { position: absolute; left: 0; top: 0; animation: mcBob calc(var(--cycle) / 2) ease-in-out infinite; }
+.mc-runner > .mc-body { transform-origin: 0 0; }
+
+.mc-torso { position: absolute; left: -12px; top: -54px; width: 24px; height: 56px; transform-origin: 12px 54px; transform: rotate(14deg); z-index: 2; }
+.mc-chest {
+    position: absolute;
+    inset: 0;
+    border-radius: 12px 12px 10px 10px;
+    background: var(--limb);
+    box-shadow: inset -4px -6px 10px rgba(10, 50, 110, 0.35), 0 4px 10px rgba(31, 122, 224, 0.25);
+    z-index: 1;
+}
+.mc-head {
+    position: absolute;
+    left: 0;
+    top: -27px;
+    width: 24px;
+    height: 25px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 65% 35%, #8fd4ff, #2a8cf0 55%, #1b67c2);
+    box-shadow: inset -3px -4px 8px rgba(10, 50, 110, 0.35);
+    z-index: 3;
+    animation: mcHead calc(var(--cycle) / 2) ease-in-out infinite;
+}
+
+.mc-limb, .mc-lower { position: absolute; border-radius: 999px; }
+.mc-limb::before {   /* mocap joint marker */
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 7px;
+    height: 7px;
+    margin: -1px 0 0 -3.5px;
+    border-radius: 50%;
+    background: var(--secondary-orange);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 10px var(--secondary-orange);
+    z-index: 5;
+}
+.mc-lower::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 1px;
+    width: 6px;
+    height: 6px;
+    margin-left: -3px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 2px var(--secondary-orange), 0 0 8px var(--secondary-orange);
+    z-index: 5;
+}
+
+.mc-leg { left: -7px; top: -7px; width: 14px; height: 36px; transform-origin: 7px 7px; background: var(--limb); animation: mcThigh var(--cycle) linear infinite; }
+.mc-leg .mc-lower { left: 0; top: 29px; width: 14px; height: 36px; transform-origin: 7px 7px; background: var(--limb); animation: mcShin var(--cycle) linear infinite; }
+.mc-foot { position: absolute; left: 3px; bottom: -2px; width: 20px; height: 9px; border-radius: 6px 9px 5px 5px; background: var(--limb); }
+.mc-leg.mc-back { z-index: 0; }
+.mc-leg.mc-front { z-index: 4; }
+
+.mc-arm { left: 6px; top: 4px; width: 12px; height: 28px; transform-origin: 6px 6px; background: var(--limb); animation: mcArm var(--cycle) linear infinite; }
+.mc-arm .mc-lower { left: 0; top: 22px; width: 12px; height: 26px; transform-origin: 6px 6px; background: var(--limb); animation: mcForearm var(--cycle) linear infinite; }
+.mc-arm.mc-back { z-index: 0; }
+.mc-arm.mc-front { z-index: 4; }
+
+/* Back-side limbs are darker and half a stride out of phase */
+.mc-back, .mc-back .mc-lower, .mc-back .mc-foot { background: var(--limb-back); }
+.mc-back, .mc-back .mc-lower { animation-delay: calc(var(--cycle) / -2); }
+
+/* Ghost trail (motion blur) */
+.mc-ghost { z-index: 2; pointer-events: none; }
+.mc-ghost .mc-limb::before, .mc-ghost .mc-lower::before { display: none; }
+.mc-ghost-1 { margin-left: -16px; opacity: 0.28; filter: saturate(0.6) blur(0.5px); }
+.mc-ghost-2 { margin-left: -32px; opacity: 0.12; filter: saturate(0.4) blur(1px); }
+.mc-ghost-1 * { animation-delay: -0.06s !important; }
+.mc-ghost-2 * { animation-delay: -0.12s !important; }
+.mc-ghost-1 .mc-back, .mc-ghost-1 .mc-back .mc-lower { animation-delay: calc(var(--cycle) / -2 - 0.06s) !important; }
+.mc-ghost-2 .mc-back, .mc-ghost-2 .mc-back .mc-lower { animation-delay: calc(var(--cycle) / -2 - 0.12s) !important; }
+
+/* Scanning laser */
+.mc-scan {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    z-index: 5;
+    background: linear-gradient(90deg, transparent, var(--primary-blue) 20%, #7fd0ff 50%, var(--secondary-orange) 80%, transparent);
+    box-shadow: 0 0 12px var(--primary-blue), 0 0 24px rgba(31, 122, 224, 0.5);
+    animation: mcScan 2.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+.mc-scan::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 2px;
+    height: 46px;
+    background: linear-gradient(to top, rgba(31, 122, 224, 0.16), transparent);
+}
+
+/* Run cycle (facing right): negative = swing forward. 0% = front foot strike. */
+@keyframes mcThigh {
+    0%   { transform: rotate(-42deg); }
+    25%  { transform: rotate(-8deg); }
+    50%  { transform: rotate(34deg); }
+    70%  { transform: rotate(18deg); }
+    85%  { transform: rotate(-30deg); }
+    100% { transform: rotate(-42deg); }
+}
+@keyframes mcShin {
+    0%   { transform: rotate(14deg); }
+    25%  { transform: rotate(30deg); }
+    50%  { transform: rotate(48deg); }
+    68%  { transform: rotate(118deg); }
+    85%  { transform: rotate(70deg); }
+    100% { transform: rotate(14deg); }
+}
+@keyframes mcArm {
+    0%   { transform: rotate(42deg); }
+    50%  { transform: rotate(-52deg); }
+    100% { transform: rotate(42deg); }
+}
+@keyframes mcForearm {
+    0%   { transform: rotate(-58deg); }
+    50%  { transform: rotate(-104deg); }
+    100% { transform: rotate(-58deg); }
+}
+@keyframes mcBob { 0%, 100% { transform: translateY(2px); } 50% { transform: translateY(-7px); } }
+@keyframes mcHead { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+@keyframes mcShadow { 0%, 100% { transform: scaleX(1); opacity: 1; } 50% { transform: scaleX(0.72); opacity: 0.6; } }
+@keyframes mcFloor { from { background-position: 0 0; } to { background-position: -32px 0; } }
+@keyframes mcStreak { from { transform: translateX(0); opacity: 0; } 15% { opacity: 1; } to { transform: translateX(-460px); opacity: 0; } }
+@keyframes mcScan { 0% { top: 0; opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { top: 228px; opacity: 0; } }
+@keyframes mcBlink { to { visibility: hidden; } }
+@keyframes mcHud { 0%, 100% { transform: scale(1); opacity: 0.75; } 50% { transform: scale(1.12); opacity: 1; } }
 
 .motion-loader-text {
     font-family: 'Orbitron', sans-serif;
@@ -451,6 +652,7 @@
     .motion-scrubber { order: -1; flex: 1 1 100%; height: 10px; }
     .motion-time { min-width: 0; flex: 1; text-align: center; font-size: 0.8rem; }
     .motion-idle .motion-generate { padding: 14px 24px; font-size: 0.85rem; }
+    .mc-scene { transform: scale(0.78); margin: -26px 0; }
 }
 
 /* Touch screens have no arrow keys */
@@ -459,5 +661,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .motion-runner *, .motion-idle-figure, .motion-loader-bar span::after { animation: none !important; }
+    .mc-scene *, .motion-loader-bar span::after { animation: none !important; }
 }

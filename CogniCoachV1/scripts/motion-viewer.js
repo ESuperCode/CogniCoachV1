@@ -73,7 +73,14 @@
 
     function startLoadingSteps() {
         var i = 0;
+        var frameEl = root.querySelector('.mc-frame-n');
+        var n = 0;
         clearInterval(state.stepTimer);
+        clearInterval(state.frameTimer);
+        state.frameTimer = setInterval(function () {
+            n = (n + 1) % 10000;
+            if (frameEl) { frameEl.textContent = ('000' + n).slice(-4); }
+        }, 1000 / 30);
         loaderStep.textContent = LOADING_STEPS[0];
         state.stepTimer = setInterval(function () {
             i = Math.min(i + 1, LOADING_STEPS.length - 1);
@@ -120,6 +127,7 @@
 
     function showError(message) {
         clearInterval(state.stepTimer);
+        clearInterval(state.frameTimer);
         state.generating = false;
         errorText.textContent = message;
         setMode('error');
@@ -165,6 +173,7 @@
         if (!state.hasAnimation) { return; }
         var wait = state.iframeReady ? Math.max(0, state.revealAt - Date.now()) : -1;
         if (wait === 0) {
+            clearInterval(state.frameTimer);
             if (root.getAttribute('data-mode') !== 'ready') { post('seek', { position: 0 }); post('play'); }
             setMode('ready');
             return;
@@ -228,6 +237,17 @@
         else if (key === 'ArrowDown') { post('rotate', { dx: -step, dy: 0 }); }
     }
 
+    // A jointed mannequin (hip -> thigh -> shin -> foot, shoulder -> upper arm -> forearm) for the loader.
+    function runnerHtml(extra) {
+        var leg = function (side) {
+            return '<div class="mc-limb mc-leg mc-' + side + '"><div class="mc-lower"><div class="mc-foot"></div></div></div>';
+        };
+        var arm = function (side) { return '<div class="mc-limb mc-arm mc-' + side + '"><div class="mc-lower"></div></div>'; };
+        return '<div class="mc-runner ' + extra + '"><div class="mc-body">' + leg('back') +
+            '<div class="mc-torso">' + arm('back') + '<div class="mc-chest"></div><div class="mc-head"></div>' + arm('front') + '</div>' +
+            leg('front') + '</div></div>';
+    }
+
     function build() {
         root = document.getElementById('motionViewer');
         if (!root) { return; }
@@ -243,19 +263,19 @@
             '</div>' +
             '<div class="motion-stage" tabindex="0" aria-label="3D animation. Use the arrow keys to turn the athlete.">' +
             '  <div class="motion-idle">' +
-            '    <div class="motion-idle-figure" aria-hidden="true"></div>' +
             '    <button type="button" class="btn btn-primary motion-generate">Generate Animation</button>' +
             '    <p class="motion-idle-note">Turns the drill above into a 3D demonstration in a few seconds.</p>' +
             '  </div>' +
             '  <div class="motion-loader" aria-live="polite">' +
-            '    <svg class="motion-runner" viewBox="0 0 120 120" aria-hidden="true">' +
-            '      <circle class="ring ring-a" cx="60" cy="60" r="54"/><circle class="ring ring-b" cx="60" cy="60" r="44"/>' +
-            '      <g class="runner"><circle cx="60" cy="30" r="7"/>' +
-            '        <line class="torso" x1="60" y1="38" x2="60" y2="66"/>' +
-            '        <line class="arm arm-l" x1="60" y1="44" x2="60" y2="62"/><line class="arm arm-r" x1="60" y1="44" x2="60" y2="62"/>' +
-            '        <line class="leg leg-l" x1="60" y1="66" x2="60" y2="92"/><line class="leg leg-r" x1="60" y1="66" x2="60" y2="92"/></g>' +
-            '      <line class="floor" x1="30" y1="96" x2="90" y2="96"/>' +
-            '    </svg>' +
+            '    <div class="mc-scene" aria-hidden="true">' +
+            '      <div class="mc-hud mc-hud-tl"></div><div class="mc-hud mc-hud-tr"></div><div class="mc-hud mc-hud-bl"></div><div class="mc-hud mc-hud-br"></div>' +
+            '      <div class="mc-rec"><i></i>REC</div><div class="mc-frame">FRAME <b class="mc-frame-n">0000</b></div>' +
+            '      <div class="mc-floor"></div>' +
+            '      <div class="mc-streaks"><i></i><i></i><i></i><i></i><i></i></div>' +
+            '      <div class="mc-shadow"></div>' +
+            runnerHtml('mc-ghost mc-ghost-2') + runnerHtml('mc-ghost mc-ghost-1') + runnerHtml('') +
+            '      <div class="mc-scan"></div>' +
+            '    </div>' +
             '    <div class="motion-loader-text"><span class="motion-loader-step">Reading the drill</span><span class="dots"><i></i><i></i><i></i></span></div>' +
             '    <div class="motion-loader-bar"><span></span></div>' +
             '  </div>' +
