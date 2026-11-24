@@ -134,7 +134,12 @@
 }
 .acct-close:hover { color: var(--text-white); }
 
-/* spinning 3D cube */
+/* 3D whistle logo (scripts/brand3d.js) */
+.acct-brand { height: 150px; margin: -18px -8px 0; }
+.acct-brand .brand3d { --b: 118px; }
+@media (max-width: 640px) { .acct-brand { height: 120px; } .acct-brand .brand3d { --b: 96px; } }
+
+/* (legacy) spinning 3D cube */
 .acct-orb { width: 64px; height: 64px; margin: 0 auto 14px; perspective: 400px; }
 .acct-cube { position: relative; width: 40px; height: 40px; margin: 12px auto; transform-style: preserve-3d; animation: acctCube 6s linear infinite; }
 .acct-cube i {
@@ -167,7 +172,7 @@
     box-shadow: 0 6px 16px var(--glow-blue);
     transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.15);
 }
-.acct-overlay[data-tab="signup"] .acct-tab-ink { transform: translateX(100%); }
+.acct-overlay[data-tab="login"] .acct-tab-ink { transform: translateX(100%); }
 
 .acct-title { font-family: 'Orbitron', sans-serif; font-size: 1.35rem; color: var(--text-white); text-align: center; }
 .acct-sub { margin: 6px 0 18px; text-align: center; color: var(--text-gray); font-size: 0.85rem; }
@@ -263,3 +268,4 @@
 .acct-or::before, .acct-or::after { content: ""; flex: 1; height: 1px; background: var(--line, rgba(118, 140, 168, 0.3)); }
 .acct-google { display: flex; justify-content: center; min-height: 44px; }
 .acct-overlay[data-tab="password"] .acct-google-wrap { display: none; }
+@media (max-width: 640px) { .acct-tabs button { white-space: nowrap; font-size: 0.62rem; letter-spacing: 0.5px; } }

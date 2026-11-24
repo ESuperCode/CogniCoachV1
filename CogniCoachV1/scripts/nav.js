@@ -79,6 +79,7 @@ class SiteNav extends HTMLElement {
 // app page, the first-visit tour. Loaded from here so no page has to list them.
 function loadSiteExtras() {
     const extras = [
+        { css: 'styles/brand3d.css', js: 'scripts/brand3d.js' },
         { css: 'styles/account.css', js: 'scripts/account.js' },
         { css: 'styles/tour.css', js: 'scripts/tour.js' }
     ];

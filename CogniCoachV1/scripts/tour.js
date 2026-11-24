@@ -209,11 +209,7 @@
             '<div class="tour-card" role="dialog" aria-live="polite" aria-labelledby="tourTitle">' +
             '  <div class="tour-stage" aria-hidden="true">' +
             '    <div class="stage-floor"></div>' +
-            '    <div class="stage-orbit o1"><i></i></div>' +
-            '    <div class="stage-orbit o2"><i></i></div>' +
-            '    <div class="stage-cube"><span class="c-front"></span><span class="c-back"></span><span class="c-right"></span>' +
-            '      <span class="c-left"></span><span class="c-top"></span><span class="c-bottom"></span></div>' +
-            '    <div class="stage-shadow"></div>' +
+            '    <div class="tour-brand"></div>' +
             '  </div>' +
             '  <div class="tour-step-num"></div>' +
             '  <div class="tour-body"></div>' +
@@ -228,6 +224,7 @@
         document.body.appendChild(root);
         spot = root.querySelector('.tour-spot');
         card = root.querySelector('.tour-card');
+        if (window.CogniBrand) { window.CogniBrand.mount(root.querySelector('.tour-brand')); }
         root.addEventListener('click', function (e) {
             var b = e.target.closest('[data-t]');
             if (!b) { return; }

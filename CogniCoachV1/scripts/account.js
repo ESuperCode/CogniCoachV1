@@ -387,8 +387,8 @@
         if (!host) { return; }
         var s = session();
         if (!s) {
-            host.innerHTML = '<button type="button" class="nav-account-btn" data-act="open-signin">' +
-                '<span class="nav-account-icon" aria-hidden="true"></span><span class="nav-account-label">Sign in</span></button>';
+            host.innerHTML = '<button type="button" class="nav-account-btn" data-act="open-signin" aria-label="Create account or sign in">' +
+                '<span class="nav-account-icon" aria-hidden="true"></span><span class="nav-account-label">Sign up</span></button>';
         } else {
             host.innerHTML = '<button type="button" class="nav-account-btn signed-in" data-act="toggle-menu" aria-haspopup="true" aria-expanded="' + menuOpen + '">' +
                 '<span class="nav-avatar">' + esc(s.username.charAt(0).toUpperCase()) + '<i class="sync-dot ' + status.state + '"></i></span>' +
@@ -416,12 +416,11 @@
         wrap.innerHTML =
             '<div class="acct-card" role="dialog" aria-modal="true" aria-labelledby="acctTitle">' +
             '  <button type="button" class="acct-close" data-act="close" aria-label="Close">&times;</button>' +
-            '  <div class="acct-orb" aria-hidden="true"><div class="acct-cube">' +
-            '    <i class="f1"></i><i class="f2"></i><i class="f3"></i><i class="f4"></i><i class="f5"></i><i class="f6"></i></div></div>' +
+            '  <div class="acct-brand" aria-hidden="true"></div>' +
             (isPw ? '  <h2 id="acctTitle" class="acct-title">Change password</h2>' :
             '  <div class="acct-tabs" role="tablist">' +
-            '    <button type="button" role="tab" data-tab="login" class="' + (mode !== 'signup' ? 'active' : '') + '">Sign in</button>' +
-            '    <button type="button" role="tab" data-tab="signup" class="' + (mode === 'signup' ? 'active' : '') + '">Create account</button>' +
+            '    <button type="button" role="tab" data-tab="signup" class="' + (mode !== 'login' ? 'active' : '') + '">Create account</button>' +
+            '    <button type="button" role="tab" data-tab="login" class="' + (mode === 'login' ? 'active' : '') + '">Sign in</button>' +
             '    <span class="acct-tab-ink"></span></div>' +
             '  <h2 id="acctTitle" class="acct-title"></h2>') +
             '  <p class="acct-sub"></p>' +
@@ -440,12 +439,13 @@
             (isPw ? '' : '  <p class="acct-note">Syncs your profile, training history, dashboard, Competition notes and saved animations. Anything you did before signing up is added to your account. Your password is scrambled on this device before it is sent.</p>') +
             '</div>';
         document.body.appendChild(wrap);
+        if (window.CogniBrand) { window.CogniBrand.mount(wrap.querySelector('.acct-brand')); }
         requestAnimationFrame(function () { wrap.classList.add('show'); });
-        setTab(wrap, isPw ? 'password' : (mode === 'signup' ? 'signup' : 'login'));
+        setTab(wrap, isPw ? 'password' : (mode === 'login' ? 'login' : 'signup'));
         if (!isPw) {
             var gw = wrap.querySelector('.acct-google-wrap');
             gw.hidden = true;
-            renderGoogleButton(wrap.querySelector('#acctGoogle'), { text: mode === 'signup' ? 'signup_with' : 'signin_with' })
+            renderGoogleButton(wrap.querySelector('#acctGoogle'), { text: mode === 'login' ? 'signin_with' : 'signup_with' })
                 .then(function (ok) { gw.hidden = !ok; });
         }
         var first = wrap.querySelector('input');
@@ -560,7 +560,7 @@
         var act = e.target.closest && e.target.closest('#navAccount [data-act]');
         if (!act) { if (menuOpen && !(e.target.closest && e.target.closest('#navAccount'))) { closeMenu(); } return; }
         var a = act.getAttribute('data-act');
-        if (a === 'open-signin') { openModal('login'); }
+        if (a === 'open-signin') { openModal('signup'); }
         else if (a === 'toggle-menu') { menuOpen = !menuOpen; render(); }
         else if (a === 'sync') { syncNow(); }
         else if (a === 'password') { openModal('password'); }
