@@ -184,18 +184,35 @@
         if (!el) { return; }
         var A = window.CogniAccount;
         var s = A && A.session();
-        el.innerHTML = s ?
-            '<div class="acct-row"><span class="nav-avatar big">' + esc(s.username.charAt(0).toUpperCase()) + '</span><div>' +
-            '<div class="acct-name">' + esc(s.username) + '</div><div class="acct-sync" id="dashSyncStatus">' + esc(A.statusText()) + '</div></div>' +
-            '<button class="btn btn-secondary" id="dashSyncBtn" type="button">Sync now</button></div>' +
-            '<p class="dash-muted">Your profile, training history and dashboard settings sync to your account, so you can sign in on any device.</p>' :
-            '<div class="acct-row"><div class="acct-cta-art" aria-hidden="true"></div><div><div class="acct-name">Train on any device</div>' +
-            '<p class="dash-muted" style="margin:4px 0 0">Create a free account to back up your profile and history and pick up where you left off on your phone or another computer.</p></div>' +
-            '<button class="btn btn-primary" id="dashSignInBtn" type="button">Sign in / Create account</button></div>';
+        if (s) {
+            el.innerHTML =
+                '<div class="acct-panel signed-in">' +
+                '  <span class="acct-panel-avatar">' + esc(s.username.charAt(0).toUpperCase()) + '</span>' +
+                '  <div class="acct-panel-text"><div class="acct-panel-title">' + esc(s.username) + '</div>' +
+                '    <div class="acct-panel-sub"><i class="sync-dot-inline"></i><span id="dashSyncStatus">' + esc(A.statusText()) + '</span></div>' +
+                '    <p>Profile, history, dashboard, Competition notes and saved animations sync to this account.</p></div>' +
+                '  <div class="acct-panel-actions"><button class="dash-btn primary" id="dashSyncBtn" type="button">Sync now</button></div>' +
+                '</div>';
+        } else {
+            el.innerHTML =
+                '<div class="acct-panel">' +
+                '  <div class="acct-panel-icon" aria-hidden="true"><span class="cloud"></span><span class="arrow"></span></div>' +
+                '  <div class="acct-panel-text"><div class="acct-panel-title">Train on any device</div>' +
+                '    <p>Create a free account to back up everything on this device and pick up where you left off on your phone or another computer.</p>' +
+                '    <ul class="acct-perks"><li>Profile &amp; level</li><li>Session history</li><li>Competition notes</li><li>Saved animations</li></ul></div>' +
+                '  <div class="acct-panel-actions">' +
+                '    <button class="dash-btn primary" id="dashSignUpBtn" type="button">Create free account</button>' +
+                '    <button class="dash-link" id="dashSignInBtn" type="button">I already have an account</button></div>' +
+                '</div>';
+        }
         var b1 = document.getElementById('dashSyncBtn');
         if (b1) { b1.onclick = function () { A.syncNow(); }; }
-        var b2 = document.getElementById('dashSignInBtn');
+        var b2 = document.getElementById('dashSignUpBtn');
         if (b2) { b2.onclick = function () { A.open('signup'); }; }
+        var b3 = document.getElementById('dashSignInBtn');
+        if (b3) { b3.onclick = function () { A.open('login'); }; }
+        var dot = el.querySelector('.sync-dot-inline');
+        if (dot && A) { dot.className = 'sync-dot-inline ' + A.status().state; }
     }
 
     function importData(file) {
@@ -277,6 +294,8 @@
                 window.CogniAccount.onStatus(function () {
                     var st = document.getElementById('dashSyncStatus');
                     if (st) { st.textContent = window.CogniAccount.statusText(); }
+                    var dot = document.querySelector('#accountCardBody .sync-dot-inline');
+                    if (dot) { dot.className = 'sync-dot-inline ' + window.CogniAccount.status().state; }
                 });
             }
         }, 100);

@@ -157,12 +157,11 @@
             </div>
 
             <!-- Competition Mode entry point -->
-            <div class="card dash-card dash-span-12 text-center">
-                <h2 class="card-title">Competition Mode</h2>
-                <p class="text-muted" style="color: var(--text-gray); font-size: 0.85rem; margin-bottom: 12px;">
-                    See the focus notes CogniCoach has built up from your training sessions, sport by sport,
-                    and ask a sport-specific assistant questions before you compete.
-                </p>
+            <div class="card dash-card dash-span-12 competition-cta">
+                <div class="competition-cta-text">
+                    <h2 class="card-title">Competition Mode</h2>
+                    <p>See the focus notes CogniCoach has built from your training, sport by sport, and ask a sport-specific assistant questions before you compete.</p>
+                </div>
                 <a class="btn btn-primary" href="competition.html">Open Competition Mode</a>
             </div>
 
@@ -172,14 +171,20 @@
             </div>
 
             <!-- Account & data -->
-            <div class="card dash-card dash-span-12">
+            <div class="card dash-card dash-span-12 account-data-card">
                 <h2 class="card-title">Account &amp; Data</h2>
                 <div id="accountCardBody"></div>
-                <div class="danger-row" style="margin-top:16px;">
-                    <button class="btn btn-secondary" id="exportDataBtn">Export Data</button>
-                    <button class="btn btn-secondary" id="importDataBtn" type="button">Import Data</button>
-                    <input type="file" id="importDataInput" accept="application/json,.json" hidden>
-                    <button class="btn btn-danger" id="clearHistoryBtn">Clear History</button>
+                <div class="data-tools">
+                    <div class="data-tools-text">
+                        <div class="data-tools-title">Your data</div>
+                        <p>Download a backup, restore one, or wipe this device's training history.</p>
+                    </div>
+                    <div class="data-tools-actions">
+                        <button class="dash-btn" id="exportDataBtn" type="button"><span class="ico ico-down" aria-hidden="true"></span>Export</button>
+                        <button class="dash-btn" id="importDataBtn" type="button"><span class="ico ico-up" aria-hidden="true"></span>Import</button>
+                        <input type="file" id="importDataInput" accept="application/json,.json" hidden>
+                        <button class="dash-btn danger" id="clearHistoryBtn" type="button"><span class="ico ico-x" aria-hidden="true"></span>Clear history</button>
+                    </div>
                 </div>
             </div>
 

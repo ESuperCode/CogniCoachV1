@@ -2,8 +2,8 @@
 // CogniCoach accounts: sign in on any device and keep your profile in sync.
 //
 // Loaded on every page by scripts/nav.js. Talks to the cognicoach-accounts Cloudflare Worker
-// (workers/accounts). What syncs: your profile (cognicoach-profile), your session history
-// (cognicoach-history) and dashboard settings (cognicoach-dashboard). Nothing else leaves the browser.
+// (workers/accounts). What syncs: your profile, session history, dashboard settings, Competition Mode
+// notes and saved 3D animations. Anything gathered before signing in is added to the account.
 //
 // Passwords never leave this browser: they are stretched here with PBKDF2-SHA256 (600k rounds) and
 // only the derived key is sent (the server hashes it again with a random salt).
@@ -23,7 +23,9 @@
 
     var SESSION_KEY = 'cognicoach-account';
     var META_KEY = 'cognicoach-sync-meta';
-    var SYNC_KEYS = { 'cognicoach-profile': 'profile', 'cognicoach-history': 'history', 'cognicoach-dashboard': 'dashboard' };
+    var SYNC_KEYS = { 'cognicoach-profile': 'profile', 'cognicoach-history': 'history', 'cognicoach-dashboard': 'dashboard',
+        'cognicoach-competition-notes': 'competition', 'cognicoach-motion-saved': 'animations' };
+    var MAX_DOC_CHARS = 240000;   // the server accepts 256 KB per account
     var PUSH_DELAY = 2500;
     var PULL_EVERY = 60000;
 
@@ -66,8 +68,33 @@
         return {
             profile: readJSON('cognicoach-profile', null), profileAt: m.profileAt || 0,
             history: readJSON('cognicoach-history', []), historyAt: m.historyAt || 0,
-            dashboard: readJSON('cognicoach-dashboard', null), dashboardAt: m.dashboardAt || 0
+            dashboard: readJSON('cognicoach-dashboard', null), dashboardAt: m.dashboardAt || 0,
+            competition: readJSON('cognicoach-competition-notes', {}),
+            animations: readJSON('cognicoach-motion-saved', {})
         };
+    }
+
+    // per-key maps: keep each entry's newest version
+    function mergeMap(x, y, stamp) {
+        var out = {};
+        [x || {}, y || {}].forEach(function (src) {
+            Object.keys(src).forEach(function (k) {
+                var v = src[k];
+                if (!v || typeof v !== 'object') { return; }
+                if (!out[k] || stamp(v) > stamp(out[k])) { out[k] = v; }
+            });
+        });
+        return out;
+    }
+    function noteTime(v) { var t = new Date(v.updatedAt || 0).getTime(); return isNaN(t) ? 0 : t; }
+    function animTime(v) { return Number(v.savedAt) || 0; }
+
+    // keep the synced document under the server's size limit: drop the oldest saved animations first
+    function fitSize(doc) {
+        var anims = doc.animations || {};
+        var ids = Object.keys(anims).sort(function (a, b) { return animTime(anims[b]) - animTime(anims[a]); });
+        while (JSON.stringify(doc).length > MAX_DOC_CHARS && ids.length) { delete anims[ids.pop()]; }
+        return doc;
     }
 
     function historyKey(r) { return (r && r.date || '') + '|' + (r && r.sport || ''); }
@@ -91,8 +118,12 @@
             if (!seen[k]) { seen[k] = 1; hist.push(r); }
         });
         hist.sort(function (r1, r2) { return new Date(r1.date) - new Date(r2.date); });
-        return { profile: p[0], profileAt: p[1], dashboard: d[0], dashboardAt: d[1], history: hist,
-            historyAt: Math.max(a.historyAt || 0, b.historyAt || 0) };
+        var anims = mergeMap(a.animations, b.animations, animTime);
+        var ids = Object.keys(anims).sort(function (i, j) { return animTime(anims[j]) - animTime(anims[i]); });
+        ids.slice(40).forEach(function (id) { delete anims[id]; });
+        return fitSize({ profile: p[0], profileAt: p[1], dashboard: d[0], dashboardAt: d[1], history: hist,
+            historyAt: Math.max(a.historyAt || 0, b.historyAt || 0),
+            competition: mergeMap(a.competition, b.competition, noteTime), animations: anims });
     }
 
     function sameDoc(x, y) { return JSON.stringify(x) === JSON.stringify(y); }
@@ -104,6 +135,8 @@
             if (doc.profile) { writeRaw('cognicoach-profile', JSON.stringify(doc.profile)); }
             if (Array.isArray(doc.history)) { writeRaw('cognicoach-history', JSON.stringify(doc.history)); }
             if (doc.dashboard) { writeRaw('cognicoach-dashboard', JSON.stringify(doc.dashboard)); }
+            if (doc.competition && Object.keys(doc.competition).length) { writeRaw('cognicoach-competition-notes', JSON.stringify(doc.competition)); }
+            if (doc.animations && Object.keys(doc.animations).length) { writeRaw('cognicoach-motion-saved', JSON.stringify(doc.animations)); }
             var m = meta();
             m.profileAt = doc.profileAt || m.profileAt || 0;
             m.historyAt = doc.historyAt || m.historyAt || 0;
@@ -203,15 +236,31 @@
         toast('You were signed out. Sign in again to keep syncing.', 'warn');
     }
 
+    // What this browser gathered while signed out (shown after sign-up / sign-in).
+    function localSummary() {
+        var d = localDoc();
+        var parts = [];
+        var n = Array.isArray(d.history) ? d.history.length : 0;
+        if (n) { parts.push(n + ' session' + (n === 1 ? '' : 's')); }
+        if (d.profile && d.profile.onboarded) { parts.push('your profile'); }
+        var c = Object.keys(d.competition || {}).length;
+        if (c) { parts.push('Competition notes for ' + c + ' sport' + (c === 1 ? '' : 's')); }
+        var a = Object.keys(d.animations || {}).length;
+        if (a) { parts.push(a + ' saved animation' + (a === 1 ? '' : 's')); }
+        if (!parts.length) { return ''; }
+        return parts.length === 1 ? parts[0] : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+    }
+
     async function signIn(mode, username, password) {
         username = String(username || '').trim().toLowerCase();
+        var gathered = localSummary();
         var key = await deriveKey(username, password);
         var res = await api(mode === 'signup' ? '/signup' : '/login', { method: 'POST', auth: false, body: { username: username, key: key } });
         saveSession({ username: res.username, token: res.token, version: 0, since: Date.now() });
         render();
         await syncNow();
         window.dispatchEvent(new CustomEvent('cognicoach:account', { detail: { signedIn: true, username: res.username } }));
-        return res.username;
+        return { username: res.username, gathered: gathered };
     }
 
     async function signOut() {
@@ -310,7 +359,7 @@
             '    <div class="acct-error" role="alert"></div>' +
             '    <button type="submit" class="btn btn-primary acct-submit"><span class="label"></span><span class="acct-spin" aria-hidden="true"></span></button>' +
             '  </form>' +
-            (isPw ? '' : '  <p class="acct-note">Syncs your profile, training history and dashboard across devices. Your password is scrambled on this device before it is sent.</p>') +
+            (isPw ? '' : '  <p class="acct-note">Syncs your profile, training history, dashboard, Competition notes and saved animations. Anything you did before signing up is added to your account. Your password is scrambled on this device before it is sent.</p>') +
             '</div>';
         document.body.appendChild(wrap);
         requestAnimationFrame(function () { wrap.classList.add('show'); });
@@ -382,10 +431,15 @@
                 closeModal();
                 toast('Password updated. Other devices were signed out.', 'ok');
             } else {
-                var name = await signIn(tab, user, pw);
+                var r = await signIn(tab, user, pw);
                 closeModal();
-                toast(tab === 'signup' ? 'Account created - welcome, ' + name + '! Your training now syncs.' :
-                    'Welcome back, ' + name + '. Your profile is synced.', 'ok');
+                if (tab === 'signup') {
+                    toast('Account created - welcome, ' + r.username + '! ' +
+                        (r.gathered ? 'Added to your account from this device: ' + r.gathered + '.' : 'Your training will sync from now on.'), 'ok');
+                } else {
+                    toast('Welcome back, ' + r.username + '. ' +
+                        (r.gathered ? 'Merged into your account from this device: ' + r.gathered + '.' : 'Your profile is synced.'), 'ok');
+                }
             }
         } catch (e) {
             err.textContent = e.message || 'Something went wrong.';
