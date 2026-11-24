@@ -8,6 +8,14 @@ const muscleCheckboxIds = [
 // Global drills list: array of strings in the form "drillname + description"
 window.globalDrillsList = [];
 
+// Session events for the read-aloud, mobile timer dock and screen-reader helpers
+// (scripts/read-aloud.js, scripts/session-dock.js). Fire-and-forget: nothing here depends on a listener.
+function emitSessionEvent(name, detail) {
+    try { document.dispatchEvent(new CustomEvent('cognicoach:' + name, { detail: detail || {} })); } catch (e) {}
+}
+// Set when the user asked for the next drill, so its title gets keyboard/screen-reader focus once it shows.
+let focusDrillOnRender = false;
+
 function updateGlobalDrillsList(drillData) {
     if (!drillData) return;
     const name = drillData.name || drillData.Name || 'Drill';
@@ -720,6 +728,7 @@ async function startSession() {
     document.getElementById('marketingIntro').classList.add('hidden');
 
     // Load first drill
+    focusDrillOnRender = true;
     loadCurrentDrill();
     saveState();
 }
@@ -767,6 +776,7 @@ function prefetchDrill(index) {
 async function loadCurrentDrill() {
     const drill = appState.session.drills[appState.session.currentDrillIndex];
     
+    emitSessionEvent('drill-loading', { index: appState.session.currentDrillIndex });
     // Show loading
     document.getElementById('loadingContainer').classList.add('active');
     document.getElementById('drillContent').classList.add('hidden');
@@ -1089,6 +1099,23 @@ function renderDrill(drill, drillData) {
     // Add this drill to the global drills list (name + description)
     updateGlobalDrillsList(drillData);
     prepareTimer(drill.drillTime);
+
+    if (focusDrillOnRender) {
+        focusDrillOnRender = false;
+        const title = document.getElementById('drillName');
+        if (title) {
+            title.setAttribute('tabindex', '-1');
+            title.focus({ preventScroll: true });
+            const card = title.closest('.card');
+            if (card) card.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        }
+    }
+    emitSessionEvent('drill-rendered', {
+        index: appState.session.currentDrillIndex,
+        total: appState.session.drills.length,
+        seconds: drill.drillTime,
+        drill: drillData
+    });
 }
 
 
@@ -1211,12 +1238,16 @@ function syncMuscleSelectionState(id) {
     const isAiSelected = input.dataset.aiSelected === 'true';
     const isManualSelected = input.dataset.manualSelected === 'true';
 
-    input.checked = isAiSelected;
-    input.disabled = isAiSelected;
+    // Checked = shown as worked (by the AI pick or the user's own pick). The checkbox is visually hidden but
+    // keyboard-focusable, so screen reader and keyboard users can toggle muscles too.
+    input.checked = isAiSelected || isManualSelected;
+    input.disabled = false;
 
     if (label) {
         label.classList.toggle('ai-selected', isAiSelected);
         label.classList.toggle('manual-selected', isManualSelected);
+        const name = label.dataset.muscleName || (label.dataset.muscleName = label.textContent.trim());
+        input.setAttribute('aria-label', name + (isAiSelected ? ', worked by this drill' : ''));
     }
 
     if (svgGroup) {
@@ -1258,6 +1289,7 @@ function prepareTimer(seconds) {
     if (skipBtnEl) skipBtnEl.style.display = 'inline-block';
     document.getElementById('pauseBtn').textContent = 'Pause';
     document.getElementById('pauseBtn').disabled = true;
+    document.getElementById('pauseBtn').setAttribute('aria-pressed', 'false');
     document.getElementById('timerStatus').textContent = 'Drill loaded. Start when you are ready.';
 
     updateTimerDisplay();
@@ -1284,12 +1316,14 @@ function startTimer() {
     document.getElementById('timerStatus').textContent = 'Timer is running.';
 
     updateTimerDisplay();
+    emitSessionEvent('timer', { state: 'running', remaining: appState.session.timeRemaining, total: appState.session.totalTime });
 
     appState.session.timerInterval = setInterval(() => {
         if (!appState.session.isPaused) {
             appState.session.timeRemaining--;
 
             updateTimerDisplay();
+            emitSessionEvent('timer', { state: 'tick', remaining: appState.session.timeRemaining, total: appState.session.totalTime });
 
             if (appState.session.timeRemaining <= 0) {
                 clearInterval(appState.session.timerInterval);
@@ -1427,9 +1461,11 @@ function togglePause() {
 
     appState.session.isPaused = !appState.session.isPaused;
     document.getElementById('pauseBtn').textContent = appState.session.isPaused ? 'Resume' : 'Pause';
+    document.getElementById('pauseBtn').setAttribute('aria-pressed', appState.session.isPaused ? 'true' : 'false');
     document.getElementById('timerStatus').textContent = appState.session.isPaused
         ? 'Timer paused.'
         : 'Timer is running.';
+    emitSessionEvent('timer', { state: appState.session.isPaused ? 'paused' : 'running', remaining: appState.session.timeRemaining, total: appState.session.totalTime });
     saveState();
 }
 
@@ -1444,10 +1480,12 @@ function drillComplete() {
     if (skipBtnEl) skipBtnEl.style.display = 'none';
     document.getElementById('nextDrillContainer').style.display = 'block';
     saveState();
+    emitSessionEvent('timer', { state: 'complete', remaining: 0, total: appState.session.totalTime });
 }
 
 // Next drill
 function nextDrill() {
+    focusDrillOnRender = true;
     appState.session.currentDrillIndex++;
 
     if (appState.session.currentDrillIndex >= appState.session.drills.length) {
@@ -1467,6 +1505,9 @@ function sessionComplete() {
     logSessionToHistory(true);
     document.getElementById('drillContent').classList.add('hidden');
     document.getElementById('sessionComplete').classList.remove('hidden');
+    emitSessionEvent('session-end', { completed: true });
+    const doneTitle = document.querySelector('#sessionComplete .drill-name');
+    if (doneTitle) { doneTitle.setAttribute('tabindex', '-1'); doneTitle.focus(); }
 }
 
 // End session early
@@ -1512,6 +1553,7 @@ function logSessionToHistory(completed) {
 
 // Return to setup
 function returnToSetup() {
+    emitSessionEvent('session-end', { completed: false });
     // Reset session
     appState.session = {
         currentDrillIndex: 0,
@@ -1601,10 +1643,15 @@ function initializeMuscleDiagramInteractions() {
         });
     });
 
+    const svgHost = document.getElementById('muscleSvgHost');
+    if (svgHost) svgHost.setAttribute('aria-hidden', 'true');   // the labels above carry the same info
     document.querySelectorAll('.muscle-groups label[for]').forEach(function(label) {
         label.addEventListener('click', function(event) {
             event.preventDefault();
             toggleManualMuscle(label.htmlFor);
         });
+        // keyboard (Space on the focused checkbox)
+        const box = document.getElementById(label.htmlFor);
+        if (box) box.addEventListener('change', function() { toggleManualMuscle(label.htmlFor); });
     });
 }

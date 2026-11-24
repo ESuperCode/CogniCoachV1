@@ -34,6 +34,7 @@
     <link href="styles/profile.css" rel="stylesheet">
     <link href="styles/motion-viewer.css" rel="stylesheet">
     <link href="styles/session-timeline.css" rel="stylesheet">
+    <link href="styles/read-aloud.css" rel="stylesheet">
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -119,7 +120,7 @@
     </div>
 
     <!-- Main Container -->
-    <div class="container">
+    <main class="container" id="main" tabindex="-1">
         <!-- Header -->
         <header>
             <div class="logo-container">
@@ -167,7 +168,7 @@
             <div class="card quick-start-card" id="quickStartCard">
                 <div class="quick-start-header">
                     <h2 class="card-title" style="margin-bottom: 6px;">Quick Start</h2>
-                    <button type="button" class="btn-chip" id="openSettingsBtn" title="Advanced Settings">&#9881; Settings</button>
+                    <button type="button" class="btn-chip" id="openSettingsBtn" title="Advanced Settings"><span aria-hidden="true">&#9881;</span> Settings</button>
                 </div>
                 <p class="quick-start-sub">Your saved preferences fill in the rest.</p>
 
@@ -284,7 +285,7 @@
         <!-- Session View -->
         <div id="sessionView" class="session-container">
             <!-- Loading -->
-            <div id="loadingContainer" class="loading-container">
+            <div id="loadingContainer" class="loading-container" role="status" aria-live="polite">
                 <div class="loading-spinner"></div>
                 <div class="loading-text">Generating your optimal drill...</div>
             </div>
@@ -335,14 +336,14 @@
 
                     <!-- Timer -->
                     <div class="timer-container">
-                        <div class="timer-display" id="timerDisplay">00:00</div>
+                        <div class="timer-display" id="timerDisplay" role="timer">00:00</div>
                         <div class="timer-progress">
                             <div class="timer-progress-bar" id="timerProgressBar" style="width: 0%;"></div>
                         </div>
-                        <div class="timer-status" id="timerStatus">Drill loaded. Start when you're ready.</div>
+                        <div class="timer-status" id="timerStatus" role="status" aria-live="polite">Drill loaded. Start when you're ready.</div>
                         <div class="flex-center">
                             <button class="btn btn-primary" id="startTimerBtn" onclick="startTimer()">Start When Ready</button>
-                            <button class="btn btn-secondary" id="pauseBtn" onclick="togglePause()" disabled>Pause</button>
+                            <button class="btn btn-secondary" id="pauseBtn" onclick="togglePause()" aria-pressed="false" disabled>Pause</button>
                             <button class="btn btn-danger" onclick="endSessionEarly()">End Session Early</button>
                         </div>
                     </div>
@@ -364,7 +365,7 @@
                 </div>
             </div>
         </div>
-    </div>    
+    </main>    
 <script src="scripts/nav.js"></script>
 <script src="scripts/profile.js"></script>
 <script src="scripts/sport-normalize.js"></script>
@@ -377,5 +378,7 @@
 <script src="scripts/script.js"></script>
 <script src="scripts/motion-viewer.js"></script>
 <script src="scripts/session-timeline.js"></script>
+<script src="scripts/read-aloud.js"></script>
+<script src="scripts/session-dock.js"></script>
 </body>
 </html>

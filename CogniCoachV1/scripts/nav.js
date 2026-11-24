@@ -10,11 +10,25 @@
 // current page's filename.
 // ==========================================================================
 
+// Display preferences (scripts/a11y.js) go on <html> right away so the page doesn't flash.
+(function applyA11yPrefsEarly() {
+    try {
+        const p = JSON.parse(localStorage.getItem('cognicoach-a11y') || '{}') || {};
+        const h = document.documentElement;
+        if (p.textSize === 'large') h.classList.add('a11y-text-lg');
+        if (p.textSize === 'xlarge') h.classList.add('a11y-text-xl');
+        if (p.contrast) h.classList.add('a11y-contrast');
+        if (p.easyRead) h.classList.add('a11y-easy-read');
+        const osReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (p.motion === 'reduce' || ((!p.motion || p.motion === 'auto') && osReduce)) h.classList.add('a11y-reduce-motion');
+    } catch (e) {}
+})();
+
 const NAV_LINKS = [
     { href: 'index.html', label: 'CogniCoach', brand: true },
     { href: 'dashboard.html', label: 'Dashboard' },
-    { href: 'competition.html', label: 'Competition' },
-    { href: 'about.html', label: 'About Us' },
+    { href: 'competition.html', label: 'Competition', short: 'Compete' },
+    { href: 'about.html', label: 'About Us', short: 'About' },
     { href: 'contact.html', label: 'Contact' }
 ];
 
@@ -27,7 +41,7 @@ class SiteNav extends HTMLElement {
             const logo = link.brand
                 ? `<img src="logo.png" alt="" class="site-nav-logo" onerror="this.style.display='none'">`
                 : '';
-            return `<a href="${link.href}" class="${classes}"${link.brand ? ` aria-label="${link.label}"` : ''}>${logo}<span class="site-nav-text">${link.label}</span></a>`;
+            return `<a href="${link.href}" class="${classes}"${link.brand ? ` aria-label="${link.label}"` : ''}>${logo}<span class="site-nav-text">${link.short ? `<span class="nav-full">${link.label}</span><span class="nav-short">${link.short}</span>` : link.label}</span></a>`;
         }).join('') + '<div class="nav-account" id="navAccount"></div>';
 
         this.highlightCurrentPage();
@@ -79,6 +93,7 @@ class SiteNav extends HTMLElement {
 // app page, the first-visit tour. Loaded from here so no page has to list them.
 function loadSiteExtras() {
     const extras = [
+        { css: 'styles/a11y.css', js: 'scripts/a11y.js' },
         { css: 'styles/brand3d.css', js: 'scripts/brand3d.js' },
         { css: 'styles/account.css', js: 'scripts/account.js' },
         { css: 'styles/tour.css', js: 'scripts/tour.js' }

@@ -55,6 +55,8 @@
           text: 'Pick muscle groups, set your level, or drag drills into your own warm-up, main work and cool-down timeline.' },
         { demo: 'enter', target: '#drillContent .drill-display', title: 'Inside a session',
           text: "Here's a sample drill. Each one tells you exactly what to do and what it focuses on." },
+        { demo: true, target: '#drillContent .ra-bar', title: 'Hear it instead',
+          text: 'Read aloud speaks the drill and highlights each sentence, so you can keep your eyes on the ball. The Aa button at the top sets text size, contrast, voice and speed.' },
         { demo: true, target: '#sessionTimeline', title: 'Your whole session',
           text: 'Your timeline from warm-up to cool-down: finished drills get a check, the one you are on fills up as its timer runs, and All drills lists everything ahead.' },
         { demo: true, target: '#drillContent .muscle-groups', title: 'Muscles worked',
