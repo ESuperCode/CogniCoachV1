@@ -48,8 +48,17 @@
 .st-seg.next { opacity: 0.75; }
 .st-seg.current {
     border-color: var(--c);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent), 0 0 14px color-mix(in srgb, var(--c) 55%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent);
+}
+.st-seg.current::after {   /* pulsing glow: opacity only, so the GPU animates it without repainting */
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 8px;
+    box-shadow: 0 0 16px color-mix(in srgb, var(--c) 65%, transparent);
     animation: stGlow 1.8s ease-in-out infinite;
+    pointer-events: none;
+    will-change: opacity;
 }
 .st-seg.current .st-fill {
     background: linear-gradient(90deg, var(--c), color-mix(in srgb, var(--c) 70%, #fff));
@@ -104,8 +113,7 @@
 .st-sec { font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--text-white); white-space: nowrap; }
 .st-time { font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--text-gray); white-space: nowrap; min-width: 48px; text-align: right; }
 
-@keyframes stGlow { 0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 30%, transparent), 0 0 10px color-mix(in srgb, var(--c) 40%, transparent); }
-    50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 45%, transparent), 0 0 18px color-mix(in srgb, var(--c) 65%, transparent); } }
+@keyframes stGlow { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 @keyframes stBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
 
 @media (max-width: 640px) {
@@ -118,4 +126,4 @@
     .st-list li { grid-template-columns: 26px minmax(0, 1fr) auto; }
     .st-list li .st-sec { display: none; }
 }
-@media (prefers-reduced-motion: reduce) { .st-seg.current, .st-here { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .st-seg.current::after, .st-here { animation: none; } }

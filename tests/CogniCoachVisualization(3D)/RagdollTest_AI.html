@@ -199,7 +199,11 @@
       </div>
       <div id="motion-status">Unity is loading. Then type a movement and press Generate AI Motion.</div>
     </div>
-    <script src="worker/dist/motion-compiler.js"></script>
+    <script>
+      // The standalone test page compiles on the main thread; the embedded viewer uses a Web Worker
+      // (worker/dist/compile-worker.js) so compiling never stalls the 3D frame.
+      if (!window.COGNICOACH_EMBED) { document.write('<script src="worker/dist/motion-compiler.js"><\/script>'); }
+    </script>
     <script>
       
       // Motion service location. Override with ?api=https://your-server or window.COGNICOACH_MOTION_API.
@@ -273,6 +277,49 @@
       }
 
       // Frames are compiled in this browser by the same compiler the Worker uses (worker/dist/motion-compiler.js).
+      var compileWorker = null, compileSeq = 0, compileWaiting = {};
+      function compileInWorker(plan, side) {
+        return new Promise(function(resolve, reject) {
+          try {
+            if (!compileWorker) {
+              compileWorker = new Worker("worker/dist/compile-worker.js");
+              compileWorker.onmessage = function(e) {
+                var d = e.data || {}, w = compileWaiting[d.id];
+                if (!w) { return; }
+                delete compileWaiting[d.id];
+                if (d.ok) { w.resolve(d.payload); } else { w.reject(new Error(d.error)); }
+              };
+              compileWorker.onerror = function(e) {
+                Object.keys(compileWaiting).forEach(function(k) { compileWaiting[k].reject(new Error("compile worker failed")); });
+                compileWaiting = {};
+                compileWorker = null;
+                e.preventDefault && e.preventDefault();
+              };
+            }
+            var id = ++compileSeq;
+            compileWaiting[id] = { resolve: resolve, reject: reject };
+            compileWorker.postMessage({ id: id, plan: plan, side: side });
+          } catch (error) { reject(error); }
+        });
+      }
+      function loadCompilerScript() {
+        return new Promise(function(resolve, reject) {
+          if (window.CogniCoachMotion) { resolve(); return; }
+          var tag = document.createElement("script");
+          tag.src = "worker/dist/motion-compiler.js";
+          tag.onload = resolve;
+          tag.onerror = function() { reject(new Error("The motion compiler did not load.")); };
+          document.head.appendChild(tag);
+        });
+      }
+      async function compileMotionPlanAsync(plan, side) {
+        if (window.Worker) {
+          try { return await compileInWorker(plan, side); } catch (error) { console.warn("Worker compile failed, compiling here:", error); }
+        }
+        await loadCompilerScript();
+        return compileMotionPlan(plan, side);
+      }
+
       function compileMotionPlan(plan, side) {
         if (!window.CogniCoachMotion) {
           throw new Error("The motion compiler (worker/dist/motion-compiler.js) did not load.");
@@ -640,6 +687,7 @@
       }
 
       function updateFrameControls() {
+        if (window.COGNICOACH_EMBED) { return; }   // panel is hidden in the embed: skip the DOM work
         var controls = getFrameInputElements();
         var totalFrames = motionFrames.length;
         controls.slider.max = Math.max(0, totalFrames - 1);
@@ -658,7 +706,7 @@
         applyRootOffset(Number(motionFrames[currentFrameIndex].rooty) || 0);
         sendUnityMessage("WebBridge", "UpdateMotion", relativityCalculation(frame));
         updateFrameControls();
-        embedPost("progress", { position: currentFrameIndex, total: motionFrames.length, playing: !!motionAnimationId });
+        embedProgress(currentFrameIndex, true);
       }
 
       function sendInterpolatedFrame(amount) {
@@ -677,7 +725,7 @@
         applyRootOffset(rootA + (rootB - rootA) * amount);
         sendUnityMessage("WebBridge", "UpdateMotion", relativityCalculation(frame));
         updateFrameControls();
-        embedPost("progress", { position: currentFrameIndex + amount, total: motionFrames.length, playing: !!motionAnimationId });
+        embedProgress(currentFrameIndex + amount, false);
       }
 
       function getPlaybackBlendAmount(now, fps) {
@@ -974,11 +1022,38 @@
         for (var k in (data || {})) { msg[k] = data[k]; }
         try { window.parent.postMessage(msg, window.location.origin); } catch (error) {}
       }
+      var lastProgressPost = 0;
+      function embedProgress(position, force) {
+        if (!window.COGNICOACH_EMBED) { return; }
+        var now = performance.now();
+        if (!force && now - lastProgressPost < 100) { return; }
+        lastProgressPost = now;
+        embedPost("progress", { position: position, total: motionFrames.length, playing: !!motionAnimationId });
+      }
+
+      // Off screen / tab hidden: stop Unity's render loop entirely (no GPU work), resume when visible.
+      var embedVisible = true, wasPlayingBeforeHide = false;
+      function setEmbedVisible(visible) {
+        if (visible === embedVisible) { return; }
+        embedVisible = visible;
+        var mod = unityMotionInstance && unityMotionInstance.Module;
+        if (!visible) {
+          wasPlayingBeforeHide = !!motionAnimationId;
+          if (motionAnimationId) { stopMotionLoop(); }
+          try { if (mod && mod.pauseMainLoop) { mod.pauseMainLoop(); } } catch (e) {}
+        } else {
+          try { if (mod && mod.resumeMainLoop) { mod.resumeMainLoop(); } } catch (e) {}
+          if (wasPlayingBeforeHide && motionFrames.length) { startMotionLoop(); }
+        }
+      }
+
       var embedLastPlan = null;
       var embedRequestId = 0;
 
-      function embedPlay(plan, side) {
-        var payload = compileMotionPlan(plan, side);
+      async function embedPlay(plan, side) {
+        var id = embedRequestId;
+        var payload = await compileMotionPlanAsync(plan, side);
+        if (id !== embedRequestId) { return; }   // a newer request arrived while compiling
         var controls = getFrameInputElements();
         if (controls.sideInput) { controls.sideInput.value = side; }
         playGeneratedMotion(payload);
@@ -1004,7 +1079,7 @@
           if (!response.ok) { throw new Error(plan.detail || ("Motion service error (HTTP " + response.status + ").")); }
           if (id !== embedRequestId) { return; }
           embedLastPlan = plan;
-          embedPlay(plan, side);
+          await embedPlay(plan, side);
         } catch (error) {
           if (id !== embedRequestId) { return; }
           var msg = error && error.name === "TypeError" && /fetch|network|load/i.test(error.message || "")
@@ -1032,8 +1107,8 @@
             // A saved animation (the host keeps plans in localStorage): compile and play, no model call.
             embedRequestId++;
             embedLastPlan = m.plan;
-            try { embedPlay(m.plan, m.side === "left" ? "left" : "right"); }
-            catch (error) { embedPost("error", { message: error.message || String(error) }); }
+            embedPlay(m.plan, m.side === "left" ? "left" : "right")
+              .catch(function(error) { embedPost("error", { message: error.message || String(error) }); });
           }
           else if (m.type === "play") { if (motionFrames.length) { startMotionLoop(); } }
           else if (m.type === "pause") { stopMotionLoop(); embedSeek(currentFrameIndex); }
@@ -1044,8 +1119,10 @@
             resendCurrentPose();
           }
           else if (m.type === "view") { setCameraView(m.name); }
+          else if (m.type === "visibility") { setEmbedVisible(!!m.visible); }
           else if (m.type === "side" && embedLastPlan) {
-            try { embedPlay(embedLastPlan, m.side === "left" ? "left" : "right"); } catch (error) { embedPost("error", { message: error.message }); }
+            embedRequestId++;
+            embedPlay(embedLastPlan, m.side === "left" ? "left" : "right").catch(function(error) { embedPost("error", { message: error.message }); });
           }
         });
         embedPost("loaded", {});
@@ -1184,6 +1261,8 @@
 
 
       } else if (window.COGNICOACH_EMBED) {
+        // Rendering at a 2-3x device pixel ratio quadruples the GPU work for little visible gain here.
+        config.devicePixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
         // Embedded: the canvas fills the iframe (sized by the host page).
       } else {
         // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:

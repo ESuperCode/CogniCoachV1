@@ -673,3 +673,34 @@
 @media (prefers-reduced-motion: reduce) {
     .mc-scene *, .motion-loader-bar span::after { animation: none !important; }
 }
+
+/* ------------------------------------------------------------------------------------------
+   Performance mode while the 3D viewer is on screen (html.motion-live, set by motion-viewer.js).
+   The page keeps its look, but nothing behind the 3D canvas changes every frame: the animated
+   background is frozen, frosted-glass blurs (which re-blur whatever moves underneath them) become
+   solid surfaces, and the drill card no longer lifts on hover.
+   ------------------------------------------------------------------------------------------ */
+html.motion-live .animated-bg,
+html.motion-live .animated-bg *,
+html.motion-live .animated-bg::before,
+html.motion-live .animated-bg::after {
+    animation-play-state: paused !important;
+    transition: none !important;
+}
+html.motion-live .card,
+html.motion-live .site-nav {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+html.motion-live .card { background: var(--surface-strong, #fff); }
+html.motion-live .site-nav { background: rgba(20, 26, 38, 0.94); }
+html.motion-live #drillContent .card,
+html.motion-live #drillContent .card:hover { transform: none !important; transition: none !important; }
+#drillContent .card:hover { transform: none; }   /* the drill card holds the 3D view: never lift it */
+.motion-stage { contain: layout paint; }
+.motion-title { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(0, 0, 0, 0.6); }
+
+/* the loader's animations only run while it is showing */
+.motion-viewer:not([data-mode="loading"]) .motion-loader,
+.motion-viewer:not([data-mode="loading"]) .motion-loader * { animation-play-state: paused !important; }
+.motion-viewer[data-mode="ready"] .motion-loader { visibility: hidden; }

@@ -96,8 +96,20 @@
         frame.contentWindow.postMessage(msg, window.location.origin);
     }
 
+    // Performance: while the 3D viewer is on screen the page switches to a light mode
+    // (html.motion-live: no animated background / glass blur), and the viewer's render loop
+    // is paused whenever it is scrolled away or the tab is hidden.
+    var onScreen = false;
+    function updateLive() {
+        var mode = root.getAttribute('data-mode');
+        var live = onScreen && !document.hidden && (mode === 'loading' || mode === 'ready');
+        document.documentElement.classList.toggle('motion-live', live);
+        if (frame) { post('visibility', { visible: onScreen && !document.hidden }); }
+    }
+
     function setMode(mode) {
         root.setAttribute('data-mode', mode);
+        updateLive();
     }
 
     function startLoadingSteps() {
@@ -402,6 +414,13 @@
             e.preventDefault();
         });
         window.addEventListener('message', onMessage);
+        if ('IntersectionObserver' in window) {
+            new IntersectionObserver(function (entries) {
+                onScreen = entries[0].isIntersecting;
+                updateLive();
+            }, { threshold: 0.05 }).observe(stage);
+        } else { onScreen = true; }
+        document.addEventListener('visibilitychange', updateLive);
 
         var desc = document.getElementById('drillDescription');
         var name = document.getElementById('drillName');

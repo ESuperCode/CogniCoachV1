@@ -257,8 +257,16 @@ function initializeInteractiveBackground() {
         root.style.setProperty('--bg-scale', bgScale);
     };
 
+    // At most one update per frame, and none while the 3D viewer plays (each update restyles the
+    // whole page; see html.motion-live in styles/motion-viewer.css).
+    let pointerRaf = 0, lastPointer = null;
     window.addEventListener('pointermove', event => {
-        updatePointer(event.clientX, event.clientY);
+        lastPointer = event;
+        if (pointerRaf || root.classList.contains('motion-live')) return;
+        pointerRaf = requestAnimationFrame(() => {
+            pointerRaf = 0;
+            if (lastPointer) updatePointer(lastPointer.clientX, lastPointer.clientY);
+        });
     }, { passive: true });
 }
 // Update slider display

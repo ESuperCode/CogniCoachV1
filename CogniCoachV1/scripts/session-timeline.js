@@ -102,11 +102,26 @@
         root.querySelector('.st-toggle').onclick = function () { expanded = !expanded; render(); };
     }
 
-    // cheap re-render on every timer tick: only rebuild when something visible changed
+    // Every second: a full rebuild only when the drill list / current drill / names change;
+    // otherwise just move the current drill's fill and the clock (no layout churn).
+    function liveNumbers(st) {
+        var drills = st.drills, cur = Math.min(st.index, drills.length - 1);
+        var curLen = drills[cur].drillTime || 0;
+        var curLeft = st.started && typeof st.remaining === 'number' ? st.remaining : curLen;
+        var left = curLeft + drills.slice(cur + 1).reduce(function (s, d) { return s + (d.drillTime || 0); }, 0);
+        return { pct: curLen ? Math.max(0, Math.min(100, 100 * (1 - curLeft / curLen))) : 0, left: left };
+    }
     function tick() {
         var st = state();
-        var sig = st ? [st.drills.length, st.index, st.remaining, st.started, st.drills.map(function (d) { return d.generatedDrill ? 1 : 0; }).join('')].join('|') : '';
-        if (sig !== lastSig) { lastSig = sig; render(); }
+        var sig = st ? [st.drills.length, st.index, st.drills.map(function (d) { return d.generatedDrill ? 1 : 0; }).join('')].join('|') : '';
+        if (sig !== lastSig || !root || !root.firstChild) { lastSig = sig; render(); return; }
+        if (!st || !st.drills.length) { return; }
+        var n = liveNumbers(st);
+        var fill = root.querySelector('.st-seg.current .st-fill');
+        if (fill) { fill.style.width = n.pct.toFixed(1) + '%'; }
+        var left = root.querySelector('.st-left');
+        var text = mmss(n.left) + ' left in session';
+        if (left && left.textContent !== text) { left.textContent = text; }
     }
 
     function init() {
