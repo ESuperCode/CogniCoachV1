@@ -235,10 +235,11 @@
             '<div class="motion-head">' +
             '  <div><h2 class="motion-heading">3D Motion Preview</h2>' +
             '  <p class="motion-sub">See this drill performed by a 3D athlete.</p></div>' +
+            '  <div class="motion-side-wrap"><span class="motion-side-label">Hand</span>' +
             '  <div class="motion-side" role="group" aria-label="Dominant hand">' +
             '    <button type="button" data-side="right" class="active">Right</button>' +
             '    <button type="button" data-side="left">Left</button>' +
-            '  </div>' +
+            '  </div></div>' +
             '</div>' +
             '<div class="motion-stage" tabindex="0" aria-label="3D animation. Use the arrow keys to turn the athlete.">' +
             '  <div class="motion-idle">' +
@@ -273,7 +274,7 @@
             '<div class="motion-help">' +
             '  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> turn the athlete</span>' +
             '  <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> tilt the view</span>' +
-            '  <span class="motion-help-note">Click the animation first</span>' +
+            '  <span class="motion-help-note">Click the animation, then use the arrow keys</span>' +
             '</div>' +
             '<ul class="motion-cues" hidden></ul>';
 

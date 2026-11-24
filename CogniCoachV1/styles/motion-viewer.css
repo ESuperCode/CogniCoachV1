@@ -39,6 +39,21 @@
     color: var(--text-gray);
 }
 
+.motion-side-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.motion-side-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.68rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-gray);
+}
+
 .motion-side {
     display: inline-flex;
     padding: 3px;
@@ -72,7 +87,8 @@
 .motion-stage {
     position: relative;
     width: 100%;
-    aspect-ratio: 16 / 10;
+    aspect-ratio: 16 / 9;
+    max-height: 68vh;
     border-radius: 16px;
     overflow: hidden;
     background:
@@ -85,6 +101,12 @@
     box-shadow: 0 14px 40px rgba(30, 50, 80, 0.12);
     outline: none;
     isolation: isolate;
+}
+
+.motion-viewer[data-mode="idle"] .motion-stage,
+.motion-viewer[data-mode="error"] .motion-stage {
+    aspect-ratio: auto;
+    height: 300px;
 }
 
 .motion-stage:focus-visible {
@@ -255,16 +277,16 @@
 
 /* Controls: play/pause, smooth scrubber, time, regenerate */
 .motion-controls {
-    display: flex;
+    display: none;
     align-items: center;
     gap: 14px;
     margin-top: 14px;
-    opacity: 0.35;
-    pointer-events: none;
-    transition: opacity 0.3s ease;
+    animation: motionFadeUp 0.45s ease-out;
 }
 
-.motion-viewer[data-mode="ready"] .motion-controls { opacity: 1; pointer-events: auto; }
+.motion-viewer[data-mode="ready"] .motion-controls { display: flex; }
+
+@keyframes motionFadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 .motion-play, .motion-regen {
     flex-shrink: 0;
@@ -422,9 +444,18 @@
     .motion-viewer { padding: 14px; margin-top: 28px; }
     .motion-head { flex-direction: column; align-items: flex-start; gap: 10px; }
     .motion-stage { aspect-ratio: 4 / 3.4; }
+    .motion-viewer[data-mode="idle"] .motion-stage,
+    .motion-viewer[data-mode="error"] .motion-stage { height: 250px; }
     .motion-help-note { margin-left: 0; width: 100%; }
-    .motion-time { min-width: 80px; font-size: 0.75rem; }
+    .motion-viewer[data-mode="ready"] .motion-controls { flex-wrap: wrap; row-gap: 12px; }
+    .motion-scrubber { order: -1; flex: 1 1 100%; height: 10px; }
+    .motion-time { min-width: 0; flex: 1; text-align: center; font-size: 0.8rem; }
     .motion-idle .motion-generate { padding: 14px 24px; font-size: 0.85rem; }
+}
+
+/* Touch screens have no arrow keys */
+@media (hover: none) and (pointer: coarse) {
+    .motion-help { display: none !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

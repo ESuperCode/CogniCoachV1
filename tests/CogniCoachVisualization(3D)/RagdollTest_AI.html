@@ -1006,7 +1006,11 @@
           embedLastPlan = plan;
           embedPlay(plan, side);
         } catch (error) {
-          if (id === embedRequestId) { embedPost("error", { message: error.message || String(error) }); }
+          if (id !== embedRequestId) { return; }
+          var msg = error && error.name === "TypeError" && /fetch|network|load/i.test(error.message || "")
+            ? "Couldn't reach the animation service. Check your connection and try again."
+            : (error.message || String(error));
+          embedPost("error", { message: msg });
         }
       }
 
