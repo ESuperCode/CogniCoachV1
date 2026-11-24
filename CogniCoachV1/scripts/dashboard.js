@@ -399,9 +399,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('exportDataBtn').addEventListener('click', () => {
+        let profile = null;
+        try { profile = JSON.parse(localStorage.getItem('cognicoach-profile') || 'null'); } catch (e) { profile = null; }
         const data = {
             history: loadHistory(),
-            settings: loadDashboardSettings()
+            settings: loadDashboardSettings(),
+            profile
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);

@@ -27,10 +27,11 @@ class SiteNav extends HTMLElement {
             const logo = link.brand
                 ? `<img src="logo.png" alt="" class="site-nav-logo" onerror="this.style.display='none'">`
                 : '';
-            return `<a href="${link.href}" class="${classes}">${logo}${link.label}</a>`;
-        }).join('');
+            return `<a href="${link.href}" class="${classes}"${link.brand ? ` aria-label="${link.label}"` : ''}>${logo}<span class="site-nav-text">${link.label}</span></a>`;
+        }).join('') + '<div class="nav-account" id="navAccount"></div>';
 
         this.highlightCurrentPage();
+        loadSiteExtras();
         this.wireScrollBehavior();
     }
 
@@ -72,6 +73,29 @@ class SiteNav extends HTMLElement {
             }
         }, { passive: true });
     }
+}
+
+// Site-wide extras that every page with the nav gets: accounts (sign-in + profile sync) and, on the
+// app page, the first-visit tour. Loaded from here so no page has to list them.
+function loadSiteExtras() {
+    const extras = [
+        { css: 'styles/account.css', js: 'scripts/account.js' },
+        { css: 'styles/tour.css', js: 'scripts/tour.js' }
+    ];
+    extras.forEach(({ css, js }) => {
+        if (!document.querySelector(`link[href="${css}"]`)) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = css;
+            document.head.appendChild(link);
+        }
+        if (!document.querySelector(`script[src="${js}"]`)) {
+            const script = document.createElement('script');
+            script.src = js;
+            script.defer = true;
+            document.head.appendChild(script);
+        }
+    });
 }
 
 customElements.define('site-nav', SiteNav);

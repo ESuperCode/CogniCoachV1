@@ -7,7 +7,9 @@
 
     var VIEWER_PATH = '/tests/CogniCoachVisualization(3D)/RagdollTest_AI.html';
     var MAX_PROMPT = 2000;
-    var SPLASH_MS = 3200;   // the Unity build shows its "Made with Unity" splash right after it starts
+    var SPLASH_MS = 3200;
+    var SAVED_KEY = 'cognicoach-motion-saved';   // drill -> generated plan, so a reload shows it again
+    var SAVED_MAX = 40;   // the Unity build shows its "Made with Unity" splash right after it starts
     var LOADING_STEPS = [
         'Reading the drill',
         'Breaking it into movements',
@@ -44,6 +46,33 @@
         var title = (name || '').trim();
         var out = title && !/^(drill|loading\.*)$/i.test(title) ? 'Drill: ' + title + '. ' + body : body;
         return out.slice(0, MAX_PROMPT);
+    }
+
+    function drillId(drill) {
+        var text = (drill.name || '') + '|' + textFromHtml(drill.html);
+        var h = 5381;
+        for (var i = 0; i < text.length; i++) { h = ((h << 5) + h + text.charCodeAt(i)) | 0; }
+        return 'd' + (h >>> 0).toString(36) + '-' + text.length;
+    }
+
+    function readSaved() {
+        try { return JSON.parse(localStorage.getItem(SAVED_KEY) || '{}') || {}; } catch (e) { return {}; }
+    }
+
+    function savePlan(drill, plan, side) {
+        if (!plan || !plan.script) { return; }
+        try {
+            var all = readSaved();
+            all[drillId(drill)] = { plan: plan, side: side, savedAt: Date.now() };
+            var ids = Object.keys(all).sort(function (a, b) { return all[b].savedAt - all[a].savedAt; });
+            ids.slice(SAVED_MAX).forEach(function (id) { delete all[id]; });
+            localStorage.setItem(SAVED_KEY, JSON.stringify(all));
+        } catch (e) { /* storage full or blocked: the animation still plays */ }
+    }
+
+    function savedFor(drill) {
+        var entry = readSaved()[drillId(drill)];
+        return entry && entry.plan && entry.plan.script ? entry : null;
     }
 
     function currentDrill() {
@@ -115,14 +144,37 @@
         startLoadingSteps();
         updateLoaderBar();
         ensureFrame();
-        state.pending = { description: description, side: state.side };
+        state.activeDrill = drill;
+        state.pending = { type: 'generate', data: { description: description, side: state.side } };
+        if (state.loaded) { flushPending(); }
+    }
+
+    // Show the animation saved for this drill (after a reload): compile + play, no model call.
+    function restore(drill, entry) {
+        state.generating = true;
+        state.hasAnimation = false;
+        state.activeDrill = drill;
+        if (entry.side && entry.side !== state.side) { setSide(entry.side); }
+        setMode('loading');
+        startLoadingSteps();
+        loaderStep.textContent = 'Loading your saved animation';
+        updateLoaderBar();
+        ensureFrame();
+        state.pending = { type: 'play-plan', data: { plan: entry.plan, side: state.side } };
         if (state.loaded) { flushPending(); }
     }
 
     function flushPending() {
         if (!state.pending) { return; }
-        post('generate', state.pending);
+        post(state.pending.type, state.pending.data);
         state.pending = null;
+    }
+
+    function setSide(side) {
+        state.side = side;
+        if (sideToggle) {
+            sideToggle.querySelectorAll('button').forEach(function (x) { x.classList.toggle('active', x.getAttribute('data-side') === side); });
+        }
     }
 
     function showError(message) {
@@ -148,6 +200,7 @@
     }
 
     function onReady(m) {
+        if (m.plan && state.activeDrill) { savePlan(state.activeDrill, m.plan, m.side || state.side); }
         clearInterval(state.stepTimer);
         state.generating = false;
         state.hasAnimation = true;
@@ -226,7 +279,10 @@
         state.drillKey = key;
         if (state.hasAnimation) { post('pause'); }
         state.hasAnimation = false;
-        setMode('idle');
+        if (!drill.name || /^loading/i.test(drill.name.trim()) || !textFromHtml(drill.html) ||
+            /^loading/i.test(textFromHtml(drill.html))) { setMode('idle'); return; }
+        var saved = savedFor(drill);
+        if (saved) { restore(drill, saved); } else { setMode('idle'); }
     }
 
     function rotate(key) {
@@ -332,9 +388,12 @@
         sideToggle.addEventListener('click', function (e) {
             var b = e.target.closest('button[data-side]');
             if (!b || b.getAttribute('data-side') === state.side) { return; }
-            state.side = b.getAttribute('data-side');
-            sideToggle.querySelectorAll('button').forEach(function (x) { x.classList.toggle('active', x === b); });
-            if (state.hasAnimation) { post('side', { side: state.side }); }
+            setSide(b.getAttribute('data-side'));
+            if (state.hasAnimation) {
+                post('side', { side: state.side });
+                var saved = state.activeDrill && savedFor(state.activeDrill);
+                if (saved) { savePlan(state.activeDrill, saved.plan, state.side); }
+            }
         });
         // Arrow keys while the preview has focus (the iframe handles them itself once clicked).
         root.addEventListener('keydown', function (e) {
@@ -350,6 +409,9 @@
         [desc, name].forEach(function (el) {
             if (el) { observer.observe(el, { childList: true, characterData: true, subtree: true }); }
         });
+        // A drill restored before this script ran (page reload mid-session)
+        var content = document.getElementById('drillContent');
+        if (content && !content.classList.contains('hidden')) { onDrillChanged(); }
     }
 
     window.CogniMotionViewer = { motionTextFor: motionTextFor, generate: generate };

@@ -1,0 +1,21 @@
+# CogniCoach accounts Worker (free plan: SQLite-backed Durable Objects, no paid features).
+# Secret (optional): DEV_CODE - lets other origins / tools call the API with the header X-Dev-Code.
+name = "cognicoach-accounts"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+workers_dev = true
+preview_urls = false
+
+[vars]
+ALLOWED_ORIGINS = "https://cognicoachai.com,https://www.cognicoachai.com"
+
+[[durable_objects.bindings]]
+name = "USERS"
+class_name = "UserAccount"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["UserAccount"]
+
+[observability]
+enabled = true

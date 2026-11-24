@@ -2246,7 +2246,92 @@ def _compile_script(script: str, side: str) -> Dict[str, Any]:
 
 
 SCRIPT_EFFORT = os.getenv("MOTION_SCRIPT_EFFORT", "minimal")   # minimal: ~3-5 s per request
-SCRIPT_TIMEOUT = float(os.getenv("MOTION_SCRIPT_TIMEOUT", "9"))  # seconds before the local fallback
+SCRIPT_TIMEOUT = float(os.getenv("MOTION_SCRIPT_TIMEOUT", "10"))  # whole request (distill + script) before the local fallback
+DISTILL_TIMEOUT = 4.5
+
+# Call 1 (drill descriptions only): description -> the plain sequence of body movements to animate
+# (same prompt as worker/src/engine.js). Form cues like "arm swing" otherwise became separate motions.
+DISTILL_SCHEMA = _obj({
+    "title": {"type": "string"},
+    "sport": {"type": "string"},
+    "movements": {"type": "array", "items": {"type": "string"}},
+})
+
+DISTILL_INSTRUCTIONS = """You prepare a sports drill description for a 3D animation. Return the plain physical movements the
+athlete's whole body performs, in order, for ONE representative repetition.
+
+- title: the drill's name in 2-6 words. sport: the sport or activity (e.g. "track sprinting", "swimming").
+- movements: 1-6 short steps (2-8 words), each a distinct whole-body movement in simple generic words,
+  e.g. "crouch in a sprint start", "drive out into a sprint", "swim front crawl", "jog back".
+- REMOVE everything that is not a separate movement: form and technique detail (hip drive, arm swing,
+  knee drive, early vertical forearm, wrist snap, elbows at 90 degrees, trunk bracing, rotation,
+  posture, staying tall, breathing, quick feet, soft landing), effort and intensity (brisk, powerful,
+  explosive, non-max, controlled), rest, recovery and transitions, distances, laps, sets, reps, rounds,
+  times, stations, setup, equipment, partners, and why the drill helps.
+- Arm actions that belong to a movement (the arm swing of a run or an approach, a follow-through) are
+  part of that movement, never their own step. Phases that differ only in emphasis are ONE step.
+- Keep specific skills the description names (A-skips, a crossover dribble, a jump shot, a spike, a
+  crow hop) in their sport's words.
+- If the drill names stations or segments without saying what they are, show its core movement once
+  (e.g. a sprint warm-up: a sprint start into an acceleration and an upright sprint); never invent
+  unrelated exercises."""
+
+
+def needs_distill(text: str) -> bool:
+    """Long or multi-sentence requests are drill descriptions and go through the distill call first."""
+    return len(re.findall(r"[A-Za-z]+", text)) > 18 or len(re.findall(r"[.!?](\s|$)", text)) > 1
+
+
+def distill_drill(movement: str, timeout: float) -> Dict[str, Any]:
+    out, meta = _call_model(DISTILL_INSTRUCTIONS, movement.strip(), SCRIPT_EFFORT, DISTILL_SCHEMA, name="drill_movements",
+                            max_tokens=800, timeout=timeout)
+    moves = [str(m).strip() for m in out.get("movements", []) if str(m).strip()][:6]
+    if not moves:
+        raise ValueError("no movements")
+    sport = str(out.get("sport", "")).strip()
+    return {"text": (sport + ": " if sport else "") + ", then ".join(moves), "title": str(out.get("title", "")).strip(),
+            "movements": moves, "meta": meta}
+
+
+def tidy_model_script(script: str) -> str:
+    """Model scripts sometimes copy the plan's full counts: the clip shows one rep and loops."""
+    script = re.sub(r"\btimes\s*=\s*(\d+)", lambda m: "times=3" if int(m.group(1)) > 3 else m.group(0), script)
+    script = re.sub(r"\bhold\s*=\s*(\d+(?:\.\d+)?)", lambda m: "hold=1.5" if float(m.group(1)) > 1.5 else m.group(0), script)
+    return re.sub(r"(\s[x*]\s*)(\d+)\s*$", lambda m: m.group(1) + "2" if int(m.group(2)) > 2 else m.group(0), script, flags=re.M)
+
+
+# Motions that only make sense in one context (picked by a shared word otherwise); kept only when the
+# request calls for that context. Same rules as worker/src/engine.js contextFilter.
+CONTEXT_MOTIONS = {
+    "arm_swings": (r"\barm (swings?|circles?)\b|\bwarm.?up\b.*\barms?\b", lambda t: None),
+    "crow_pose": (r"\byoga\b|\bcrow pose\b", lambda t: "stride_step" if re.search(r"\bcrow.?hop", t) else None),
+    "chest_trap": (r"\bchest (trap|control)|\btrap\b.*\bchest\b|\bchest\b.*\b(soccer|football)\b", lambda t: None),
+    "guard": (r"\b(box|boxing|fight|fighting|kickbox|martial|mma|muay|karate|taekwondo|guard)\b", lambda t: None),
+    "high_v": (r"\bcheer|\bhigh v\b", lambda t: None),
+}
+
+
+def context_filter(script: str, request_text: str) -> str:
+    text = request_text.lower()
+    out = []
+    for line in script.split("\n"):
+        m = re.search(r"\s+[x*]\s*\d+\s*$", line)
+        tail = m.group(0) if m else ""
+        body = line[: len(line) - len(tail)] if tail else line
+        items = [x.strip() for x in body.split("+") if x.strip()]
+        names = [(lambda mm: mm.group(1) if mm else "")(re.match(r"([a-z_][a-z0-9_]*)", it)) for it in items]
+        kept = []
+        for it, name in zip(items, names):
+            rule = CONTEXT_MOTIONS.get(name)
+            if not rule or re.search(rule[0], text):
+                kept.append(it)
+                continue
+            rep = rule[1](text)
+            if rep and rep not in names:
+                kept.append(rep)
+        if kept or not items:
+            out.append(" + ".join(kept) + tail if kept else line)
+    return "\n".join(out)
 
 
 def _words(text: str) -> List[str]:
@@ -2324,8 +2409,20 @@ def plan_script(movement: str, extra: str = "") -> Tuple[Dict[str, Any], List[Di
     local = local_script(movement)
     if local and local.get("exact") and not extra.strip():
         return local, [{"stage": "local", "seconds": round(time.time() - t0, 2), "script": local["script"]}]
-    request = f"Request: {movement.strip()}" + (f"\nNotes: {extra.strip()}" if extra.strip() else "")
-    hints = relevant_recipes(movement + " " + extra)
+    calls: List[Dict[str, Any]] = []
+    subject, distilled = movement.strip(), None
+    if needs_distill(subject):
+        try:
+            distilled = distill_drill(subject, DISTILL_TIMEOUT)
+            subject = distilled["text"]
+            calls.append({"stage": "distill", **distilled["meta"], "movements": distilled["movements"]})
+        except HTTPException:
+            raise
+        except Exception as exc:
+            calls.append({"stage": "distill-skipped", "seconds": round(time.time() - t0, 1),
+                          "reason": f"{type(exc).__name__}: {str(exc)[:80]}"})
+    request = f"Request: {subject}" + (f"\nNotes: {extra.strip()}" if extra.strip() else "")
+    hints = relevant_recipes(subject + " " + extra)
     if hints:
         request += "\n\nMost relevant recipes for this request (adapt them):\n" + "\n".join(hints)
     last_exc: Optional[Exception] = None
@@ -2334,10 +2431,13 @@ def plan_script(movement: str, extra: str = "") -> Tuple[Dict[str, Any], List[Di
         if attempt and budget < 4.0:
             break   # not enough time left for a second try: answer locally
         try:
-            raw, meta = _call_model(script_instructions(movement + " " + extra), request, SCRIPT_EFFORT, SCRIPT_SCHEMA, name="motion_script",
+            raw, meta = _call_model(script_instructions(subject + " " + extra), request, SCRIPT_EFFORT, SCRIPT_SCHEMA, name="motion_script",
                                     max_tokens=3000, timeout=budget)
-            _compile_script(raw.get("script", ""), "right")   # lenient: only fails if nothing usable is left
-            return raw, [{"stage": "script" if not attempt else "script-retry", **meta, "script": raw.get("script")}]
+            raw["script"] = context_filter(tidy_model_script(raw.get("script", "")), movement + " " + subject + " " + extra)
+            _compile_script(raw["script"], "right")   # lenient: only fails if nothing usable is left
+            if distilled and distilled["title"]:
+                raw["title"] = distilled["title"]
+            return raw, [{"stage": "script" if not attempt else "script-retry", **meta, "script": raw.get("script")}] + calls
         except HTTPException:
             raise
         except Exception as exc:  # transient API error / timeout / unusable script
@@ -2347,7 +2447,7 @@ def plan_script(movement: str, extra: str = "") -> Tuple[Dict[str, Any], List[Di
         fallback = local or {"canonical_name": "stance", "steps": [], "title": movement.strip()[:60], "coaching_cues": [],
                              "camera_view": "three_quarter", "script": "stance(depth=0.3) + ready_arms"}
         return fallback, [{"stage": "local-fallback", "seconds": round(time.time() - t0, 1),
-                           "reason": f"{type(exc).__name__}: {str(exc)[:120]}", "script": fallback["script"]}]
+                           "reason": f"{type(exc).__name__}: {str(exc)[:120]}", "script": fallback["script"]}] + calls
 
 
 def script_response(raw: Dict[str, Any], side: str, calls: List[Dict[str, Any]], cached: bool) -> Dict[str, Any]:

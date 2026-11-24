@@ -985,7 +985,7 @@
         embedPost("ready", {
           title: payload.title, cues: payload.coaching_cues || [], frames: payload.frames.length,
           fps: payload.playback_fps, duration: payload.duration_seconds, script: payload.script,
-          timing: payload.timing || {}, side: side, loop: payload.loop
+          timing: payload.timing || {}, side: side, loop: payload.loop, plan: plan
         });
       }
 
@@ -1028,6 +1028,13 @@
           var m = event.data || {};
           if (m.target !== "cognicoach-motion") { return; }
           if (m.type === "generate") { embedGenerate(m.description, m.side === "left" ? "left" : "right"); }
+          else if (m.type === "play-plan" && m.plan && m.plan.script) {
+            // A saved animation (the host keeps plans in localStorage): compile and play, no model call.
+            embedRequestId++;
+            embedLastPlan = m.plan;
+            try { embedPlay(m.plan, m.side === "left" ? "left" : "right"); }
+            catch (error) { embedPost("error", { message: error.message || String(error) }); }
+          }
           else if (m.type === "play") { if (motionFrames.length) { startMotionLoop(); } }
           else if (m.type === "pause") { stopMotionLoop(); embedSeek(currentFrameIndex); }
           else if (m.type === "seek") { embedSeek(m.position); }

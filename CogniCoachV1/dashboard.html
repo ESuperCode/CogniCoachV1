@@ -77,6 +77,13 @@
                 </div>
             </div>
 
+            <!-- Athlete level + personal records (scripts/dashboard-plus.js) -->
+            <div class="card dash-card dash-span-4 level-card" id="levelCard"></div>
+            <div class="card dash-card dash-span-8">
+                <h2 class="card-title">Personal Records</h2>
+                <div class="records-grid" id="recordsGrid"></div>
+            </div>
+
             <!-- Streak calendar -->
             <div class="card dash-card dash-span-8">
                 <h2 class="card-title">Streak Calendar</h2>
@@ -106,6 +113,25 @@
                 <div class="goal-progress-text" id="goalProgressText">0 of 3 sessions this week.</div>
             </div>
 
+            <!-- Weekly minutes + training mix -->
+            <div class="card dash-card dash-span-8">
+                <div class="dash-card-header">
+                    <h2 class="card-title" style="margin-bottom:0;">Minutes Per Week</h2>
+                    <span class="stat-label">Last 10 weeks</span>
+                </div>
+                <div class="chart-box" id="weeklyChart"></div>
+            </div>
+            <div class="card dash-card dash-span-4">
+                <div class="dash-card-header">
+                    <h2 class="card-title" style="margin-bottom:0;">Training Mix</h2>
+                    <div class="seg" role="group" aria-label="Group by">
+                        <button type="button" data-mix="sport" class="active">Sport</button>
+                        <button type="button" data-mix="focus">Focus</button>
+                    </div>
+                </div>
+                <div class="mix-list" id="mixChart"></div>
+            </div>
+
             <!-- Badges -->
             <div class="card dash-card dash-span-12">
                 <div class="dash-card-header">
@@ -119,6 +145,15 @@
             <div class="card dash-card dash-span-12">
                 <h2 class="card-title">Recommended For You</h2>
                 <div class="recommend-grid" id="recommendGrid"></div>
+            </div>
+
+            <!-- Recent sessions -->
+            <div class="card dash-card dash-span-12">
+                <div class="dash-card-header">
+                    <h2 class="card-title" style="margin-bottom:0;">Recent Sessions</h2>
+                    <select id="sessionsFilter" class="dash-select" aria-label="Filter by sport"></select>
+                </div>
+                <div class="sessions-scroll" id="sessionsTable"></div>
             </div>
 
             <!-- Competition Mode entry point -->
@@ -136,14 +171,14 @@
                 No sessions logged yet. Complete a workout in the app and it'll show up here — streak, stats, and all.
             </div>
 
-            <!-- Data management -->
-            <div class="card dash-card dash-span-12 text-center">
-                <h2 class="card-title">Your Data</h2>
-                <p class="text-muted" style="color: var(--text-gray); font-size: 0.8rem; margin-bottom: 12px;">
-                    All dashboard data lives in this browser's local storage — nothing is sent to a server.
-                </p>
-                <div class="danger-row">
+            <!-- Account & data -->
+            <div class="card dash-card dash-span-12">
+                <h2 class="card-title">Account &amp; Data</h2>
+                <div id="accountCardBody"></div>
+                <div class="danger-row" style="margin-top:16px;">
                     <button class="btn btn-secondary" id="exportDataBtn">Export Data</button>
+                    <button class="btn btn-secondary" id="importDataBtn" type="button">Import Data</button>
+                    <input type="file" id="importDataInput" accept="application/json,.json" hidden>
                     <button class="btn btn-danger" id="clearHistoryBtn">Clear History</button>
                 </div>
             </div>
@@ -154,5 +189,6 @@
     <script src="scripts/nav.js"></script>
     <script src="scripts/profile.js"></script>
     <script src="scripts/dashboard.js"></script>
+    <script src="scripts/dashboard-plus.js"></script>
 </body>
 </html>

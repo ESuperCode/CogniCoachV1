@@ -89,3 +89,19 @@ body {
         height: 16px;
     }
 }
+/* Phones: the account chip joins the row - keep everything on one line. */
+.site-nav-link { white-space: nowrap; }
+
+@media (max-width: 640px) {
+    .site-nav { gap: 0; padding: 10px 4px; }
+    .site-nav-link { padding: 7px 6px; font-size: 0.7rem; letter-spacing: 0; }
+    .site-nav-brand .site-nav-text { display: none; }
+    .site-nav-brand { padding: 6px 6px; }
+    .site-nav-brand .site-nav-logo { width: 22px; height: 22px; }
+    .site-nav .nav-account { margin-left: 0; }
+}
+
+@media (max-width: 380px) {
+    .site-nav-link { padding: 6px 3px; font-size: 0.62rem; }
+    .site-nav .nav-account-btn { padding: 4px; }
+}
