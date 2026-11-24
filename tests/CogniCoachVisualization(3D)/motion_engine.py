@@ -1950,7 +1950,7 @@ def cache_put(key: str, plan: Dict[str, Any]) -> None:
 # -----------------------------------------------------------------------------
 
 class GenerateRequest(BaseModel):
-    movement: str = Field(min_length=3, max_length=400)
+    movement: str = Field(min_length=3, max_length=2000)
     duration_seconds: Optional[float] = Field(default=None, ge=0.6, le=8.0,
                                               description="Omit/null to let the planner choose a realistic duration.")
     playback_fps: int = Field(default=DEFAULT_FPS, ge=6, le=60)
@@ -2118,6 +2118,17 @@ THE MOTION LANGUAGE
   a pose from a different activity (no plank before swimming, no stance before a swim stroke).
 - Use the fewest motions that show the request; usually 1-5 lines and under 8 seconds. For a drill
   that is not in the catalog, chain catalog motions that match its steps.
+- Requests are often full drill descriptions from a training plan (distances, laps, sets, reps, rest,
+  setup, coaching emphasis, why the drill helps). Animate ONE representative repetition: each distinct
+  phase once, in the order described, with small counts (times=1-3). Never write out the full laps,
+  sets, reps or rounds, never add rest or recovery holds over 1 second, never repeat the whole
+  sequence (the viewer loops the clip) and skip equipment setup, partners and the reasons it helps.
+  At most 8 lines and about 10 seconds.
+- Phases that differ only in coaching emphasis ("focus on the catch", then "focus on breathing") are
+  the same motion: show that motion once, not once per emphasis.
+- Match the described action exactly: a swimming push-off from the wall is streamline + a kick (not
+  start_dive, which is a dive from the blocks); a crow hop before a throw is stride_step then
+  overhand_throw; a volleyball approach is stride_step lines then jump + the arm swing.
 
 Syntax examples:
 stance(width=wide, depth=0.5) + ready_arms

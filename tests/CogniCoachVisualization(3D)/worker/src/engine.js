@@ -148,6 +148,17 @@ THE MOTION LANGUAGE
   a pose from a different activity (no plank before swimming, no stance before a swim stroke).
 - Use the fewest motions that show the request; usually 1-5 lines and under 8 seconds. For a drill
   that is not in the catalog, chain catalog motions that match its steps.
+- Requests are often full drill descriptions from a training plan (distances, laps, sets, reps, rest,
+  setup, coaching emphasis, why the drill helps). Animate ONE representative repetition: each distinct
+  phase once, in the order described, with small counts (times=1-3). Never write out the full laps,
+  sets, reps or rounds, never add rest or recovery holds over 1 second, never repeat the whole
+  sequence (the viewer loops the clip) and skip equipment setup, partners and the reasons it helps.
+  At most 8 lines and about 10 seconds.
+- Phases that differ only in coaching emphasis ("focus on the catch", then "focus on breathing") are
+  the same motion: show that motion once, not once per emphasis.
+- Match the described action exactly: a swimming push-off from the wall is streamline + a kick (not
+  start_dive, which is a dive from the blocks); a crow hop before a throw is stride_step then
+  overhand_throw; a volleyball approach is stride_step lines then jump + the arm swing.
 
 Syntax examples:
 stance(width=wide, depth=0.5) + ready_arms
@@ -281,6 +292,15 @@ export async function callModel(env, instructions, input, { effort, schema, name
   }
 }
 
+// Model scripts for long drill descriptions sometimes copy the plan's full counts (push_up(times=10),
+// "x10", hold=30): the clip shows one representative rep and loops, so counts and holds are capped.
+export function tidyModelScript(script) {
+  return script
+    .replace(/\btimes\s*=\s*(\d+)/g, (m, n) => (Number(n) > 3 ? "times=3" : m))
+    .replace(/\bhold\s*=\s*(\d+(?:\.\d+)?)/g, (m, n) => (Number(n) > 1.5 ? "hold=1.5" : m))
+    .replace(/(\s[x*]\s*)(\d+)\s*$/gm, (m, x, n) => (Number(n) > 2 ? `${x}2` : m));
+}
+
 const SCRIPT_EFFORT = "minimal";
 const SCRIPT_TIMEOUT_S = 9;
 
@@ -304,7 +324,8 @@ export async function planScript(env, movement, extra = "") {
       const [raw, meta] = await callModel(env, scriptInstructions(movement + " " + extra), request, {
         effort: SCRIPT_EFFORT, schema: SCRIPT_SCHEMA, name: "motion_script", maxTokens: 3000, timeoutMs: budget * 1000,
       });
-      compileScript(raw.script || "", { validateOnly: true });   // lenient: only fails if nothing usable is left
+      raw.script = tidyModelScript(raw.script || "");
+      compileScript(raw.script, { validateOnly: true });   // lenient: only fails if nothing usable is left
       return [raw, [{ stage: attempt ? "script-retry" : "script", ...meta, script: raw.script }]];
     } catch (exc) {
       if (exc.status === 503) throw exc;
