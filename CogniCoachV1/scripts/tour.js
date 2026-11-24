@@ -161,42 +161,28 @@
     }
 
     // ------------------------------------------------------------------ welcome card (setup form)
-    function sportOptions(selected) {
-        var list = typeof PROFILE_SPORTS !== 'undefined' ? PROFILE_SPORTS :
-            ['Basketball', 'Soccer', 'Tennis', 'Football', 'Baseball', 'Volleyball', 'Swimming', 'Cricket', 'Rugby', 'Golf'];
-        return '<option value="">Choose your sport</option>' + list.map(function (s) {
-            return '<option value="' + esc(s) + '"' + (s === selected ? ' selected' : '') + '>' + esc(s) + '</option>';
-        }).join('') + '<option value="__other__">Other / not listed</option>';
-    }
 
+    // The welcome card: create an account (its form asks for main sport + date of birth),
+    // continue with Google, sign in - or just take the tour.
     function welcomeBody() {
-        var p = profile();
         var signedIn = window.CogniAccount && window.CogniAccount.session();
-        if (!needsSetup) {
+        if (signedIn) {
             return '<h2 class="tour-title" id="tourTitle">Welcome to CogniCoachAI</h2>' +
                 '<p class="tour-text">Your AI coach builds a full training session around your sport, your space and your time. Take a quick look around?</p>';
         }
         return '<h2 class="tour-title" id="tourTitle">Welcome to CogniCoachAI</h2>' +
-            '<p class="tour-text">Two quick questions so your first workout fits you - change them any time.</p>' +
-            '<form class="tour-form" novalidate>' +
-            '  <label class="tour-field"><span>Main sport</span><select name="sport">' + sportOptions(p.defaultSport || '') + '</select></label>' +
-            '  <input class="tour-other" name="sportOther" placeholder="Enter your sport" hidden>' +
-            '  <label class="tour-field"><span>Date of birth <em>(optional)</em></span><input type="date" name="dob"></label>' +
-            '  <p class="tour-hint">Only used to suggest a starting level.</p>' +
-            '</form>' +
-            (signedIn ? '' :
-            '<div class="tour-signin">' +
-            '  <span class="tour-or">Already training with us?</span>' +
-            '  <div class="tour-signin-row"><button type="button" class="tour-chip" data-t="signin">Sign in</button>' +
-            '  <div class="tour-google" id="tourGoogle"></div></div>' +
-            '</div>');
+            '<p class="tour-text">Your AI coach builds a full training session around your sport, your space and your time.</p>' +
+            '<div class="tour-join">' +
+            '  <button type="button" class="tour-create" data-t="create">Create free account</button>' +
+            '  <div class="tour-google" id="tourGoogle"></div>' +
+            '  <p class="tour-have">Already have an account? <button type="button" class="tour-link" data-t="signin">Sign in</button></p>' +
+            '</div>';
     }
 
+    // Taking the tour without an account still counts as finishing the first-run setup
+    // (the sport can be picked on Quick Start any time).
     function saveWelcome() {
-        var f = card.querySelector('.tour-form');
-        if (!f) { return; }
-        var sport = f.sport.value === '__other__' ? f.sportOther.value.trim() : f.sport.value;
-        if (typeof completeOnboarding === 'function') { completeOnboarding(sport, f.dob.value); }
+        if (needsSetup && typeof completeOnboarding === 'function' && !profile().onboarded) { completeOnboarding('', ''); }
         needsSetup = false;
     }
 
@@ -232,13 +218,8 @@
             if (t === 'next') { next(); }
             else if (t === 'back') { go(idx - 1); }
             else if (t === 'signin') { if (window.CogniAccount) { window.CogniAccount.open('login'); } }
+            else if (t === 'create') { if (window.CogniAccount) { window.CogniAccount.open('signup'); } }
             else { skip(); }
-        });
-        root.addEventListener('change', function (e) {
-            if (e.target.name === 'sport') {
-                var other = card.querySelector('.tour-other');
-                if (other) { other.hidden = e.target.value !== '__other__'; if (!other.hidden) { other.focus(); } }
-            }
         });
         document.addEventListener('keydown', onKey);
         window.addEventListener('resize', schedulePosition);
@@ -246,8 +227,8 @@
         window.addEventListener('cognicoach:account', function (e) {
             if (!active || !e.detail || !e.detail.signedIn) { return; }
             // signed in from the welcome card: their saved profile came with the account
-            if (profile().onboarded) { needsSetup = false; }
-            if (idx === 0) { go(0); }
+            needsSetup = false;
+            if (idx === 0) { go(1); }
         });
     }
 
@@ -309,25 +290,12 @@
 
     function next() {
         var step = steps()[idx];
-        if (step && step.id === 'welcome' && needsSetup) {
-            var f = card.querySelector('.tour-form');
-            if (f && !f.sport.value) {
-                f.sport.focus();
-                f.sport.classList.add('need');
-                setTimeout(function () { f.sport.classList.remove('need'); }, 1200);
-                return;
-            }
-            saveWelcome();
-        }
+        if (step && step.id === 'welcome') { saveWelcome(); }
         go(idx + 1);
     }
 
     function skip() {
-        if (needsSetup) {   // skipping the welcome still finishes the first-run setup
-            var f = card && card.querySelector('.tour-form');
-            if (f && f.sport.value) { saveWelcome(); }
-            else if (typeof completeOnboarding === 'function') { completeOnboarding('', ''); }
-        }
+        saveWelcome();   // skipping still finishes the first-run setup
         finish(true);
     }
 
@@ -345,7 +313,7 @@
         card.classList.add('enter');
         var hero = step.kind === 'hero';
         card.classList.toggle('hero', hero);
-        card.classList.toggle('with-form', step.id === 'welcome' && needsSetup);
+        card.classList.toggle('with-form', step.id === 'welcome' && !(window.CogniAccount && window.CogniAccount.session()));
         var body = card.querySelector('.tour-body');
         body.innerHTML = step.id === 'welcome' ? welcomeBody() :
             '<h2 class="tour-title" id="tourTitle">' + esc(step.title) + '</h2><p class="tour-text">' + esc(step.text) + '</p>';
@@ -357,9 +325,10 @@
         card.querySelector('.tour-step-num').textContent = hero ? '' : ('Step ' + idx + ' of ' + total);
         card.querySelector('.tour-dots').innerHTML = list.map(function (s, i) { return '<i class="' + (i === idx ? 'on' : i < idx ? 'done' : '') + '"></i>'; }).join('');
         card.querySelector('.tour-back').style.visibility = idx > 0 ? 'visible' : 'hidden';
-        card.querySelector('.tour-next').textContent = step.id === 'welcome' ? (needsSetup ? 'Start the tour' : "Let's go") :
+        var anon = !(window.CogniAccount && window.CogniAccount.session());
+        card.querySelector('.tour-next').textContent = step.id === 'welcome' ? (anon ? 'Take the tour' : "Let's go") :
             step.id === 'finale' ? 'Start training' : 'Next';
-        card.querySelector('.tour-skip').textContent = step.id === 'welcome' && needsSetup ? 'Skip the tour' : 'Skip tour';
+        card.querySelector('.tour-skip').textContent = 'Skip tour';
         card.querySelector('.tour-skip').style.visibility = step.id === 'finale' ? 'hidden' : 'visible';
 
         if (step.target) {
@@ -385,7 +354,7 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
             position();
         }
-        var focusEl = card.querySelector('.tour-form select') || card.querySelector('.tour-next');
+        var focusEl = card.querySelector('.tour-create') || card.querySelector('.tour-next');
         if (focusEl) { focusEl.focus({ preventScroll: true }); }
     }
 

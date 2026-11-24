@@ -432,6 +432,13 @@
             '      <button type="button" class="acct-eye" data-act="eye" aria-label="Show password"></button></div></label>' +
             '    <div class="acct-strength"><i></i><span></span></div>' +
             '    <label class="acct-field acct-confirm"><span>Confirm password</span><input name="confirm" type="password" autocomplete="new-password"></label>' +
+            (isPw ? '' :
+            '    <div class="acct-about">' +
+            '      <label class="acct-field"><span>Main sport</span><select name="sport">' + sportOptions(knownSport()) + '</select></label>' +
+            '      <input class="acct-other" name="sportOther" placeholder="Enter your sport" maxlength="40" hidden>' +
+            '      <label class="acct-field"><span>Date of birth <em>(optional)</em></span><input name="dob" type="date" value="' + esc(knownDob()) + '"></label>' +
+            '      <p class="acct-hint">Sets your starting level - change it any time.</p>' +
+            '    </div>') +
             '    <div class="acct-error" role="alert"></div>' +
             '    <button type="submit" class="btn btn-primary acct-submit"><span class="label"></span><span class="acct-spin" aria-hidden="true"></span></button>' +
             '  </form>' +
@@ -463,6 +470,16 @@
             }
         });
         wrap.querySelector('input[name="password"]').addEventListener('input', function (e) { strength(wrap, e.target.value); });
+        wrap.querySelector('form').addEventListener('input', function () { wrap.querySelector('.acct-error').textContent = ''; });
+        wrap.querySelector('form').addEventListener('change', function () { wrap.querySelector('.acct-error').textContent = ''; });
+        var sportSel = wrap.querySelector('select[name="sport"]');
+        if (sportSel) {
+            sportSel.addEventListener('change', function () {
+                var other = wrap.querySelector('.acct-other');
+                other.hidden = sportSel.value !== '__other__';
+                if (!other.hidden) { other.focus(); }
+            });
+        }
         wrap.querySelector('form').addEventListener('submit', function (e) { e.preventDefault(); submit(wrap); });
         wrap.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeModal(); } });
     }
@@ -494,6 +511,37 @@
         el.querySelector('span').textContent = pw ? ['Too short', 'Okay', 'Good', 'Strong', 'Excellent'][score] : '';
     }
 
+    // ---- first-run questions on the create-account form (main sport, date of birth)
+    var SPORTS = ['Basketball', 'Soccer', 'Tennis', 'Football', 'Baseball', 'Volleyball', 'Swimming', 'Cricket', 'Rugby', 'Golf'];
+    function knownSport() { var p = readJSON('cognicoach-profile', {}) || {}; return p.defaultSport || ''; }
+    function knownDob() { var p = readJSON('cognicoach-profile', {}) || {}; return p.dob || ''; }
+    function sportOptions(selected) {
+        var list = typeof PROFILE_SPORTS !== 'undefined' ? PROFILE_SPORTS : SPORTS;
+        var custom = selected && list.indexOf(selected) < 0;
+        return '<option value="">Choose your sport</option>' + list.map(function (sp) {
+            return '<option value="' + esc(sp) + '"' + (sp === selected ? ' selected' : '') + '>' + esc(sp) + '</option>';
+        }).join('') + (custom ? '<option value="' + esc(selected) + '" selected>' + esc(selected) + '</option>' : '') +
+            '<option value="__other__">Other / not listed</option>';
+    }
+    // same result as profile.js completeOnboarding(), which pages without profile.js don't have
+    function saveAbout(sport, dob) {
+        if (typeof completeOnboarding === 'function') { completeOnboarding(sport, dob); return; }
+        var p = readJSON('cognicoach-profile', null) || { sportProfiles: {}, totalSessions: 0, createdAt: new Date().toISOString() };
+        p.onboarded = true;
+        if (sport) {
+            p.defaultSport = sport;
+            p.sportProfiles = p.sportProfiles || {};
+            if (!p.sportProfiles[sport]) { p.sportProfiles[sport] = { location: {}, focus: {}, muscleGroup: {}, workoutLengths: [], levelOverride: null, sessions: 0 }; }
+        }
+        if (dob) {
+            p.dob = dob;
+            var d = new Date(dob), t = new Date();
+            var age = t.getFullYear() - d.getFullYear() - ((t.getMonth() < d.getMonth() || (t.getMonth() === d.getMonth() && t.getDate() < d.getDate())) ? 1 : 0);
+            p.age = age >= 0 && age < 130 ? age : null;
+        }
+        localStorage.setItem('cognicoach-profile', JSON.stringify(p));
+    }
+
     async function submit(wrap) {
         var tab = wrap.getAttribute('data-tab');
         var f = wrap.querySelector('form');
@@ -507,6 +555,11 @@
         }
         if (pw.length < 8) { err.textContent = 'Passwords need at least 8 characters.'; return; }
         if (tab !== 'login' && f.confirm.value !== pw) { err.textContent = "The passwords don't match."; return; }
+        var sportPick = '';
+        if (tab === 'signup') {
+            sportPick = f.sport.value === '__other__' ? f.sportOther.value.trim() : f.sport.value;
+            if (!sportPick) { err.textContent = 'Pick your main sport so your first workout fits you.'; f.sport.focus(); return; }
+        }
         btn.disabled = true;
         wrap.classList.add('busy');
         try {
@@ -515,6 +568,7 @@
                 closeModal();
                 toast('Password updated. Other devices were signed out.', 'ok');
             } else {
+                if (tab === 'signup') { saveAbout(sportPick, f.dob.value); }   // stored before the first sync
                 var r = await signIn(tab, user, pw);
                 closeModal();
                 if (tab === 'signup') {

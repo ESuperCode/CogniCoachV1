@@ -10,7 +10,7 @@ preview_urls = false
 ALLOWED_ORIGINS = "https://cognicoachai.com,https://www.cognicoachai.com"
 # Sign in with Google: the OAuth web client ID from Google Cloud Console (public, not a secret).
 # Empty = the Google button stays hidden.
-GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_ID = "755545304533-589e3fhd1g6rdltlranqhg1p579a0l83.apps.googleusercontent.com"
 
 [[durable_objects.bindings]]
 name = "USERS"
