@@ -125,3 +125,6 @@
     letter-spacing: 0.05em;
     margin: 4px 0 10px;
 }
+@media (min-width: 900px) {
+    .about-feature-grid { grid-template-columns: repeat(3, 1fr); }
+}

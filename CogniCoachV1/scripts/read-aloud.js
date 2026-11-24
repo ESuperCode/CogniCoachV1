@@ -319,6 +319,8 @@
         stop: stop,
         toggle: function () { speaking ? stop() : start(0); },
         isSpeaking: function () { return speaking; },
+        busy: function () { return speaking || !!(synth && synth.speaking); },
+        say: function (text, interrupt) { say(text, !!interrupt); },
         test: function () { stop(); say('This is how drills will sound. Keep your eyes up and stay low.', true); }
     };
 

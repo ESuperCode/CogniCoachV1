@@ -740,7 +740,7 @@ async function startSession() {
 const drillPrefetch = new Map();   // drills array index -> { drills, promise }
 
 function buildDrillRequest(drill) {
-    return {
+    const request = {
         sport: appState.setup.sport,
         focus: appState.setup.focus,
         "muscle group": appState.setup.muscleGroup,
@@ -749,6 +749,26 @@ function buildDrillRequest(drill) {
         section: drill.sectionName,
         location: appState.setup.location
     };
+    // Adaptive coach (scripts/coach-adapt.js): today's readiness and the athlete's
+    // "too easy / too hard" feedback nudge the intensity of drills not generated yet.
+    if (window.CogniCoachAdapt) {
+        try { return window.CogniCoachAdapt.adjustRequest(request, drill); } catch (e) {}
+    }
+    return request;
+}
+
+// Throw away the prepared next drill (if it hasn't been shown yet) and prepare it again,
+// e.g. after the athlete says the current one is too easy or too hard.
+function refreshUpcomingDrill() {
+    const index = appState.session.currentDrillIndex + 1;
+    const drill = appState.session.drills[index];
+    if (!drill) return;
+    const pending = drillPrefetch.get(index);
+    if (pending) pending.cancelled = true;
+    drillPrefetch.delete(index);
+    drill.generatedDrill = null;
+    saveState();
+    setTimeout(() => prefetchDrill(index), 200);
 }
 
 function prefetchDrill(index) {
@@ -757,6 +777,7 @@ function prefetchDrill(index) {
     if (!drill || drill.generatedDrill || drillPrefetch.has(index)) return;
     const entry = { drills, promise: null };
     entry.promise = getDrill(buildDrillRequest(drill)).then((data) => {
+        if (entry.cancelled) return data;
         // only keep it if this is still the same session
         if (appState.session.drills === drills && drills[index] && !drills[index].generatedDrill) {
             drills[index].generatedDrill = data;
@@ -782,21 +803,13 @@ async function loadCurrentDrill() {
     document.getElementById('drillContent').classList.add('hidden');
 
     // Prepare data for getDrill
-    const drillRequest = {
-        sport: appState.setup.sport,
-        focus: appState.setup.focus,
-        "muscle group": appState.setup.muscleGroup,
-        level: appState.setup.level,
-        "drill time": drill.drillTime,
-        section: drill.sectionName,
-        location:appState.setup.location
-    };
+    const drillRequest = buildDrillRequest(drill);
 
     try {
         const index = appState.session.currentDrillIndex;
         const pending = drillPrefetch.get(index);
         let prefetched = null;
-        if (!drill.generatedDrill && pending && pending.drills === appState.session.drills) {
+        if (!drill.generatedDrill && pending && !pending.cancelled && pending.drills === appState.session.drills) {
             prefetched = await pending.promise.catch(() => null);   // already on its way: wait for it
         }
         drillPrefetch.delete(index);
@@ -1541,6 +1554,9 @@ function logSessionToHistory(completed) {
         drillsTotal: drillsTotal,
         completed: !!completed
     };
+    if (window.CogniCoachAdapt) {
+        try { Object.assign(record, window.CogniCoachAdapt.sessionSummary()); } catch (e) {}
+    }
 
     try {
         const history = JSON.parse(localStorage.getItem('cognicoach-history') || '[]');

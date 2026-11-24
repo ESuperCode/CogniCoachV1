@@ -1,0 +1,10 @@
+/* Depth (scripts/depth.js): cards lean toward the pointer. */
+.depth { transform-style: preserve-3d; }
+.depth.depth-live {
+    transform: perspective(900px) rotateX(var(--d-rx, 0deg)) rotateY(var(--d-ry, 0deg)) translateY(-4px) !important;
+    transition: transform 0.12s ease-out, box-shadow 0.2s ease !important;
+    box-shadow: 0 26px 50px rgba(30, 50, 80, 0.16), 0 0 0 1px rgba(26, 109, 204, 0.12) !important;
+    background-image: radial-gradient(circle at var(--d-mx, 50%) var(--d-my, 50%), rgba(255, 255, 255, 0.55), transparent 55%) !important;
+}
+.about-feature-icon { display: inline-block; transition: transform 0.3s ease; }
+.about-feature.depth-live .about-feature-icon { transform: translateZ(30px) scale(1.15); }

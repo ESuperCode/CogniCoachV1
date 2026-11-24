@@ -344,8 +344,8 @@ table.sessions td { padding: 10px; border-bottom: 1px solid var(--line, var(--li
 table.sessions tr:hover td { background: var(--medium-gray); }
 table.sessions .num { text-align: right; font-variant-numeric: tabular-nums; }
 .pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 0.72rem; }
-.pill.done { background: rgba(46, 204, 113, 0.14); color: #1e8449; }
-.pill.partial { background: rgba(243, 156, 18, 0.14); color: #a35f00; }
+.pill.done { background: rgba(46, 204, 113, 0.14); color: #17693a; }
+.pill.partial { background: rgba(243, 156, 18, 0.14); color: #7f4a00; }
 
 /* Account & data card */
 .acct-panel {
