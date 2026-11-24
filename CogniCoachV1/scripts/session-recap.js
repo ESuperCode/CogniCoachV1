@@ -111,6 +111,7 @@
             '<h2 class="recap-title" tabindex="-1">Session complete</h2>' +
             '<p class="recap-sub">' + esc(rec.sport) + (rec.focus && rec.focus !== 'General' ? ' · ' + esc(rec.focus) : '') + '</p>' +
             (before.index !== after.index ? '<p class="recap-levelup" role="status">Level up! You are now <b>' + esc(after.cur.name) + '</b></p>' : '') +
+            rankLine(h) +
             '<div class="recap-grid">' +
             tile(rec.drillsCompleted + '/' + rec.drillsTotal, 'Drills done') +
             tile(mins, 'Minutes trained') +
@@ -134,6 +135,29 @@
         if (title) { title.focus({ preventScroll: true }); }
         card.scrollIntoView({ block: 'start', behavior: 'smooth' });
         confetti(card);
+    }
+
+    // Rank change from this session (scripts/athlete-stats.js), e.g. placement finished or a promotion.
+    function rankLine(h) {
+        var CS = window.CogniStats;
+        if (!CS || !h.length) { return ''; }
+        var prevH = h.slice(0, -1);
+        var last = new Date(h[h.length - 1].date).getTime();
+        var before = CS.rankFor(prevH.length ? CS.rating(prevH, last) : 50, prevH.length);
+        var nowOvr = CS.rating(h, last);
+        var after = CS.rankFor(nowOvr, h.length);
+        var order = function (r) { return r.placed ? r.index * 3 + ['III', 'II', 'I'].indexOf(r.division || 'I') : -1; };
+        var badge = function (r) {
+            return '<span class="recap-rank-badge" style="--tier:' + (r.placed ? r.tier.color : '#7b8798') + ';--tier-light:' + (r.placed ? r.tier.light : '#dfe5ee') + '">' +
+                (r.placed ? (r.division || '\u2605') : '?') + '</span>';
+        };
+        var msg;
+        if (!before.placed && after.placed) { msg = 'Placement complete! You are ranked <b>' + esc(after.label) + '</b>.'; }
+        else if (!after.placed) { msg = 'Placement: <b>' + (CS.PLACEMENT - after.toGo) + ' of ' + CS.PLACEMENT + '</b> sessions done. ' + after.toGo + ' more to get your rank.'; }
+        else if (order(after) > order(before)) { msg = 'Ranked up! <b>' + esc(before.label) + '</b> \u2192 <b>' + esc(after.label) + '</b>' + (after.index > before.index ? ' - new card frame unlocked.' : '.'); }
+        else { msg = 'Rank: <b>' + esc(after.label) + '</b> \u00b7 OVR ' + nowOvr + (after.next ? ' \u00b7 ' + after.pointsToNext + ' to ' + esc(after.next) : ''); }
+        var up = (!before.placed && after.placed) || (after.placed && order(after) > order(before));
+        return '<p class="recap-rank' + (up ? ' recap-rank-up' : '') + '"' + (up ? ' role="status"' : '') + '>' + badge(after) + '<span>' + msg + '</span></p>';
     }
 
     function tile(num, label) {

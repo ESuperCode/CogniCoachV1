@@ -334,3 +334,15 @@ html.a11y-reduce-motion .recap-coin { animation: none; }
 }
 .adapt-badge[data-level^="-"] { background: #ecfbf3; color: #1f5f3c; border-color: #a9e2c3; }
 .adapt-badge[hidden] { display: none; }
+
+/* recap: rank line */
+.recap-rank { display: inline-flex; align-items: center; gap: 12px; margin: 0 auto 14px; padding: 8px 16px 8px 8px; border-radius: 999px; background: #eef3fb; color: #172033; font-size: 0.9rem; }
+.recap-rank-up { background: linear-gradient(90deg, #fff3d6, #ffe6f0); box-shadow: 0 8px 22px rgba(255, 138, 52, 0.25); }
+.recap-rank-badge {
+    display: grid; place-items: center; width: 40px; height: 44px;
+    clip-path: polygon(50% 0, 100% 16%, 96% 60%, 50% 100%, 4% 60%, 0 16%);
+    background: linear-gradient(135deg, var(--tier-light), var(--tier) 60%, #1b2233);
+    color: #fff; font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 0.85rem;
+}
+.recap-rank-up .recap-rank-badge { animation: recapBadge 1.2s ease-out 1; }
+@keyframes recapBadge { 0% { transform: scale(0.4) rotateY(180deg); } 70% { transform: scale(1.15) rotateY(0); } 100% { transform: scale(1); } }
