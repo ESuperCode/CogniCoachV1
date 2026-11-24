@@ -2069,7 +2069,7 @@ SCRIPT_SCHEMA = _obj({
     "canonical_name": {"type": "string"},
     "steps": {"type": "array", "items": {"type": "string"}},
     "title": {"type": "string"},
-    "coaching_cues": {"type": "array", "items": {"type": "string"}},
+    "what_happens": {"type": "array", "items": {"type": "string"}},
     "camera_view": _enum(VIEWS),
     "script": {"type": "string"},
 })
@@ -2085,8 +2085,11 @@ Fill the fields in order:
 1. canonical_name: the core movement or drill in 2-6 words.
 2. steps: what the athlete does, in order, as 1-8 plain steps (e.g. "sprint forward", "touch the cone
    with the right hand", "backpedal to the start"). Drop story, setting and chatter.
-3. title, coaching_cues (3-5 short cues for a right-handed athlete), camera_view (side for forward/back
-   motion and swimming, front for side-to-side motion, three_quarter otherwise).
+3. title, what_happens (2-5 short bullets describing what the animated athlete does, in order, in
+   present tense, e.g. "Drives out of a crouched start", "Accelerates into an upright sprint". Describe
+   the movement only: never instructions, form tips, effort levels or keep/stay/focus phrasing),
+   camera_view (side for forward/back motion and swimming, front for side-to-side motion,
+   three_quarter otherwise).
 4. script: the steps written in the motion language below.
 
 THE MOTION LANGUAGE
@@ -2126,6 +2129,18 @@ THE MOTION LANGUAGE
   At most 8 lines and about 10 seconds.
 - Phases that differ only in coaching emphasis ("focus on the catch", then "focus on breathing") are
   the same motion: show that motion once, not once per emphasis.
+- Form and technique cues (hip drive, arm swing, knee drive, trunk bracing, posture, breathing, elbows
+  at 90 degrees, quick feet) describe HOW the main movement is done, and the stored motions already
+  have good form. Never turn a cue into its own motion: an "arm swing" cue in a sprint is the run's own
+  arm action, never arm_swings. Rest, recovery and transitions are never animated (no stand or
+  hands_on_hips lines for resting).
+- Choose motions by what the body does in THIS sport, not by shared words: a motion from another
+  activity is wrong even if its name matches (crow_pose is a yoga pose, not a baseball crow hop; a
+  swimming "catch" is part of the stroke, not a ball catch; guard is a boxing guard; chest_trap is a
+  soccer chest control; arm_swings is only the warm-up exercise of opening and crossing the arms,
+  never the arm swing of a run, approach or jump). Add an
+  upper-body motion only when the step names a specific arm skill of the sport (a throw, a shot, a
+  ball catch, a block, a punch, a swing).
 - Match the described action exactly: a swimming push-off from the wall is streamline + a kick (not
   start_dive, which is a dive from the blocks); a crow hop before a throw is stride_step then
   overhand_throw; a volleyball approach is stride_step lines then jump + the arm swing.
@@ -2348,7 +2363,7 @@ def script_response(raw: Dict[str, Any], side: str, calls: List[Dict[str, Any]],
         "dominant_side": side,
         "title": text(raw.get("title", "")),
         "movement_summary": "; ".join(raw.get("steps") or []),
-        "coaching_cues": [text(c) for c in raw.get("coaching_cues", [])],
+        "coaching_cues": [text(c) for c in (raw.get("what_happens") or raw.get("coaching_cues") or [])],
         "script": raw.get("script", ""),
         "plan": {"script": raw.get("script", ""), "steps": raw.get("steps"), "lines": compiled["lines"]},
         "report": {**compiled["report"], "playback_time_scale": 1.0},

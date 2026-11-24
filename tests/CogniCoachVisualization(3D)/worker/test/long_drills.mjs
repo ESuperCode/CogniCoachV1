@@ -15,8 +15,10 @@ for (const d of drills) {
   const [raw, calls] = await E.planScript({ OPENAI_API_KEY: "sk-proxy-injected" }, text);
   const secs = ((Date.now() - t0) / 1000).toFixed(1);
   const r = E._c(raw.script, {});
-  console.log(`\n=== ${secs}s ${calls[0].stage}${calls[0].reason ? " " + calls[0].reason : ""} | ${r.duration_seconds}s clip | ${d.slice(0, 80)}...`);
-  console.log("steps:", JSON.stringify(raw.steps));
+  console.log(`\n=== ${secs}s total ${calls[0].stage}${calls[0].reason ? " " + calls[0].reason : ""} | ${r.duration_seconds}s clip | ${d.slice(0, 80)}...`);
+  const dc = calls.find((c) => c.stage.startsWith("distill"));
+  if (dc) console.log(`distill (${dc.seconds}s):`, JSON.stringify(dc.movements || dc.reason));
+  console.log("title:", raw.title, "| what happens:", JSON.stringify(raw.what_happens || raw.coaching_cues));
   console.log("script:\n  " + raw.script.split("\n").join("\n  "));
   if (r.report.warnings.length) console.log("warnings:", r.report.warnings);
   if (r.report.issues.length) console.log("ISSUES:", r.report.issues);

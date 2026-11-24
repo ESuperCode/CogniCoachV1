@@ -631,6 +631,16 @@
 }
 
 .motion-viewer:not([data-mode="ready"]) .motion-cues { display: none; }
+.motion-cues::before {
+    content: "In this animation";
+    display: block;
+    margin: 0 0 6px -18px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.68rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--secondary-orange);
+}
 .motion-cues li::marker { color: var(--secondary-orange); }
 
 @keyframes motionSpin { to { transform: rotate(360deg); } }

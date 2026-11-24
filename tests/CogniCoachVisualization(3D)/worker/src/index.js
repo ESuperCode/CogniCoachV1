@@ -171,7 +171,7 @@ async function generate(request, env, ctx, who) {
     title: raw.title || "",
     canonical_name: raw.canonical_name || "",
     steps: raw.steps || [],
-    coaching_cues: raw.coaching_cues || [],
+    coaching_cues: raw.what_happens || raw.coaching_cues || [],
     camera_view: VIEWS.includes(raw.camera_view) ? raw.camera_view : "three_quarter",
     dominant_side: side,
     model: MODEL,

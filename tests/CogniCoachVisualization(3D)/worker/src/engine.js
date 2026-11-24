@@ -3,7 +3,7 @@
 import { ALIASES, CATALOG, ENGINE_DATA_VERSION, MOTIONS, MOTION_NAMES, RECIPES } from "./db.js";
 import { compileScript, ScriptError } from "./script.js";
 
-export const ENGINE_VERSION = `${ENGINE_DATA_VERSION}-worker`;
+export const ENGINE_VERSION = `${ENGINE_DATA_VERSION}-worker2`;
 export const VIEWS = ["front", "side", "three_quarter", "back"];
 // Only the cheap text model - deliberately not configurable.
 export const MODEL = "gpt-5-mini";
@@ -14,7 +14,7 @@ const SCRIPT_SCHEMA = obj({
   canonical_name: { type: "string" },
   steps: { type: "array", items: { type: "string" } },
   title: { type: "string" },
-  coaching_cues: { type: "array", items: { type: "string" } },
+  what_happens: { type: "array", items: { type: "string" } },
   camera_view: { type: "string", enum: VIEWS },
   script: { type: "string" },
 });
@@ -115,8 +115,11 @@ Fill the fields in order:
 1. canonical_name: the core movement or drill in 2-6 words.
 2. steps: what the athlete does, in order, as 1-8 plain steps (e.g. "sprint forward", "touch the cone
    with the right hand", "backpedal to the start"). Drop story, setting and chatter.
-3. title, coaching_cues (3-5 short cues for a right-handed athlete), camera_view (side for forward/back
-   motion and swimming, front for side-to-side motion, three_quarter otherwise).
+3. title, what_happens (2-5 short bullets describing what the animated athlete does, in order, in
+   present tense, e.g. "Drives out of a crouched start", "Accelerates into an upright sprint". Describe
+   the movement only: never instructions, form tips, effort levels or keep/stay/focus phrasing),
+   camera_view (side for forward/back motion and swimming, front for side-to-side motion,
+   three_quarter otherwise).
 4. script: the steps written in the motion language below.
 
 THE MOTION LANGUAGE
@@ -156,6 +159,18 @@ THE MOTION LANGUAGE
   At most 8 lines and about 10 seconds.
 - Phases that differ only in coaching emphasis ("focus on the catch", then "focus on breathing") are
   the same motion: show that motion once, not once per emphasis.
+- Form and technique cues (hip drive, arm swing, knee drive, trunk bracing, posture, breathing, elbows
+  at 90 degrees, quick feet) describe HOW the main movement is done, and the stored motions already
+  have good form. Never turn a cue into its own motion: an "arm swing" cue in a sprint is the run's own
+  arm action, never arm_swings. Rest, recovery and transitions are never animated (no stand or
+  hands_on_hips lines for resting).
+- Choose motions by what the body does in THIS sport, not by shared words: a motion from another
+  activity is wrong even if its name matches (crow_pose is a yoga pose, not a baseball crow hop; a
+  swimming "catch" is part of the stroke, not a ball catch; guard is a boxing guard; chest_trap is a
+  soccer chest control; arm_swings is only the warm-up exercise of opening and crossing the arms,
+  never the arm swing of a run, approach or jump). Add an
+  upper-body motion only when the step names a specific arm skill of the sport (a throw, a shot, a
+  ball catch, a block, a punch, a swing).
 - Match the described action exactly: a swimming push-off from the wall is streamline + a kick (not
   start_dive, which is a dive from the blocks); a crow hop before a throw is stride_step then
   overhand_throw; a volleyball approach is stride_step lines then jump + the arm swing.
@@ -301,8 +316,90 @@ export function tidyModelScript(script) {
     .replace(/(\s[x*]\s*)(\d+)\s*$/gm, (m, x, n) => (Number(n) > 2 ? `${x}2` : m));
 }
 
+// Motions that only make sense in one context. The fast model sometimes picks them by a shared word
+// ("crow hop" -> crow_pose, an approach's "arm swing" -> arm_swings); they stay only when the request
+// itself calls for that context. A replacement (or null = drop) is used otherwise.
+const CONTEXT_MOTIONS = {
+  arm_swings: { ok: /\barm (swings?|circles?)\b|\bwarm.?up\b.*\barms?\b/, use: null },
+  crow_pose: { ok: /\byoga\b|\bcrow pose\b/, use: (t) => (/\bcrow.?hop/.test(t) ? "stride_step" : null) },
+  chest_trap: { ok: /\bchest (trap|control)|\btrap\b.*\bchest\b|\bchest\b.*\b(soccer|football)\b/, use: null },
+  guard: { ok: /\b(box|boxing|fight|fighting|kickbox|martial|mma|muay|karate|taekwondo|guard)\b/, use: null },
+  high_v: { ok: /\bcheer|\bhigh v\b/, use: null },
+};
+
+export function contextFilter(script, requestText) {
+  const text = requestText.toLowerCase();
+  const out = [];
+  for (const line of script.split("\n")) {
+    const tail = (line.match(/\s+[x*]\s*\d+\s*$/) || [""])[0];
+    const body = tail ? line.slice(0, -tail.length) : line;
+    const items = body.split("+").map((x) => x.trim()).filter(Boolean);
+    const names = items.map((it) => (it.match(/^([a-z_][a-z0-9_]*)/) || [, ""])[1]);
+    const kept = [];
+    items.forEach((it, i) => {
+      const rule = CONTEXT_MOTIONS[names[i]];
+      if (!rule || rule.ok.test(text)) { kept.push(it); return; }
+      const rep = rule.use && rule.use(text);
+      if (rep && !names.includes(rep)) kept.push(rep);
+    });
+    if (kept.length || !items.length) out.push(kept.length ? kept.join(" + ") + tail : line);
+  }
+  return out.join("\n");
+}
+
 const SCRIPT_EFFORT = "minimal";
-const SCRIPT_TIMEOUT_S = 9;
+const SCRIPT_TIMEOUT_S = 10;    // whole request budget (distill + script); the local fallback answers after it
+const DISTILL_TIMEOUT_S = 4.5;
+
+// ---------------------------------------------------------------------------
+// Call 1 (drill descriptions only): description -> the plain sequence of body movements to animate.
+// Training-plan text mixes WHAT the athlete does with HOW (form cues), effort, rest, distances,
+// logistics and benefits; the script model turned cues like "arm swing" into separate motions.
+// ---------------------------------------------------------------------------
+const DISTILL_SCHEMA = obj({
+  title: { type: "string" },
+  sport: { type: "string" },
+  movements: { type: "array", items: { type: "string" } },
+});
+
+export const DISTILL_INSTRUCTIONS = `
+You prepare a sports drill description for a 3D animation. Return the plain physical movements the
+athlete's whole body performs, in order, for ONE representative repetition.
+
+- title: the drill's name in 2-6 words. sport: the sport or activity (e.g. "track sprinting", "swimming").
+- movements: 1-6 short steps (2-8 words), each a distinct whole-body movement in simple generic words,
+  e.g. "crouch in a sprint start", "drive out into a sprint", "swim front crawl", "jog back".
+- REMOVE everything that is not a separate movement: form and technique detail (hip drive, arm swing,
+  knee drive, early vertical forearm, wrist snap, elbows at 90 degrees, trunk bracing, rotation,
+  posture, staying tall, breathing, quick feet, soft landing), effort and intensity (brisk, powerful,
+  explosive, non-max, controlled), rest, recovery and transitions, distances, laps, sets, reps, rounds,
+  times, stations, setup, equipment, partners, and why the drill helps.
+- Arm actions that belong to a movement (the arm swing of a run or an approach, a follow-through) are
+  part of that movement, never their own step. Phases that differ only in emphasis are ONE step.
+- Keep specific skills the description names (A-skips, a crossover dribble, a jump shot, a spike, a
+  crow hop) in their sport's words.
+- If the drill names stations or segments without saying what they are, show its core movement once
+  (e.g. a sprint warm-up: a sprint start into an acceleration and an upright sprint); never invent
+  unrelated exercises.
+`.trim();
+
+const wordCount = (t) => (t.match(/[A-Za-z]+/g) || []).length;
+
+/** Long or multi-sentence requests are drill descriptions and go through the distill call first. */
+export function needsDistill(text) {
+  const sentences = (text.match(/[.!?](\s|$)/g) || []).length;
+  return wordCount(text) > 18 || sentences > 1;
+}
+
+export async function distillDrill(env, movement, timeoutMs) {
+  const [out, meta] = await callModel(env, DISTILL_INSTRUCTIONS, movement.trim(), {
+    effort: SCRIPT_EFFORT, schema: DISTILL_SCHEMA, name: "drill_movements", maxTokens: 800, timeoutMs,
+  });
+  const moves = (out.movements || []).map((m) => String(m).trim()).filter(Boolean).slice(0, 6);
+  if (!moves.length) throw new Error("no movements");
+  const text = `${out.sport ? out.sport.trim() + ": " : ""}${moves.join(", then ")}`;
+  return { text, title: String(out.title || "").trim(), movements: moves, meta };
+}
 
 /** Text -> motion script in ONE fast model call; a local database match answers when the model fails. */
 export async function planScript(env, movement, extra = "") {
@@ -312,21 +409,36 @@ export async function planScript(env, movement, extra = "") {
   if (local && local.exact && !extra.trim()) {
     return [local, [{ stage: "local", seconds: Math.round(elapsed() * 100) / 100, script: local.script }]];
   }
-  let request = `Request: ${movement.trim()}` + (extra.trim() ? `\nNotes: ${extra.trim()}` : "");
-  const hints = relevantRecipes(movement + " " + extra);
-  if (hints.length) request += "\n\nMost relevant recipes for this request (adapt them):\n" + hints.join("\n");
   const timeout = Number(env.MOTION_SCRIPT_TIMEOUT || SCRIPT_TIMEOUT_S);
+  const calls = [];
+  let subject = movement.trim();
+  let distilled = null;
+  if (needsDistill(subject)) {
+    try {
+      distilled = await distillDrill(env, subject, DISTILL_TIMEOUT_S * 1000);
+      subject = distilled.text;
+      calls.push({ stage: "distill", ...distilled.meta, movements: distilled.movements });
+    } catch (exc) {
+      if (exc.status === 503) throw exc;
+      calls.push({ stage: "distill-skipped", seconds: Math.round(elapsed() * 10) / 10,
+        reason: `${exc.name === "AbortError" ? "Timeout" : exc.name}: ${String(exc.message).slice(0, 80)}` });
+    }
+  }
+  let request = `Request: ${subject}` + (extra.trim() ? `\nNotes: ${extra.trim()}` : "");
+  const hints = relevantRecipes(subject + " " + extra);
+  if (hints.length) request += "\n\nMost relevant recipes for this request (adapt them):\n" + hints.join("\n");
   let lastExc = null;
   for (let attempt = 0; attempt < 2; attempt++) {
     const budget = timeout - elapsed();
     if (attempt && budget < 4) break;
     try {
-      const [raw, meta] = await callModel(env, scriptInstructions(movement + " " + extra), request, {
+      const [raw, meta] = await callModel(env, scriptInstructions(subject + " " + extra), request, {
         effort: SCRIPT_EFFORT, schema: SCRIPT_SCHEMA, name: "motion_script", maxTokens: 3000, timeoutMs: budget * 1000,
       });
-      raw.script = tidyModelScript(raw.script || "");
+      raw.script = contextFilter(tidyModelScript(raw.script || ""), movement + " " + subject + " " + extra);
       compileScript(raw.script, { validateOnly: true });   // lenient: only fails if nothing usable is left
-      return [raw, [{ stage: attempt ? "script-retry" : "script", ...meta, script: raw.script }]];
+      if (distilled && distilled.title) raw.title = distilled.title;
+      return [raw, [{ stage: attempt ? "script-retry" : "script", ...meta, script: raw.script }, ...calls]];
     } catch (exc) {
       if (exc.status === 503) throw exc;
       lastExc = exc;
@@ -335,7 +447,7 @@ export async function planScript(env, movement, extra = "") {
   const fallback = local || { canonical_name: "stance", steps: [], title: movement.trim().slice(0, 60), coaching_cues: [],
     camera_view: "three_quarter", script: "stance(depth=0.3) + ready_arms" };
   const reason = lastExc ? `${lastExc.name === "AbortError" ? "Timeout" : lastExc.name}: ${String(lastExc.message).slice(0, 120)}` : "no time left";
-  return [fallback, [{ stage: "local-fallback", seconds: Math.round(elapsed() * 10) / 10, reason, script: fallback.script }]];
+  return [fallback, [{ stage: "local-fallback", seconds: Math.round(elapsed() * 10) / 10, reason, script: fallback.script }, ...calls]];
 }
 
 // ---------------------------------------------------------------------------
@@ -374,7 +486,7 @@ export function scriptResponse(env, raw, side, calls, cached) {
     dominant_side: side,
     title: text(raw.title || ""),
     movement_summary: (raw.steps || []).join("; "),
-    coaching_cues: (raw.coaching_cues || []).map(text),
+    coaching_cues: (raw.what_happens || raw.coaching_cues || []).map(text),
     script: raw.script || "",
     plan: { script: raw.script || "", steps: raw.steps ?? null, lines: compiled.lines },
     report: { ...compiled.report, playback_time_scale: 1.0 },
