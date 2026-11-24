@@ -973,7 +973,7 @@ opacity: 0.8;
 fill: var(--secondary-orange) !important;
 }
 
-main {
+main:not(.container) {
 display: flex;
 justify-content: center;
 align-items: center;

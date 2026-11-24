@@ -98,7 +98,9 @@ function loadSiteExtras() {
         { css: 'styles/account.css', js: 'scripts/account.js' },
         { css: 'styles/tour.css', js: 'scripts/tour.js' }
     ];
-    extras.forEach(({ css, js }) => {
+    const v = 'v=20261124a';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
+    extras.forEach(({ css: cssPath, js: jsPath }) => {
+        const css = cssPath + '?' + v, js = jsPath + '?' + v;
         if (!document.querySelector(`link[href="${css}"]`)) {
             const link = document.createElement('link');
             link.rel = 'stylesheet';
