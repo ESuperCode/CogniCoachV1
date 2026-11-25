@@ -71,8 +71,10 @@
           text: 'Pause, scrub frame by frame, flip between right- and left-handed, and click the athlete then use the arrow keys to turn it.' },
         { demo: true, target: '#drillContent .timer-container', title: 'Timed for you',
           text: 'Start the timer when you are ready. Each drill is sized to fit your session, and Next Drill appears when it is done.' },
-        { target: 'site-nav a[href="dashboard.html"]', nav: true, title: 'Your dashboard',
+        { target: 'site-nav a[href="dashboard.html"]', smallTarget: '#navMenuBtn', nav: true, title: 'Your dashboard',
           text: 'Streaks, XP levels, personal records and charts of every session you finish.' },
+        { target: 'site-nav a[href="arena.html"]', smallTarget: '#navMenuBtn', nav: true, title: 'The Arena',
+          text: 'Weekly leagues, friends, daily quests and the shop. Every session earns XP and Grit to spend on Streak Freezes, XP Boosts and card frames.' },
         { target: '#navAccount', nav: true, title: 'Sync everywhere',
           text: 'With a free account your profile and training follow you to every device you sign in on.' },
         { kind: 'hero', id: 'finale', title: "You're all set",
@@ -102,7 +104,12 @@
     function steps() { return plan; }
 
     function computeSteps() {
-        return STEPS.filter(function (s) {
+        // On small screens the nav links live in the Menu drop-down: point those steps at the Menu button.
+        var small = window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
+        return STEPS.map(function (s) {
+            if (small && s.smallTarget) { var c = {}; Object.keys(s).forEach(function (k) { c[k] = s[k]; }); c.target = s.smallTarget; return c; }
+            return s;
+        }).filter(function (s) {
             if (!s.target || s.demo || s.nav) { return true; }
             return visible($(s.target));
         });

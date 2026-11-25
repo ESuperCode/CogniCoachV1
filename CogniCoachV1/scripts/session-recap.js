@@ -157,7 +157,7 @@
         var chestIcons = rw.chests.map(function (c) { return icon('chest-' + c.tier, 40); }).join('');
         return '<div class="recap-rewards">' +
             '<div class="rr-item">' + icon('xp', 40) + '<div><b>+' + rw.xp + ' XP</b>' + (rw.mult > 1 ? '<span class="rr-boost">' + icon('boost', 16) + ' ' + rw.mult + 'x boost</span>' : '<small>' + rw.base + ' base</small>') + '</div></div>' +
-            '<div class="rr-item">' + icon('coin', 40) + '<div><b>+' + (rw.coins + rw.levelCoins) + '</b><small>coins' + (rw.levelCoins ? ' (incl. level-up bonus)' : '') + '</small></div></div>' +
+            '<div class="rr-item">' + icon('coin', 40) + '<div><b>+' + (rw.coins + rw.levelCoins) + '</b><small>Grit' + (rw.levelCoins ? ' (incl. level-up bonus)' : '') + '</small></div></div>' +
             '<div class="rr-item rr-goal"><svg viewBox="0 0 36 36" width="40" height="40" aria-hidden="true"><circle cx="18" cy="18" r="15" class="econ-ring-bg"/><circle cx="18" cy="18" r="15" class="econ-ring-fg" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - frac)).toFixed(1) + '" transform="rotate(-90 18 18)"/></svg>' +
             '<div><b>' + q.todayXp + '/' + q.goal + '</b><small>' + (q.goalDone ? 'daily goal done' : 'daily XP goal') + '</small></div></div>' +
             (rw.chests.length ? '<div class="rr-chests"><span class="rr-chest-icons">' + chestIcons + '</span><span>' + (rw.milestone ? '<b>' + rw.milestone + '-day streak!</b> ' : '') + 'You earned ' + rw.chests.length + ' chest' + (rw.chests.length > 1 ? 's' : '') + '</span>' +

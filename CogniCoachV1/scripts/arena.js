@@ -80,7 +80,7 @@
             html += '<div class="lg-result">' + ic(lr.place === 1 ? 'medal-gold' : lr.place === 2 ? 'medal-silver' : lr.place === 3 ? 'medal-bronze' : 'trophy-gold', 56) +
                 '<div><b>Last week: ' + ordinal(lr.place) + ' of ' + lr.size + ' in ' + esc(lr.league) + '</b><span>' +
                 (lr.moved === 'up' ? 'Promoted to ' + esc(lr.newLeague) + '!' : lr.moved === 'down' ? 'Moved down to ' + esc(lr.newLeague) + '.' : 'You stay in ' + esc(lr.newLeague) + '.') +
-                ' Reward: ' + (lr.coins ? lr.coins + ' coins' : '') + (lr.chest ? (lr.coins ? ' + ' : '') + 'a Gold Chest' : '') + '</span></div>' +
+                ' Reward: ' + (lr.coins ? lr.coins + ' Grit' : '') + (lr.chest ? (lr.coins ? ' + ' : '') + 'a Gold Chest' : '') + '</span></div>' +
                 '<button type="button" class="econ-btn econ-btn-primary" data-claim-league>Claim</button></div>';
         } else if (lr && lr.moved !== 'stay') {
             html += '<p class="lg-note">' + ic(lr.moved === 'up' ? 'arrow-up' : 'arrow-down', 18) + ' Last week you ' + (lr.moved === 'up' ? 'moved up to ' : 'moved down to ') + esc(lr.newLeague) + '.</p>';
@@ -114,7 +114,7 @@
                 try {
                     var r = await S.call('/social/claim', { body: {} });
                     var chest = E.grantReward(r.coins ? [{ type: 'coins', amount: r.coins }] : [], 'League reward', r.chest || null);
-                    UI.toast('League reward: <b>' + (r.coins || 0) + ' coins</b>' + (chest ? ' and a Gold Chest' : ''), 'coin');
+                    UI.toast('League reward: <b>' + (r.coins || 0) + ' Grit</b>' + (chest ? ' and a Gold Chest' : ''), 'coin');
                     if (chest) { UI.openChests([chest.id], function () { league(p); }); } else { league(p); }
                 } catch (e) { cl.disabled = false; UI.toast(esc(e.message), 'info'); }
             });
@@ -308,7 +308,7 @@
                 var r = E.claim(b.dataset.claim);
                 if (!r.ok) { UI.toast(esc(r.error), 'info'); return; }
                 if (r.chest) { UI.openChests([r.chest.id], function () { quests(p); }); }
-                else { UI.toast('+' + r.coins + ' coins', 'coin'); }
+                else { UI.toast('+' + r.coins + ' Grit', 'coin'); }
                 quests(p); dots();
             });
         });
@@ -318,8 +318,8 @@
     var FRAME_SWATCH = { neon: 'linear-gradient(135deg,#00e0ff,#ff2bd6)', carbon: 'repeating-linear-gradient(45deg,#1b1f27 0 4px,#2b313c 4px 8px)', aurora: 'linear-gradient(135deg,#34c38f,#4ea8ff,#8a3ffc)', prism: 'conic-gradient(#ff3d6e,#ffcf4d,#34c38f,#4ea8ff,#8a3ffc,#ff3d6e)' };
     function shop(p) {
         var w = E.load(), rep = E.repairable(w);
-        var html = '<div class="sh-head"><h2>Shop</h2><span class="sh-bal">' + ic('coin', 30) + '<b>' + w.coins + '</b> coins</span></div>' +
-            '<p class="ar-small">Earn coins by training, finishing quests, opening chests and placing in your league.</p><div class="sh-grid">';
+        var html = '<div class="sh-head"><h2>Shop</h2><span class="sh-bal">' + ic('coin', 30) + '<b>' + w.coins + '</b> Grit</span></div>' +
+            '<p class="ar-small">Earn Grit by training, finishing quests, opening chests and placing in your league.</p><div class="sh-grid">';
         E.SHOP.forEach(function (it) {
             if (it.id === 'repair' && !rep) { return; }
             var owned = it.frame && w.owned.frames.indexOf(it.frame) >= 0;
@@ -332,7 +332,7 @@
                 '<small>' + esc(it.id === 'repair' ? 'Bring back your ' + rep.lost + '-day streak.' : it.desc) + '</small>' +
                 (it.id === 'freeze' ? '<span class="sh-own">' + w.inventory.freeze + '/2 equipped</span>' : it.id === 'boost2' || it.id === 'boost3' ? '<span class="sh-own">' + w.inventory[it.id] + ' in bag</span>' : '') +
                 '<button type="button" class="econ-btn ' + (status || short ? '' : 'econ-btn-primary') + '" data-buy="' + it.id + '"' + (status || short ? ' disabled' : '') + '>' +
-                (status ? ic('check', 16) + ' ' + status : ic('coin', 20) + ' ' + it.price + (short ? '<span class="a11y-sr-only"> - not enough coins</span>' : '')) + '</button></div>';
+                (status ? ic('check', 16) + ' ' + status : ic('coin', 20) + ' ' + it.price + (short ? '<span class="a11y-sr-only"> - not enough Grit</span>' : '')) + '</button></div>';
         });
         html += '</div>';
         p.innerHTML = html;

@@ -1,5 +1,5 @@
 // ==========================================================================
-// CogniCoach economy - XP, coins, boosts, chests, shop, streak freezes, daily goal and quests.
+// CogniCoach economy - XP, Grit (the currency; stored as wallet.coins), boosts, chests, shop, streak freezes, daily goal and quests.
 // Everything lives in localStorage['cognicoach-wallet'] (synced with an account like the rest).
 //
 //   XP for a session    minutes + 25 for finishing (10 if not) + 2 per rated drill (max 10),
@@ -25,8 +25,8 @@
         { id: 'freeze', name: 'Streak Freeze', desc: 'Covers one missed day so your streak survives. Equip up to 2.', price: 120, icon: 'freeze' },
         { id: 'boost2', name: 'Double XP', desc: '2x XP on sessions for the next 60 minutes. Activate it from your bag.', price: 80, icon: 'boost' },
         { id: 'boost3', name: 'Triple XP', desc: '3x XP on sessions for the next 30 minutes.', price: 200, icon: 'boost' },
-        { id: 'chest-silver', name: 'Silver Chest', desc: 'Coins, boosts or a freeze inside.', price: 150, icon: 'chest-silver' },
-        { id: 'chest-gold', name: 'Gold Chest', desc: 'The best odds: big coin hauls, Triple XP and freezes.', price: 350, icon: 'chest-gold' },
+        { id: 'chest-silver', name: 'Silver Chest', desc: 'Grit, boosts or a freeze inside.', price: 150, icon: 'chest-silver' },
+        { id: 'chest-gold', name: 'Gold Chest', desc: 'The best odds: big Grit hauls, Triple XP and freezes.', price: 350, icon: 'chest-gold' },
         { id: 'repair', name: 'Streak Repair', desc: 'Bring back the streak you lost in the last 3 days.', price: 250, icon: 'flame', special: true },
         { id: 'frame-neon', name: 'Neon Frame', desc: 'Electric blue and pink card frame.', price: 300, icon: 'sparkles', frame: 'neon' },
         { id: 'frame-carbon', name: 'Carbon Frame', desc: 'Matte carbon fibre with an orange edge.', price: 400, icon: 'sparkles', frame: 'carbon' },
@@ -171,7 +171,7 @@
             var room = Math.max(0, MAX_FREEZES - w.inventory.freeze);
             var give = Math.min(room, r.amount);
             w.inventory.freeze += give;
-            if (give < r.amount) { var refund = (r.amount - give) * 60; w.coins += refund; r.converted = refund; log(w, 'coins', refund, 'Freeze slots full - converted'); }
+            if (give < r.amount) { var refund = (r.amount - give) * 60; w.coins += refund; r.converted = refund; log(w, 'coins', refund, 'Freeze slots full - turned into Grit'); }
         }
         else if (r.type === 'boost2' || r.type === 'boost3') { w.inventory[r.type] += r.amount; }
     }
@@ -193,7 +193,7 @@
     function buy(id) {
         var w = load(), item = SHOP.filter(function (s) { return s.id === id; })[0];
         if (!item) { return { ok: false, error: 'Unknown item.' }; }
-        if (w.coins < item.price) { return { ok: false, error: 'You need ' + (item.price - w.coins) + ' more coins.' }; }
+        if (w.coins < item.price) { return { ok: false, error: 'You need ' + (item.price - w.coins) + ' more Grit.' }; }
         if (id === 'freeze' && w.inventory.freeze >= MAX_FREEZES) { return { ok: false, error: 'You already have 2 freezes equipped.' }; }
         if (item.frame && w.owned.frames.indexOf(item.frame) >= 0) { return { ok: false, error: 'You already own this frame.' }; }
         var rep = null;

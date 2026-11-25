@@ -22,7 +22,7 @@
         if (!host) { return null; }
         var el = document.createElement('nav');
         el.className = 'econ-hud' + (opts.compact ? ' econ-hud-compact' : '');
-        el.setAttribute('aria-label', 'Your streak, coins and daily goal');
+        el.setAttribute('aria-label', 'Your streak, Grit and daily goal');
         host.appendChild(el);
         huds.push(el);
         paint(el);
@@ -41,7 +41,7 @@
             '<span class="econ-num">' + st.current + '</span><span class="econ-lbl">day' + (st.current === 1 ? '' : 's') + '</span>' +
             (w.inventory.freeze ? '<span class="econ-freeze" title="' + w.inventory.freeze + ' Streak Freeze' + (w.inventory.freeze > 1 ? 's' : '') + ' equipped">' + ic('freeze', 16) + '<b>' + w.inventory.freeze + '</b></span>' : '') +
             '<span class="a11y-sr-only">' + st.current + ' day streak' + (st.trainedToday ? ', trained today' : ', not trained yet today') + '</span></a>' +
-            '<a class="econ-chip econ-coins" href="arena.html#shop" title="Coins - spend them in the shop">' + ic('coin', 24) + '<span class="econ-num">' + w.coins + '</span><span class="a11y-sr-only">coins</span></a>' +
+            '<a class="econ-chip econ-coins" href="arena.html#shop" title="Grit - spend it in the shop">' + ic('coin', 24) + '<span class="econ-num">' + w.coins + '</span><span class="a11y-sr-only">Grit</span></a>' +
             '<a class="econ-chip econ-goal' + (q.goalDone ? ' done' : '') + '" href="arena.html#quests" title="Daily XP goal">' + ring(frac) +
             '<span class="econ-goal-text"><span class="econ-num">' + q.todayXp + '<small>/' + q.goal + '</small></span><span class="econ-lbl">XP today</span></span></a>' +
             (boost ? '<a class="econ-chip econ-boost" href="arena.html#bag" title="XP Boost running">' + ic('boost', 24) + '<span class="econ-num">' + boost.mult + 'x</span><span class="econ-lbl" data-boost-left>' + fmtLeft(boost.until - Date.now()) + '</span></a>' : '') +
@@ -67,9 +67,9 @@
 
     // ------------------------------------------------------------------ chest dialog
     var REWARD = {
-        coins: function (r) { return { icon: 'coin', title: '+' + r.amount + ' coins', sub: 'Spend them in the shop' }; },
+        coins: function (r) { return { icon: 'coin', title: '+' + r.amount + ' Grit', sub: 'Spend it in the shop' }; },
         xp: function (r) { return { icon: 'xp', title: '+' + r.amount + ' XP', sub: 'Bonus XP for your level' }; },
-        freeze: function (r) { return { icon: 'freeze', title: 'Streak Freeze', sub: r.converted ? 'Slots full - turned into ' + r.converted + ' coins' : 'Equipped - protects one missed day' }; },
+        freeze: function (r) { return { icon: 'freeze', title: 'Streak Freeze', sub: r.converted ? 'Slots full - turned into ' + r.converted + ' Grit' : 'Equipped - protects one missed day' }; },
         boost2: function (r) { return { icon: 'boost', title: (r.amount > 1 ? r.amount + ' × ' : '') + 'Double XP', sub: 'Activate it from your bag' }; },
         boost3: function (r) { return { icon: 'boost', title: 'Triple XP', sub: 'Activate it from your bag' }; }
     };

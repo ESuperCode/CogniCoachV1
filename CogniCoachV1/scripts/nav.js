@@ -26,30 +26,54 @@
 
 const NAV_LINKS = [
     { href: 'index.html', label: 'CogniCoach', brand: true },
-    { href: 'dashboard.html', label: 'Dashboard', icon: 'grid' },
-    { href: 'arena.html', label: 'Arena', icon: 'podium' },
-    { href: 'competition.html', label: 'Competition', icon: 'flag' },
-    { href: 'about.html', label: 'About Us', icon: 'info' },
-    { href: 'contact.html', label: 'Contact', icon: 'mail' }
+    { href: 'dashboard.html', label: 'Dashboard' },
+    { href: 'arena.html', label: 'Arena' },
+    { href: 'competition.html', label: 'Competition Mode' },
+    { href: 'about.html', label: 'About Us' },
+    { href: 'contact.html', label: 'Contact' }
 ];
 
 class SiteNav extends HTMLElement {
     connectedCallback() {
         this.classList.add('site-nav');
         this.id = 'siteNav';
-        this.innerHTML = NAV_LINKS.map(link => {
+        const linkHtml = link => {
             const classes = 'site-nav-link' + (link.brand ? ' site-nav-brand' : '');
             const logo = link.brand
                 ? `<img src="logo.png" alt="" class="site-nav-logo" onerror="this.style.display='none'">`
                 : '';
-            // SVG icons from scripts/icons.js (loaded before this file); on phones the nav shows icons only
-            const icon = link.icon && window.CogniIcons ? window.CogniIcons.svg(link.icon, { size: 18, cls: 'site-nav-icon' }) : '';
-            return `<a href="${link.href}" class="${classes}" title="${link.label}"${link.brand ? ` aria-label="${link.label}"` : ''}>${logo}${icon}<span class="site-nav-text">${link.label}</span></a>`;
-        }).join('') + '<div class="nav-account" id="navAccount"></div>';
+            return `<a href="${link.href}" class="${classes}"${link.brand ? ` aria-label="${link.label}"` : ''}>${logo}<span class="site-nav-text">${link.label}</span></a>`;
+        };
+        // Brand, then the page links (a drop-down "Menu" on small screens), then display settings + account.
+        this.innerHTML = linkHtml(NAV_LINKS[0]) +
+            '<button type="button" class="nav-menu-btn" id="navMenuBtn" aria-expanded="false" aria-controls="navLinks">' +
+            '<span class="nav-menu-bars" aria-hidden="true"><i></i><i></i><i></i></span><span class="nav-menu-text">Menu</span></button>' +
+            '<div class="site-nav-links" id="navLinks">' + NAV_LINKS.slice(1).map(linkHtml).join('') + '</div>' +
+            '<div class="nav-account" id="navAccount"></div>';
 
         this.highlightCurrentPage();
         loadSiteExtras();
         this.wireScrollBehavior();
+        this.wireMenu();
+    }
+
+    wireMenu() {
+        const btn = this.querySelector('#navMenuBtn');
+        const links = this.querySelector('#navLinks');
+        const setOpen = open => {
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            this.classList.toggle('menu-open', open);
+            if (open) { this.classList.remove('nav-hidden'); }
+        };
+        btn.addEventListener('click', () => setOpen(btn.getAttribute('aria-expanded') !== 'true'));
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && this.classList.contains('menu-open')) { setOpen(false); btn.focus(); }
+        });
+        document.addEventListener('click', e => {
+            if (this.classList.contains('menu-open') && !this.contains(e.target)) { setOpen(false); }
+        });
+        links.addEventListener('click', e => { if (e.target.closest('a')) { setOpen(false); } });
+        window.addEventListener('scroll', () => { if (this.classList.contains('menu-open') && window.scrollY > 200) { setOpen(false); } }, { passive: true });
     }
 
     highlightCurrentPage() {
@@ -102,7 +126,7 @@ function loadSiteExtras() {
         { css: 'styles/tour.css', js: 'scripts/tour.js' },
         { css: 'styles/depth.css', js: 'scripts/depth.js' }
     ];
-    const v = 'v=20261125a';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
+    const v = 'v=20261125b';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
     extras.forEach(({ css: cssPath, js: jsPath }) => {
         const css = cssPath + '?' + v, js = jsPath + '?' + v;
         if (!document.querySelector(`link[href="${css}"]`)) {

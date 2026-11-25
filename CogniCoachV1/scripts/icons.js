@@ -96,14 +96,16 @@
     var uid = 0;
     function gid(p) { return 'ci' + p + (++uid); }
     var G = {
+        // Grit - the site's currency: an amber hexagon token stamped with a flame
         coin: function () {
             var a = gid('c'), b = gid('c');
-            return '<defs><radialGradient id="' + a + '" cx="35%" cy="30%" r="75%"><stop offset="0" stop-color="#fff6c2"/><stop offset="0.45" stop-color="#ffcc3d"/><stop offset="1" stop-color="#d98a00"/></radialGradient>' +
-                '<linearGradient id="' + b + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffe680"/><stop offset="1" stop-color="#b86f00"/></linearGradient></defs>' +
-                '<circle cx="24" cy="25" r="20" fill="#a35f00"/><circle cx="24" cy="23" r="20" fill="url(#' + a + ')"/>' +
-                '<circle cx="24" cy="23" r="14.5" fill="none" stroke="url(#' + b + ')" stroke-width="2.5"/>' +
-                '<path d="M24 13.5l2.8 5.8 6.4.9-4.6 4.5 1.1 6.3-5.7-3-5.7 3 1.1-6.3-4.6-4.5 6.4-.9z" fill="#fff3b0" stroke="#c07800" stroke-width="1.2" stroke-linejoin="round"/>' +
-                '<path d="M11 15a15 15 0 0 1 9-7" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.7"/>';
+            return '<defs><linearGradient id="' + a + '" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd27a"/><stop offset="0.5" stop-color="#ff9a2e"/><stop offset="1" stop-color="#c2410c"/></linearGradient>' +
+                '<linearGradient id="' + b + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff4d6"/><stop offset="1" stop-color="#ffd27a"/></linearGradient></defs>' +
+                '<path d="M24 5l17 9.8v19.6L24 44.2 7 34.4V14.8z" fill="#9a3412" transform="translate(0 2)"/>' +
+                '<path d="M24 4l17 9.8v19.6L24 43.2 7 33.4V13.8z" fill="url(#' + a + ')" stroke="#9a3412" stroke-width="1.4" stroke-linejoin="round"/>' +
+                '<path d="M24 9.5l12.2 7v14L24 37.5 11.8 30.5v-14z" fill="none" stroke="#fff4d6" stroke-width="1.6" stroke-opacity="0.7" stroke-linejoin="round"/>' +
+                '<path d="M24.3 14.5c.9 3 5.4 5 5.4 9.8a5.7 5.7 0 0 1-11.4 0c0-2.2 1-3.7 2.2-4.6.1 1.9 1 2.9 2.2 3.1-.3-3 .5-5.6 1.6-8.3z" fill="url(#' + b + ')" stroke="#9a3412" stroke-width="1" stroke-linejoin="round"/>' +
+                '<path d="M12 13.5l7-4" stroke="#fff" stroke-width="2.2" stroke-linecap="round" opacity="0.6"/>';
         },
         flame: function () {
             var a = gid('f'), b = gid('f');
@@ -162,6 +164,7 @@
                 '<path d="M24 25l1.9 3.8 4.2.6-3 3 .7 4.2-3.8-2-3.8 2 .7-4.2-3-3 4.2-.6z" fill="#fff" opacity="0.9"/>';
         };
     }
+    G.grit = G.coin;
     G['medal-gold'] = medal('#fff3b0', '#ffc21f', '#b8780a');
     G['medal-silver'] = medal('#ffffff', '#c3cad6', '#7d8796');
     G['medal-bronze'] = medal('#f6cfa8', '#d08a4f', '#7a3f17');
