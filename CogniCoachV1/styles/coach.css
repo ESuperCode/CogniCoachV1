@@ -401,3 +401,4 @@ html.a11y-reduce-motion .recap-coin { animation: none; }
 .cm-slot-3d .motion-viewer { margin: 0; }
 /* an iframe inside a 3D-rotated card can mis-map clicks: keep the card flat while 3D is open */
 .coach-mode:has(.cm-slot-3d:not([hidden])) .cm-card { transform: none; }
+.cm-set-note { margin: 0; max-width: 260px; font-size: 0.74rem; line-height: 1.45; color: #9fb4d3; }

@@ -213,6 +213,20 @@
 
     function onReady(m) {
         if (m.plan && state.activeDrill && !state.demo) { savePlan(state.activeDrill, m.plan, m.side || state.side); }
+        // The athlete moved on while this was being built: keep it saved for that drill, but show
+        // the current drill instead (Coach Mode's auto 3D then builds the new one).
+        var cur = currentDrill();
+        if (!state.demo && state.activeDrill && (cur.name + '|' + cur.html) !== (state.activeDrill.name + '|' + state.activeDrill.html)) {
+            clearInterval(state.stepTimer);
+            clearInterval(state.frameTimer);
+            state.generating = false;
+            state.hasAnimation = false;
+            state.drillKey = '';
+            post('pause');
+            onDrillChanged();
+            document.dispatchEvent(new CustomEvent('cognicoach:motion-stale'));
+            return;
+        }
         clearInterval(state.stepTimer);
         state.generating = false;
         state.hasAnimation = true;
@@ -472,7 +486,16 @@
         }
     }
 
-    window.CogniMotionViewer = { motionTextFor: motionTextFor, generate: generate, demo: demo, endDemo: endDemo, reattach: reattach,
+    // Play the current animation again from the start (voice "show me" in Coach Mode).
+    function replay() {
+        if (!state.hasAnimation) { return; }
+        state.playing = true;
+        post('seek', { position: 0 });
+        post('play');
+        renderProgress();
+    }
+
+    window.CogniMotionViewer = { motionTextFor: motionTextFor, generate: generate, demo: demo, endDemo: endDemo, reattach: reattach, replay: replay,
         mode: function () { return root ? root.getAttribute('data-mode') : ''; } };
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', build); } else { build(); }
 })();

@@ -16,7 +16,7 @@
     if (window.CogniCoachMode) { return; }
 
     var KEY = 'cognicoach-coach-mode';
-    var opts = { handsFree: true, rest: 15, beeps: true, voice: false };
+    var opts = { handsFree: true, rest: 15, beeps: true, voice: false, auto3d: false };
     try { var saved = JSON.parse(localStorage.getItem(KEY) || '{}'); Object.keys(opts).forEach(function (k) { if (k in saved) { opts[k] = saved[k]; } }); } catch (e) {}
     function saveOpts() { try { localStorage.setItem(KEY, JSON.stringify(opts)); } catch (e) {} }
 
@@ -87,6 +87,8 @@
             '<div class="cm-settings-panel" hidden>' +
             '  <label>Rest between drills <select class="cm-rest">' + [0, 10, 15, 20, 30, 45, 60].map(function (n) { return '<option value="' + n + '">' + (n ? n + ' s' : 'None') + '</option>'; }).join('') + '</select></label>' +
             '  <label class="cm-toggle"><input type="checkbox" class="cm-beeps"> Countdown beeps</label>' +
+            '  <label class="cm-toggle"><input type="checkbox" class="cm-auto3d"> 3D demo for every drill</label>' +
+            '  <p class="cm-set-note">Opens the 3D athlete and builds the animation for each drill on its own. Or turn on the mic and say \u201cshow me\u201d.</p>' +
             '</div>' +
             '<div class="cm-body">' +
             '  <div class="cm-stage">' +
@@ -146,6 +148,9 @@
         var beeps = root.querySelector('.cm-beeps');
         beeps.checked = opts.beeps;
         beeps.addEventListener('change', function () { opts.beeps = beeps.checked; saveOpts(); });
+        var auto3d = root.querySelector('.cm-auto3d');
+        auto3d.checked = opts.auto3d;
+        auto3d.addEventListener('change', function () { opts.auto3d = auto3d.checked; saveOpts(); if (opts.auto3d) { demo3d(); } });
         var setBtn = root.querySelector('.cm-settings'), setPanel = root.querySelector('.cm-settings-panel');
         setBtn.addEventListener('click', function () {
             setPanel.hidden = !setPanel.hidden;
@@ -206,6 +211,19 @@
         if (v && viewerHome && viewerHome.parentNode) { place(viewerHome.parentNode, v, viewerHome); viewerHome.remove(); }
         viewerHome = null;
     }
+    // Show the 3D panel and make sure this drill's animation is coming: generate it unless one is
+    // already playing, loading, or being restored from an earlier session.
+    function demo3d() {
+        if (!isOpen) { return; }
+        show3d(true);
+        setTimeout(function () {
+            var mv = window.CogniMotionViewer;
+            if (!mv || !isOpen) { return; }
+            var m = mv.mode();
+            if (m === 'idle' || m === 'error') { mv.generate(); }
+            else if (m === 'ready' && mv.replay) { mv.replay(); }
+        }, 250);   // let the viewer notice a new drill first (it may restore a saved animation)
+    }
     function show3d(on) {
         var v = document.getElementById('motionViewer');
         if (!slot3d || !v) { return; }
@@ -243,6 +261,7 @@
         cue = {};
         syncFromSession(true);
         mainBtn.focus();
+        if (opts.auto3d && !($('loadingContainer') && $('loadingContainer').classList.contains('active'))) { demo3d(); }
         if (opts.voice) { setVoice(true); }
     }
 
@@ -422,7 +441,7 @@
             }
         };
         rec.onend = function () { if (recOn && isOpen) { try { rec.start(); } catch (e) {} } else { rec = null; } };
-        try { rec.start(); micText.textContent = 'Listening: say “pause”, “go”, “next”, “too easy”…'; } catch (e) {}
+        try { rec.start(); micText.textContent = 'Listening: say “pause”, “go”, “next”, “show me”, “too easy”…'; } catch (e) {}
     }
 
     function command(t) {
@@ -432,6 +451,8 @@
         if (has(/too (easy|light)/)) { said('noted, harder next'); if (window.CogniCoachAdapt) { window.CogniCoachAdapt.feedback('easy'); } }
         else if (has(/too (hard|tough|much)/)) { said('noted, easier next'); if (window.CogniCoachAdapt) { window.CogniCoachAdapt.feedback('hard'); } }
         else if (has(/just right|perfect|good one/)) { said('noted'); if (window.CogniCoachAdapt) { window.CogniCoachAdapt.feedback('right'); } }
+        else if (has(/\b(hide|no) (the )?(3 ?-?d|three d|demo|animation)\b/)) { said('hiding 3D'); show3d(false); }
+        else if (has(/\b3 ?-?d\b|three d|\bdemo\b|show me|\banimat|\bwatch\b/)) { said('showing the 3D demo'); demo3d(); }
         else if (has(/\b(pause|stop|hold|wait)\b/)) { said('pause'); if (s && s.timerStarted && !s.isPaused) { togglePause(); } else if (phase === 'rest') { restPaused = true; setPhase('rest'); } else { cancelCountdown(); } }
         else if (has(/\b(go|start|resume|continue)\b/)) { said('go'); if (phase === 'rest') { restPaused = false; setPhase('rest'); } else if (s && s.timerStarted && s.isPaused) { togglePause(); } else if (!s.timerStarted && phase !== 'done') { mainAction(); } }
         else if (has(/\b(next|done)\b/)) { said('next'); if (phase === 'rest' || phase === 'done') { goNext(); } }
@@ -457,7 +478,9 @@
         // the card's feedback chips may have just been created
         if (!slotFb.firstChild) { moveIn(document.querySelector('.adapt-feedback'), slotFb); }
         syncFromSession(true);
+        if (opts.auto3d) { demo3d(); }
     });
+    document.addEventListener('cognicoach:motion-stale', function () { if (isOpen && opts.auto3d) { demo3d(); } });
     document.addEventListener('cognicoach:read-aloud', function (e) {
         if (!isOpen) { return; }
         root.classList.toggle('cm-reading', e.detail.state !== 'idle');
