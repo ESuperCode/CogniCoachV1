@@ -29,6 +29,7 @@
     var CIRC = 2 * Math.PI * 88;
 
     function $(id) { return document.getElementById(id); }
+    function ic(n, s, c) { return window.CogniIcons ? window.CogniIcons.svg(n, { size: s || 20, cls: c }) : ''; }
     function S() { return (typeof appState !== 'undefined' && appState.session) ? appState.session : null; }
     function RA() { return window.CogniReadAloud && window.CogniReadAloud.supported ? window.CogniReadAloud : null; }
     function fmt(sec) { sec = Math.max(0, Math.round(sec)); return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0'); }
@@ -77,9 +78,9 @@
             '  <div class="cm-brand"><span class="cm-dot" aria-hidden="true"></span>Coach Mode <span class="cm-meta"></span></div>' +
             '  <div class="cm-top-actions">' +
             '    <label class="cm-toggle"><input type="checkbox" class="cm-hf"> Hands-free</label>' +
-            '    <button type="button" class="cm-icon cm-mic" aria-pressed="false" title="Voice control"><span aria-hidden="true">🎙️</span><span class="a11y-sr-only">Voice control</span></button>' +
-            '    <button type="button" class="cm-icon cm-settings" aria-expanded="false" title="Coach Mode settings"><span aria-hidden="true">⚙️</span><span class="a11y-sr-only">Coach Mode settings</span></button>' +
-            '    <button type="button" class="cm-icon cm-exit" title="Exit Coach Mode (Esc)"><span aria-hidden="true">✕</span><span class="a11y-sr-only">Exit Coach Mode</span></button>' +
+            '    <button type="button" class="cm-icon cm-mic" aria-pressed="false" title="Voice control">' + ic('mic', 20) + '<span class="a11y-sr-only">Voice control</span></button>' +
+            '    <button type="button" class="cm-icon cm-settings" aria-expanded="false" title="Coach Mode settings">' + ic('sliders', 20) + '<span class="a11y-sr-only">Coach Mode settings</span></button>' +
+            '    <button type="button" class="cm-icon cm-exit" title="Exit Coach Mode (Esc)">' + ic('close', 20) + '<span class="a11y-sr-only">Exit Coach Mode</span></button>' +
             '  </div>' +
             '</div>' +
             '<div class="cm-settings-panel" hidden>' +
@@ -98,9 +99,9 @@
             '      <div class="cm-center"><div class="cm-phase">Ready</div><div class="cm-digits" role="timer">00:00</div><div class="cm-upnext"></div></div>' +
             '    </div>' +
             '    <div class="cm-controls">' +
-            '      <button type="button" class="cm-btn cm-read"><span aria-hidden="true">🔊</span> Read</button>' +
+            '      <button type="button" class="cm-btn cm-read">' + ic('volume', 20) + ' Read</button>' +
             '      <button type="button" class="cm-btn cm-main">Start</button>' +
-            '      <button type="button" class="cm-btn cm-skip"><span aria-hidden="true">⏭</span> Skip</button>' +
+            '      <button type="button" class="cm-btn cm-skip">' + ic('skip', 20) + ' Skip</button>' +
             '    </div>' +
             '    <button type="button" class="cm-btn cm-next" hidden>Next drill →</button>' +
             '    <p class="cm-mic-text" aria-live="polite"></p>' +
@@ -165,7 +166,7 @@
         b.type = 'button';
         b.id = 'coachModeBtn';
         b.className = 'coach-launch';
-        b.innerHTML = '<span class="coach-launch-icon" aria-hidden="true">▶</span><span><b>Coach Mode</b><small>Hands-free, full screen</small></span>';
+        b.innerHTML = '<span class="coach-launch-icon" aria-hidden="true">' + ic('play', 22) + '</span><span><b>Coach Mode</b><small>Hands-free, full screen</small></span>';
         b.addEventListener('click', open);
         display.parentNode.insertBefore(b, display);
     }
@@ -187,6 +188,7 @@
         if (isOpen) { return; }
         if (!root) { build(); }
         lastFocus = document.activeElement;
+        if (S()) { S().usedCoachMode = true; }   // for the "Coach Mode" daily quest
         moveIn(document.querySelector('#drillContent .drill-display'), slot);
         moveIn(document.querySelector('.adapt-feedback'), slotFb);
         root.hidden = false;

@@ -21,6 +21,7 @@
         if (r.drillsTotal > 0 && !r.completed) { len = Math.round(len * (r.drillsCompleted || 0) / r.drillsTotal); }
         return len;
     }
+    function pic(n, s) { return window.CogniIcons ? window.CogniIcons.svg(n, { size: s }) : ''; }
     function esc(t) {
         return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) {
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -31,7 +32,10 @@
 
     // ---------------------------------------------------------------- XP / level
     function xpOf(h) {
-        return h.reduce(function (s, r) { return s + minutesOf(r) + (r.completed ? 25 : 10); }, 0);
+        // stored per session since the economy update (boosts); plus bonus XP from chests
+        var bonus = 0;
+        try { bonus = Number(JSON.parse(localStorage.getItem('cognicoach-wallet') || '{}').bonusXp) || 0; } catch (e) {}
+        return h.reduce(function (s, r) { return s + (typeof r.xp === 'number' ? r.xp : minutesOf(r) + (r.completed ? 25 : 10)); }, 0) + bonus;
     }
     function renderLevel(h) {
         var el = document.getElementById('levelCard');
@@ -76,15 +80,15 @@
         var sports = {};
         h.forEach(function (r) { if (r.sport) { sports[r.sport.trim().toLowerCase()] = 1; } });
         var tiles = [
-            ['⏱', (totalMin / 60).toFixed(totalMin >= 600 ? 0 : 1), 'Hours trained'],
-            ['🏋', longest + ' min', 'Longest session'],
-            ['📅', bestWeek + ' min', 'Best week'],
-            ['🎯', mostDrills, 'Most drills in a session'],
-            ['✅', rate + '%', 'Sessions finished'],
-            ['🌍', Object.keys(sports).length, 'Sports trained']
+            ['stopwatch', (totalMin / 60).toFixed(totalMin >= 600 ? 0 : 1), 'Hours trained'],
+            ['dumbbell', longest + ' min', 'Longest session'],
+            ['calendar', bestWeek + ' min', 'Best week'],
+            ['target', mostDrills, 'Most drills in a session'],
+            ['check-circle', rate + '%', 'Sessions finished'],
+            ['globe', Object.keys(sports).length, 'Sports trained']
         ];
         el.innerHTML = tiles.map(function (t, i) {
-            return '<div class="record-tile" style="animation-delay:' + (i * 60) + 'ms"><span class="record-icon" aria-hidden="true">' + t[0] +
+            return '<div class="record-tile" style="animation-delay:' + (i * 60) + 'ms"><span class="record-icon" aria-hidden="true">' + pic(t[0], 26) +
                 '</span><div class="record-value">' + esc(t[1]) + '</div><div class="stat-label">' + t[2] + '</div></div>';
         }).join('');
     }
@@ -174,7 +178,7 @@
                 return '<tr><td>' + esc(d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined })) +
                     '</td><td>' + esc(r.sport || '—') + '</td><td>' + esc(r.focus || '—') + '</td><td class="num">' + minutesOf(r) +
                     '</td><td class="num">' + (r.drillsCompleted || 0) + '/' + (r.drillsTotal || 0) + '</td><td>' +
-                    (r.completed ? '<span class="pill done">✓ Finished</span>' : '<span class="pill partial">◐ Partial</span>') + '</td></tr>';
+                    (r.completed ? '<span class="pill done">' + pic('check', 12) + ' Finished</span>' : '<span class="pill partial">' + pic('half-circle', 12) + ' Partial</span>') + '</td></tr>';
             }).join('') + '</tbody></table>' : '<p class="dash-muted">No sessions yet.</p>';
     }
 

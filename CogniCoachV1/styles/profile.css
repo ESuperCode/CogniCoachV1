@@ -170,12 +170,18 @@
     display: none;
 }
 
-.advanced-setup summary::before {
-    content: '▸ ';
+.advanced-setup summary::before {   /* drawn chevron (no text glyph) */
+    content: '';
+    display: inline-block;
+    width: 0.45em; height: 0.45em;
+    margin: 0 0.6em 0.12em 0;
+    border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg);
+    transition: transform 0.2s ease;
 }
 
 .advanced-setup[open] summary::before {
-    content: '▾ ';
+    transform: rotate(45deg);
 }
 
 .advanced-setup summary:hover {

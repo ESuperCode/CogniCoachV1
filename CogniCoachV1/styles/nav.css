@@ -105,3 +105,20 @@ body {
     .site-nav-link { padding: 6px 3px; font-size: 0.62rem; }
     .site-nav .nav-account-btn { padding: 4px; }
 }
+
+/* Icons in the nav (scripts/icons.js). Phones: icon-only links, the label stays for screen readers. */
+.site-nav-link { gap: 7px; }
+.site-nav-icon { opacity: 0.85; }
+.site-nav-link.active .site-nav-icon { opacity: 1; }
+@media (max-width: 760px) {
+    .site-nav-link:not(.site-nav-brand) .site-nav-text {
+        position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+    }
+    .site-nav-link:not(.site-nav-brand) { min-width: 40px; min-height: 40px; justify-content: center; padding: 6px 8px; }
+    .site-nav-icon { width: 20px; height: 20px; opacity: 1; }
+    .site-nav { gap: 4px; }
+}
+@media (max-width: 360px) {
+    .site-nav-link:not(.site-nav-brand) { min-width: 36px; padding: 6px 6px; }
+    .site-nav { gap: 0; }
+}

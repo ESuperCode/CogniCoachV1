@@ -24,7 +24,7 @@
         if (r.drillsTotal > 0 && !r.completed) { len = Math.round(len * (r.drillsCompleted || 0) / r.drillsTotal); }
         return len;
     }
-    function xpOfRecord(r) { return minutesOf(r) + (r.completed ? 25 : 10); }
+    function xpOfRecord(r) { return typeof r.xp === 'number' ? r.xp : minutesOf(r) + (r.completed ? 25 : 10); }
     function levelFor(xp) {
         var i = 0;
         while (i + 1 < LEVELS.length && xp >= LEVELS[i + 1].xp) { i++; }
@@ -94,20 +94,21 @@
         if (!rec || Date.now() - new Date(rec.date).getTime() > 5 * 60 * 1000) { return; }
 
         var earned = xpOfRecord(rec);
-        var total = h.reduce(function (s, r) { return s + xpOfRecord(r); }, 0);
+        var E = window.CogniEconomy, rw = window.__lastSessionReward || null;
+        var total = E ? E.totalXp() : h.reduce(function (s, r) { return s + xpOfRecord(r); }, 0);
         var before = levelFor(total - earned), after = levelFor(total);
         var lv = after;
         var pct = lv.next ? Math.round(100 * (total - lv.cur.xp) / (lv.next.xp - lv.cur.xp)) : 100;
         var mins = minutesOf(rec);
         var savedTotal = h.length * PLANNING_MINUTES_SAVED;
-        var st = streak(h);
+        var st = E ? E.streakInfo().current : streak(h);
         var f = rec.feedback || {};
         var rated = (f.hard || 0) + (f.right || 0) + (f.easy || 0);
         var readyWord = { low: 'Low energy', normal: 'Normal', high: 'Fired up' }[rec.readiness] || '';
 
         card.classList.add('recap');
         card.innerHTML =
-            '<div class="recap-medal" aria-hidden="true"><div class="recap-coin"><span>🏆</span></div></div>' +
+            '<div class="recap-medal" aria-hidden="true"><div class="recap-coin">' + icon('trophy-gold', 58) + '</div></div>' +
             '<h2 class="recap-title" tabindex="-1">Session complete</h2>' +
             '<p class="recap-sub">' + esc(rec.sport) + (rec.focus && rec.focus !== 'General' ? ' · ' + esc(rec.focus) : '') + '</p>' +
             (before.index !== after.index ? '<p class="recap-levelup" role="status">Level up! You are now <b>' + esc(after.cur.name) + '</b></p>' : '') +
@@ -118,6 +119,7 @@
             tile('+' + earned, 'XP earned') +
             tile(st + (st === 1 ? ' day' : ' days'), 'Streak') +
             '</div>' +
+            rewards(rw) +
             '<div class="recap-level"><div class="recap-level-row"><span><b>' + esc(lv.cur.name) + '</b> · ' + total + ' XP</span>' +
             '<span>' + (lv.next ? (lv.next.xp - total) + ' XP to ' + esc(lv.next.name) : 'Top level') + '</span></div>' +
             '<div class="recap-bar" role="progressbar" aria-label="Progress to next level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><span style="width:' + pct + '%"></span></div></div>' +
@@ -135,6 +137,33 @@
         if (title) { title.focus({ preventScroll: true }); }
         card.scrollIntoView({ block: 'start', behavior: 'smooth' });
         confetti(card);
+        var ob = card.querySelector('[data-open-chests]');
+        if (ob && window.CogniEconomyUI) {
+            ob.addEventListener('click', function () {
+                var ids = (rw && rw.chests || []).map(function (c) { return c.id; });
+                window.CogniEconomyUI.openChests(ids, function () { var b = card.querySelector('.recap-rewards [data-open-chests]'); if (b) { b.disabled = true; b.textContent = 'Opened'; } });
+            });
+        }
+    }
+
+    function icon(n, s) { return window.CogniIcons ? window.CogniIcons.svg(n, { size: s || 24 }) : ''; }
+
+    // XP (with boost), coins, chests and today's goal/quests from scripts/economy.js
+    function rewards(rw) {
+        var E = window.CogniEconomy;
+        if (!rw || !E) { return ''; }
+        var q = E.quests(), claim = E.claimableCount();
+        var C = 2 * Math.PI * 15, frac = Math.min(1, q.goal ? q.todayXp / q.goal : 0);
+        var chestIcons = rw.chests.map(function (c) { return icon('chest-' + c.tier, 40); }).join('');
+        return '<div class="recap-rewards">' +
+            '<div class="rr-item">' + icon('xp', 40) + '<div><b>+' + rw.xp + ' XP</b>' + (rw.mult > 1 ? '<span class="rr-boost">' + icon('boost', 16) + ' ' + rw.mult + 'x boost</span>' : '<small>' + rw.base + ' base</small>') + '</div></div>' +
+            '<div class="rr-item">' + icon('coin', 40) + '<div><b>+' + (rw.coins + rw.levelCoins) + '</b><small>coins' + (rw.levelCoins ? ' (incl. level-up bonus)' : '') + '</small></div></div>' +
+            '<div class="rr-item rr-goal"><svg viewBox="0 0 36 36" width="40" height="40" aria-hidden="true"><circle cx="18" cy="18" r="15" class="econ-ring-bg"/><circle cx="18" cy="18" r="15" class="econ-ring-fg" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - frac)).toFixed(1) + '" transform="rotate(-90 18 18)"/></svg>' +
+            '<div><b>' + q.todayXp + '/' + q.goal + '</b><small>' + (q.goalDone ? 'daily goal done' : 'daily XP goal') + '</small></div></div>' +
+            (rw.chests.length ? '<div class="rr-chests"><span class="rr-chest-icons">' + chestIcons + '</span><span>' + (rw.milestone ? '<b>' + rw.milestone + '-day streak!</b> ' : '') + 'You earned ' + rw.chests.length + ' chest' + (rw.chests.length > 1 ? 's' : '') + '</span>' +
+                '<button type="button" class="econ-btn econ-btn-primary" data-open-chests>' + icon('gift', 18) + ' Open</button></div>' : '') +
+            (claim ? '<a class="rr-claim" href="arena.html#quests">' + icon('target', 18) + ' ' + claim + ' quest reward' + (claim > 1 ? 's' : '') + ' ready to claim ' + icon('arrow-right', 16) + '</a>' : '') +
+            '</div>';
     }
 
     // Rank change from this session (scripts/athlete-stats.js), e.g. placement finished or a promotion.
@@ -149,7 +178,7 @@
         var order = function (r) { return r.placed ? r.index * 3 + ['III', 'II', 'I'].indexOf(r.division || 'I') : -1; };
         var badge = function (r) {
             return '<span class="recap-rank-badge" style="--tier:' + (r.placed ? r.tier.color : '#7b8798') + ';--tier-light:' + (r.placed ? r.tier.light : '#dfe5ee') + '">' +
-                (r.placed ? (r.division || '\u2605') : '?') + '</span>';
+                (r.placed ? (r.division || icon('star', 18)) : '?') + '</span>';
         };
         var msg;
         if (!before.placed && after.placed) { msg = 'Placement complete! You are ranked <b>' + esc(after.label) + '</b>.'; }

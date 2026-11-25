@@ -29,6 +29,7 @@
     try { range = localStorage.getItem(RANGE_KEY) || '28'; } catch (e) {}
     var skyline = null, donut = null;
 
+    function ic(n, s, c) { return window.CogniIcons ? window.CogniIcons.svg(n, { size: s || 20, cls: c }) : ''; }
     function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function startOfDay(t) { var d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
     function fmtDate(t) { return new Date(t).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); }
@@ -109,7 +110,7 @@
 
             '<div class="ms-grid">' +
             '<figure class="ms-panel ms-wide"><figcaption><span><b>Training skyline</b><small>Every day of the ' + rangeName + '. Taller and darker = more minutes.</small></span>' +
-            '<span class="ms-tools"><button type="button" class="ms-tool" data-rot="-1" aria-label="Rotate left">⟲</button><button type="button" class="ms-tool" data-rot="1" aria-label="Rotate right">⟳</button>' +
+            '<span class="ms-tools"><button type="button" class="ms-tool" data-rot="-1" aria-label="Rotate left">' + ic('rotate-left', 18) + '</button><button type="button" class="ms-tool" data-rot="1" aria-label="Rotate right">' + ic('rotate-right', 18) + '</button>' +
             '<button type="button" class="ms-tool ms-table-btn" aria-pressed="false" data-for="skyTable">Table</button></span></figcaption>' +
             '<div class="ms-canvas-wrap"><canvas class="ms-sky" role="img" aria-label="' + esc(skyAria(sl)) + '"></canvas><div class="ms-tip" hidden></div></div>' +
             '<div class="ms-legend-seq" aria-hidden="true"><span>0 min</span><i style="background:linear-gradient(90deg,' + SEQ.join(',') + ')"></i><span id="skyMax"></span></div>' +
@@ -131,7 +132,7 @@
             '<figure class="ms-panel"><figcaption><span><b>How drills felt</b><small>Your ratings during sessions</small></span></figcaption>' + feel(sl.cur) + '</figure>' +
 
             '<div class="ms-panel ms-wide ms-analysis"><h3>What the numbers say</h3><ul>' +
-            analysis(all, sl, k, kp).map(function (a) { return '<li><span class="ms-a-icon" aria-hidden="true">' + a[0] + '</span><span>' + a[1] + '</span></li>'; }).join('') +
+            analysis(all, sl, k, kp).map(function (a) { return '<li><span class="ms-a-icon" aria-hidden="true">' + ic(a[0], 22) + '</span><span>' + a[1] + '</span></li>'; }).join('') +
             '</ul></div>' +
             '</div>';
 
@@ -168,12 +169,12 @@
         if (range === 'all' || !b) { return ''; }
         var p = Math.round((a - b) / b * 100);
         if (!p) { return '<span class="ms-flat">→ same as before</span>'; }
-        return '<span class="' + (p > 0 ? 'ms-up' : 'ms-down') + '">' + (p > 0 ? '▲ ' : '▼ ') + Math.abs(p) + '%</span> vs previous';
+        return '<span class="' + (p > 0 ? 'ms-up' : 'ms-down') + '">' + ic(p > 0 ? 'arrow-up' : 'arrow-down', 12) + ' ' + Math.abs(p) + '%</span> vs previous';
     }
     function ptsDelta(a, b) {
         var p = Math.round((a - b) * 100);
         if (!p) { return '<span class="ms-flat">→ same as before</span>'; }
-        return '<span class="' + (p > 0 ? 'ms-up' : 'ms-down') + '">' + (p > 0 ? '▲ ' : '▼ ') + Math.abs(p) + ' pts</span> vs previous';
+        return '<span class="' + (p > 0 ? 'ms-up' : 'ms-down') + '">' + ic(p > 0 ? 'arrow-up' : 'arrow-down', 12) + ' ' + Math.abs(p) + ' pts</span> vs previous';
     }
     function intensityWord(v) { return v > 1.2 ? 'Max' : v > 0.4 ? 'High' : v < -1.2 ? 'Recovery' : v < -0.4 ? 'Lower' : 'Standard'; }
 
@@ -561,16 +562,16 @@
     // ------------------------------------------------------------------ analysis
     function analysis(all, sl, k, kp) {
         var out = [], rs = sl.cur;
-        if (!rs.length) { return [['📭', 'No sessions in this range yet. Try a longer range above.']]; }
+        if (!rs.length) { return [['inbox', 'No sessions in this range yet. Try a longer range above.']]; }
         if (range !== 'all' && kp.minutes) {
             var ch = Math.round((k.minutes - kp.minutes) / kp.minutes * 100);
-            out.push([ch >= 0 ? '📈' : '📉', 'You trained <b>' + Math.abs(ch) + '% ' + (ch >= 0 ? 'more' : 'less') + '</b> than the ' + (range === '28' ? 'previous 4 weeks' : 'previous 12 weeks') + ' (' + k.minutes + ' vs ' + kp.minutes + ' minutes).']);
+            out.push([ch >= 0 ? 'trend-up' : 'trend-down', 'You trained <b>' + Math.abs(ch) + '% ' + (ch >= 0 ? 'more' : 'less') + '</b> than the ' + (range === '28' ? 'previous 4 weeks' : 'previous 12 weeks') + ' (' + k.minutes + ' vs ' + kp.minutes + ' minutes).']);
         }
-        out.push(['📅', 'Active on <b>' + k.activeDays + ' of ' + Math.min(sl.days, Math.ceil((Date.now() - new Date(all[0].date).getTime()) / DAY) + 1) + ' days</b>, about <b>' + (Math.round(rs.length / (sl.days / 7) * 10) / 10) + ' sessions a week</b>.']);
+        out.push(['calendar', 'Active on <b>' + k.activeDays + ' of ' + Math.min(sl.days, Math.ceil((Date.now() - new Date(all[0].date).getTime()) / DAY) + 1) + ' days</b>, about <b>' + (Math.round(rs.length / (sl.days / 7) * 10) / 10) + ' sessions a week</b>.']);
         var wd = [0, 0, 0, 0, 0, 0, 0], wdn = [0, 0, 0, 0, 0, 0, 0];
         rs.forEach(function (r) { var d = new Date(r.date).getDay(); wd[d] += CS.minutesOf(r); wdn[d]++; });
         var best = wd.indexOf(Math.max.apply(null, wd));
-        if (wd[best]) { out.push(['⭐', '<b>' + ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'][best] + '</b> are your biggest day (' + wd[best] + ' minutes over ' + wdn[best] + ' session' + (wdn[best] === 1 ? '' : 's') + ').']); }
+        if (wd[best]) { out.push(['star', '<b>' + ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'][best] + '</b> are your biggest day (' + wd[best] + ' minutes over ' + wdn[best] + ' session' + (wdn[best] === 1 ? '' : 's') + ').']); }
         // time of day vs finishing
         var tb = [[0, 0], [0, 0], [0, 0], [0, 0]];
         rs.forEach(function (r) { var b = bucket(new Date(r.date).getHours()); tb[b][0]++; if (r.completed) { tb[b][1]++; } });
@@ -578,20 +579,20 @@
         var most = tb.map(function (x) { return x[0]; }); var mi = most.indexOf(Math.max.apply(null, most));
         var bestFinish = -1, bf = -1;
         tb.forEach(function (x, i) { if (x[0] >= 2 && x[1] / x[0] > bf) { bf = x[1] / x[0]; bestFinish = i; } });
-        out.push(['🕒', 'You train most in the <b>' + names[mi] + '</b>' + (bestFinish >= 0 && bestFinish !== mi ? ', but you finish the most sessions in the <b>' + names[bestFinish] + '</b> (' + pct(bf) + ').' : '.')]);
+        out.push(['clock', 'You train most in the <b>' + names[mi] + '</b>' + (bestFinish >= 0 && bestFinish !== mi ? ', but you finish the most sessions in the <b>' + names[bestFinish] + '</b> (' + pct(bf) + ').' : '.')]);
         // session length sweet spot
         var short = rs.filter(function (r) { return Number(r.workoutLength) <= 45; }), long = rs.filter(function (r) { return Number(r.workoutLength) > 45; });
         if (short.length >= 2 && long.length >= 2) {
             var fs = short.filter(function (r) { return r.completed; }).length / short.length, fl = long.filter(function (r) { return r.completed; }).length / long.length;
-            if (Math.abs(fs - fl) >= 0.15) { out.push(['⏱️', 'You finish <b>' + pct(fs) + '</b> of sessions up to 45 minutes and <b>' + pct(fl) + '</b> of longer ones. ' + (fs > fl ? 'Shorter sessions suit you right now.' : 'You go the distance - longer sessions work for you.')]); }
+            if (Math.abs(fs - fl) >= 0.15) { out.push(['stopwatch', 'You finish <b>' + pct(fs) + '</b> of sessions up to 45 minutes and <b>' + pct(fl) + '</b> of longer ones. ' + (fs > fl ? 'Shorter sessions suit you right now.' : 'You go the distance - longer sessions work for you.')]); }
         }
         // readiness vs finishing
         var rd = { low: [0, 0], normal: [0, 0], high: [0, 0] };
         rs.forEach(function (r) { if (rd[r.readiness]) { rd[r.readiness][0]++; if (r.completed) { rd[r.readiness][1]++; } } });
         if (rd.low[0] >= 2 && rd.high[0] >= 2) {
-            out.push(['🔋', 'On <b>Fired up</b> days you finish ' + pct(rd.high[1] / rd.high[0]) + ' of sessions; on <b>Low energy</b> days, ' + pct(rd.low[1] / rd.low[0]) + '. The coach already eases off when you are low.']);
+            out.push(['battery-low', 'On <b>Fired up</b> days you finish ' + pct(rd.high[1] / rd.high[0]) + ' of sessions; on <b>Low energy</b> days, ' + pct(rd.low[1] / rd.low[0]) + '. The coach already eases off when you are low.']);
         } else if (!rs.some(function (r) { return r.readiness; })) {
-            out.push(['💬', 'Use the <b>How do you feel today?</b> check-in before sessions and this will show how energy affects your training.']);
+            out.push(['message', 'Use the <b>How do you feel today?</b> check-in before sessions and this will show how energy affects your training.']);
         }
         // intensity trend
         var wi = rs.filter(function (r) { return typeof r.intensity === 'number'; });
@@ -599,7 +600,7 @@
             var half = Math.floor(wi.length / 2);
             var a = wi.slice(0, half).reduce(function (s, r) { return s + r.intensity; }, 0) / half;
             var b = wi.slice(half).reduce(function (s, r) { return s + r.intensity; }, 0) / (wi.length - half);
-            if (Math.abs(b - a) >= 0.4) { out.push([b > a ? '🔥' : '🌿', 'Your training intensity has gone <b>' + (b > a ? 'up' : 'down') + '</b> recently (' + intensityWord(a).toLowerCase() + ' → ' + intensityWord(b).toLowerCase() + ').']); }
+            if (Math.abs(b - a) >= 0.4) { out.push([b > a ? 'flame' : 'leaf', 'Your training intensity has gone <b>' + (b > a ? 'up' : 'down') + '</b> recently (' + intensityWord(a).toLowerCase() + ' → ' + intensityWord(b).toLowerCase() + ').']); }
         }
         // projections
         var st = CS.compute(all);
@@ -607,10 +608,10 @@
         var xpRate = rs.reduce(function (s, r) { return s + CS.xpOf(r); }, 0) / spanDays;
         if (st.level.next && xpRate > 0) {
             var dl = Math.ceil((st.level.next.xp - st.xp) / xpRate);
-            out.push(['🎯', 'At this pace you reach <b>' + st.level.next.name + '</b> level in about <b>' + dl + ' day' + (dl === 1 ? '' : 's') + '</b> (' + (st.level.next.xp - st.xp) + ' XP to go).']);
+            out.push(['target', 'At this pace you reach <b>' + st.level.next.name + '</b> level in about <b>' + dl + ' day' + (dl === 1 ? '' : 's') + '</b> (' + (st.level.next.xp - st.xp) + ' XP to go).']);
         }
-        if (!st.rank.placed) { out.push(['🏅', '<b>' + st.rank.toGo + '</b> more session' + (st.rank.toGo === 1 ? '' : 's') + ' to finish placement and get your rank.']); }
-        else if (st.rank.next) { out.push(['🏅', 'You are <b>' + esc(st.rank.label) + '</b>. ' + st.rank.pointsToNext + ' more OVR gets you <b>' + esc(st.rank.next) + '</b> - a streak day is worth up to 2.']); }
+        if (!st.rank.placed) { out.push(['medal', '<b>' + st.rank.toGo + '</b> more session' + (st.rank.toGo === 1 ? '' : 's') + ' to finish placement and get your rank.']); }
+        else if (st.rank.next) { out.push(['medal', 'You are <b>' + esc(st.rank.label) + '</b>. ' + st.rank.pointsToNext + ' more OVR gets you <b>' + esc(st.rank.next) + '</b> - a streak day is worth up to 2.']); }
         return out;
     }
 

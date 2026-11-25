@@ -128,3 +128,7 @@
 @media (min-width: 900px) {
     .about-feature-grid { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* SVG icons (scripts/icons.js) */
+.about-feature-icon { display: flex; justify-content: center; color: var(--primary-blue); }
+.about-feature-title .ci-wrap { color: var(--secondary-orange); vertical-align: -3px; }

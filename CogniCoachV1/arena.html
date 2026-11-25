@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Weekly leagues, friends, daily quests, chests and the shop - the CogniCoachAI Arena.">
+    <meta name="theme-color" content="#059bff">
+    <title>Arena | CogniCoachAI</title>
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="apple-touch-icon" href="logo-192.png">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="styles/style.css?v=20261125a" rel="stylesheet">
+    <link href="styles/nav.css?v=20261125a" rel="stylesheet">
+    <link href="styles/economy.css?v=20261125a" rel="stylesheet">
+    <link href="styles/athlete-card.css?v=20261125a" rel="stylesheet">
+    <link href="styles/arena.css?v=20261125a" rel="stylesheet">
+</head>
+<body>
+    <site-nav></site-nav>
+
+    <div class="animated-bg">
+        <div class="bg-orb orb-1"></div>
+        <div class="bg-orb orb-2"></div>
+        <div class="bg-orb orb-3"></div>
+        <div class="pointer-glow"></div>
+        <div class="grid-pattern"></div>
+    </div>
+
+    <main class="container arena" id="main" tabindex="-1">
+        <header class="arena-head">
+            <h1 class="arena-title"><i data-icon="podium" data-size="40"></i> Arena</h1>
+            <p class="tagline">LEAGUES &middot; FRIENDS &middot; QUESTS &middot; SHOP</p>
+        </header>
+
+        <div id="arenaHud"></div>
+
+        <div class="arena-tabs" role="tablist" aria-label="Arena sections">
+            <button type="button" role="tab" id="tab-league" aria-controls="panel-league" data-tab="league"><i data-icon="podium"></i><span>League</span></button>
+            <button type="button" role="tab" id="tab-friends" aria-controls="panel-friends" data-tab="friends"><i data-icon="users"></i><span>Friends</span></button>
+            <button type="button" role="tab" id="tab-quests" aria-controls="panel-quests" data-tab="quests"><i data-icon="target"></i><span>Quests</span><b class="tab-dot" hidden></b></button>
+            <button type="button" role="tab" id="tab-shop" aria-controls="panel-shop" data-tab="shop"><i data-icon="bag"></i><span>Shop</span></button>
+            <button type="button" role="tab" id="tab-bag" aria-controls="panel-bag" data-tab="bag"><i data-icon="gift"></i><span>Bag</span><b class="tab-dot" hidden></b></button>
+        </div>
+
+        <section class="arena-panel card" role="tabpanel" id="panel-league" aria-labelledby="tab-league" tabindex="0" hidden></section>
+        <section class="arena-panel card" role="tabpanel" id="panel-friends" aria-labelledby="tab-friends" tabindex="0" hidden></section>
+        <section class="arena-panel card" role="tabpanel" id="panel-quests" aria-labelledby="tab-quests" tabindex="0" hidden></section>
+        <section class="arena-panel card" role="tabpanel" id="panel-shop" aria-labelledby="tab-shop" tabindex="0" hidden></section>
+        <section class="arena-panel card" role="tabpanel" id="panel-bag" aria-labelledby="tab-bag" tabindex="0" hidden></section>
+    </main>
+
+    <script src="scripts/icons.js?v=20261125a"></script>
+    <script src="scripts/nav.js?v=20261125a"></script>
+    <script src="scripts/athlete-stats.js?v=20261125a"></script>
+    <script src="scripts/economy.js?v=20261125a"></script>
+    <script src="scripts/economy-ui.js?v=20261125a"></script>
+    <script src="scripts/social.js?v=20261125a"></script>
+    <script src="scripts/arena.js?v=20261125a"></script>
+</body>
+</html>

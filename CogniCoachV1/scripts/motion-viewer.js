@@ -357,7 +357,7 @@
             '  <button type="button" class="motion-play" aria-label="Pause"><span class="icon-play"></span><span class="icon-pause"></span></button>' +
             '  <input type="range" class="motion-scrubber" min="0" max="0" step="0.01" value="0" aria-label="Animation position">' +
             '  <span class="motion-time">0.0s / 0.0s</span>' +
-            '  <button type="button" class="motion-regen" title="Generate again">&#x21bb;</button>' +
+            '  <button type="button" class="motion-regen" title="Generate again" aria-label="Generate again">' + (window.CogniIcons ? window.CogniIcons.svg('refresh', { size: 18 }) : '&#x21bb;') + '</button>' +
             '</div>' +
             '<div class="motion-help">' +
             '  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> turn the athlete</span>' +

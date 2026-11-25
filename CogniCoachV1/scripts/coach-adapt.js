@@ -15,18 +15,19 @@
 
     var READY_KEY = 'cognicoach-readiness';
     var READINESS = [
-        { id: 'low', icon: '🔋', label: 'Low energy', bias: -1, tip: 'Easier drills today - recovery still counts.' },
-        { id: 'normal', icon: '🙂', label: 'Normal', bias: 0, tip: 'Standard intensity.' },
-        { id: 'high', icon: '⚡', label: 'Fired up', bias: 1, tip: 'Harder drills today - let’s push.' }
+        { id: 'low', icon: 'battery-low', label: 'Low energy', bias: -1, tip: 'Easier drills today - recovery still counts.' },
+        { id: 'normal', icon: 'smile', label: 'Normal', bias: 0, tip: 'Standard intensity.' },
+        { id: 'high', icon: 'bolt', label: 'Fired up', bias: 1, tip: 'Harder drills today - let’s push.' }
     ];
     var FEEDBACK = [
-        { id: 'hard', icon: '😮‍💨', label: 'Too hard', delta: -1 },
-        { id: 'right', icon: '👍', label: 'Just right', delta: 0 },
-        { id: 'easy', icon: '😤', label: 'Too easy', delta: 1 }
+        { id: 'hard', icon: 'strain', label: 'Too hard', delta: -1 },
+        { id: 'right', icon: 'thumbs-up', label: 'Just right', delta: 0 },
+        { id: 'easy', icon: 'rocket', label: 'Too easy', delta: 1 }
     ];
     var NOTES = { '-2': 'recovery pace, low intensity', '-1': 'lower intensity', '1': 'higher intensity', '2': 'maximum challenge' };
     var WORDS = { '-2': 'Recovery pace', '-1': 'Lower intensity', '0': 'Standard intensity', '1': 'Higher intensity', '2': 'Max challenge' };
 
+    function ic(n, s, c) { return window.CogniIcons ? window.CogniIcons.svg(n, { size: s || 20, cls: c }) : ''; }
     function today() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
 
     function readiness() {
@@ -93,7 +94,7 @@
         wrap.innerHTML = '<div class="readiness-label" id="readinessLabel">How do you feel today? <span>(optional)</span></div>' +
             '<div class="readiness-opts">' + READINESS.map(function (r) {
                 return '<button type="button" class="adapt-chip" data-ready="' + r.id + '" aria-pressed="false">' +
-                    '<span class="adapt-icon" aria-hidden="true">' + r.icon + '</span>' + r.label + '</button>';
+                    '<span class="adapt-icon" aria-hidden="true">' + ic(r.icon) + '</span>' + r.label + '</button>';
             }).join('') + '</div><p class="readiness-tip" aria-live="polite"></p>';
         var holder = startRow.closest('.text-center') || startRow.parentNode;
         holder.parentNode.insertBefore(wrap, holder);
@@ -127,7 +128,7 @@
         fb.innerHTML = '<div class="adapt-fb-label" id="adaptFbLabel">How is this drill feeling?</div>' +
             '<div class="adapt-fb-opts">' + FEEDBACK.map(function (f) {
                 return '<button type="button" class="adapt-chip" data-fb="' + f.id + '" aria-pressed="false">' +
-                    '<span class="adapt-icon" aria-hidden="true">' + f.icon + '</span>' + f.label + '</button>';
+                    '<span class="adapt-icon" aria-hidden="true">' + ic(f.icon) + '</span>' + f.label + '</button>';
             }).join('') + '</div>' +
             '<p class="adapt-status" aria-live="polite"></p>';
         var timer = document.querySelector('.timer-container');
@@ -188,7 +189,7 @@
         var level = d && typeof d.intensity === 'number' ? d.intensity : 0;
         badge.hidden = !level;
         badge.dataset.level = String(level);
-        badge.textContent = level ? (level > 0 ? '\u26A1 ' : '\uD83C\uDF3F ') + WORDS[String(level)] : '';
+        badge.innerHTML = level ? ic(level > 0 ? 'bolt' : 'leaf', 16) + ' ' + WORDS[String(level)] : '';
         badge.title = 'Set by the adaptive coach from your check-in and drill ratings';
     }
     document.addEventListener('cognicoach:drill-rendered', function () { buildFeedback(); paintFeedback(false); paintBadge(); });

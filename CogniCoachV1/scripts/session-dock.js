@@ -12,6 +12,7 @@
     var timerVisible = true, sessionOn = false;
 
     function $(id) { return document.getElementById(id); }
+    function ic(n, s, c) { return window.CogniIcons ? window.CogniIcons.svg(n, { size: s || 20, cls: c }) : ''; }
     function shown(el) { return !!el && el.style.display !== 'none' && !el.hidden && el.offsetParent !== null; }
 
     function build() {
@@ -23,7 +24,7 @@
         dock.innerHTML =
             '<button type="button" class="sd-time" aria-label="Go to the timer"><span class="sd-clock">00:00</span>' +
             '<span class="sd-track" aria-hidden="true"><span class="sd-fill"></span></span></button>' +
-            '<button type="button" class="sd-read" aria-pressed="false"><span aria-hidden="true">🔊</span><span class="a11y-sr-only">Read drill aloud</span></button>' +
+            '<button type="button" class="sd-read" aria-pressed="false">' + ic('volume', 22) + '<span class="a11y-sr-only">Read drill aloud</span></button>' +
             '<button type="button" class="sd-main">Start</button>';
         document.body.appendChild(dock);
         timeEl = dock.querySelector('.sd-clock');

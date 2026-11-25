@@ -481,3 +481,9 @@ table.sessions .num { text-align: right; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) {
     .bar, .mix-track i, .record-tile, .ring-fill { animation: none !important; transition: none !important; }
 }
+
+/* SVG icons (scripts/icons.js) */
+.record-icon { display: inline-flex; color: var(--primary-blue); }
+.badge-icon { display: flex; justify-content: center; color: var(--primary-blue); }
+.badge.unlocked .badge-icon { color: #a8520f; }
+.pill .ci { vertical-align: -1px; }

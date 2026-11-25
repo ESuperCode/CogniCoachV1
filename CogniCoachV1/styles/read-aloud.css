@@ -121,3 +121,5 @@
 .sd-main.sd-go { background: linear-gradient(135deg, #2f86e8, #ff8a34); color: #fff; }
 .sd-main:disabled { opacity: 0.5; }
 .session-dock button:focus-visible { outline: 3px solid #8fd0ff !important; outline-offset: 2px !important; box-shadow: none !important; }
+.ra-icon { display: inline-flex; }
+.sd-read .ci { vertical-align: middle; }

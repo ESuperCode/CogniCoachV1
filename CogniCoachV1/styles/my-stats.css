@@ -125,3 +125,6 @@
     .ms-sky { height: 280px; }
     .ms-range button { padding: 0 12px; font-size: 0.76rem; }
 }
+.ms-a-icon { display: inline-flex; color: var(--primary-blue); }
+.ms-kpi-delta .ci { vertical-align: -1px; }
+.ms-tool .ci { vertical-align: middle; }

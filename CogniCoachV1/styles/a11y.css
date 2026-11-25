@@ -294,9 +294,3 @@ html.a11y-reduce-motion .btn:hover { transform: none !important; }
 .muscle-groups label.ai-selected,
 .muscle-groups input:checked + label.ai-selected { color: #a8520f !important; }
 
-/* nav: short labels on phones so the "Aa" button fits */
-.site-nav .nav-short { display: none; }
-@media (max-width: 640px) {
-    .site-nav .nav-full { display: none; }
-    .site-nav .nav-short { display: inline; }
-}

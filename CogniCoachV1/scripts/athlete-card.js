@@ -14,6 +14,7 @@
     var CS = window.CogniStats;
     if (!CS) { return; }
 
+    function ic(n, s, c) { return window.CogniIcons ? window.CogniIcons.svg(n, { size: s || 20, cls: c }) : ''; }
     function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function fmtSaved(min) { return min >= 60 ? (Math.round(min / 6) / 10) + ' h' : min + ' m'; }
 
@@ -28,7 +29,7 @@
     function emblem(rank, size) {
         var id = 'emb' + (++emblemId);
         var t = rank.placed ? rank.tier : { color: '#7b8798', light: '#dfe5ee', id: 'none' };
-        var mark = rank.placed ? (rank.division || '★') : '?';
+        var mark = rank.placed ? (rank.division || '') : '?';
         var gems = rank.placed ? Math.min(rank.index, 6) : 0;
         var dots = '';
         for (var g = 0; g < gems; g++) {
@@ -41,14 +42,18 @@
             '<path d="M50 4 L92 20 L88 62 Q82 92 50 106 Q18 92 12 62 L8 20 Z" fill="url(#' + id + ')" stroke="' + t.light + '" stroke-width="3"/>' +
             '<path d="M50 14 L82 26 L79 60 Q74 84 50 96 Q26 84 21 60 L18 26 Z" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="2"/>' +
             '<path d="M50 4 L92 20 L90 40 Q50 30 10 40 L8 20 Z" fill="url(#' + id + 's)"/>' + dots +
-            '<text x="50" y="70" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="' + (mark.length > 2 ? 22 : 28) + '" fill="#fff" stroke="rgba(0,0,0,0.25)" stroke-width="1">' + mark + '</text>' +
+            (mark ? '<text x="50" y="70" text-anchor="middle" font-family="Orbitron, sans-serif" font-weight="900" font-size="' + (mark.length > 2 ? 22 : 28) + '" fill="#fff" stroke="rgba(0,0,0,0.25)" stroke-width="1">' + mark + '</text>'
+                : '<path d="M50 44l5.3 10.8 11.9 1.7-8.6 8.4 2 11.8L50 71.1l-10.6 5.6 2-11.8-8.6-8.4 11.9-1.7z" fill="#fff" stroke="rgba(0,0,0,0.25)"/>') +
             '</svg>';
     }
 
     // ------------------------------------------------------------------ frame + title choice
+    var SHOP_FRAMES = [['neon', 'Neon'], ['carbon', 'Carbon'], ['aurora', 'Aurora'], ['prism', 'Prism']];
+    function ownedFrames() { try { return (JSON.parse(localStorage.getItem('cognicoach-wallet') || '{}').owned || {}).frames || []; } catch (e) { return []; } }
     function chosenFrame(st, prefs) {
         var f = prefs.frame || 'auto';
         if (f === 'auto') { return st.rank.placed ? st.rank.tier.id : 'none'; }
+        if (ownedFrames().indexOf(f) >= 0) { return f; }
         var idx = CS.TIERS.map(function (t) { return t.id; }).indexOf(f);
         return idx >= 0 && idx <= st.peakIndex ? f : (st.rank.placed ? st.rank.tier.id : 'none');
     }
@@ -63,19 +68,19 @@
     function insights(st) {
         var out = [];
         var rated = st.fb.easy + st.fb.right + st.fb.hard;
-        if (!st.sessions) { return [['🚀', 'Finish your first session to start your placement. ' + CS.PLACEMENT + ' sessions and you are ranked.']]; }
-        if (!st.rank.placed) { out.push(['🏅', st.rank.toGo + ' more session' + (st.rank.toGo === 1 ? '' : 's') + ' to finish placement and get your rank.']); }
-        else if (st.rank.next) { out.push(['🏅', st.rank.pointsToNext + ' OVR to ' + st.rank.next + '. Streak days and weekly minutes move it fastest.']); }
+        if (!st.sessions) { return [['rocket', 'Finish your first session to start your placement. ' + CS.PLACEMENT + ' sessions and you are ranked.']]; }
+        if (!st.rank.placed) { out.push(['medal', st.rank.toGo + ' more session' + (st.rank.toGo === 1 ? '' : 's') + ' to finish placement and get your rank.']); }
+        else if (st.rank.next) { out.push(['medal', st.rank.pointsToNext + ' OVR to ' + st.rank.next + '. Streak days and weekly minutes move it fastest.']); }
         if (rated >= 3) {
-            if (st.fb.easy > st.fb.hard * 2) { out.push(['⬆️', 'You rate most drills too easy (' + st.fb.easy + ' of ' + rated + '). Raise your level in Advanced Setup.']); }
-            else if (st.fb.hard > st.fb.easy * 2) { out.push(['🌿', 'Lots of drills feel too hard (' + st.fb.hard + ' of ' + rated + '). The coach is easing off - check in honestly before each session.']); }
-            else { out.push(['🎯', 'Your drills are well matched: ' + st.fb.right + ' of ' + rated + ' rated just right.']); }
+            if (st.fb.easy > st.fb.hard * 2) { out.push(['arrow-up', 'You rate most drills too easy (' + st.fb.easy + ' of ' + rated + '). Raise your level in Advanced Setup.']); }
+            else if (st.fb.hard > st.fb.easy * 2) { out.push(['leaf', 'Lots of drills feel too hard (' + st.fb.hard + ' of ' + rated + '). The coach is easing off - check in honestly before each session.']); }
+            else { out.push(['target', 'Your drills are well matched: ' + st.fb.right + ' of ' + rated + ' rated just right.']); }
         } else {
-            out.push(['💬', 'Rate drills as you go (too easy / just right / too hard) and the coach tunes every session to you.']);
+            out.push(['message', 'Rate drills as you go (too easy / just right / too hard) and the coach tunes every session to you.']);
         }
-        if (st.ready.low >= 3) { out.push(['🔋', 'You checked in with low energy ' + st.ready.low + ' times lately. Sleep and recovery are training too.']); }
-        if (st.streak >= 3) { out.push(['🔥', st.streak + '-day streak. Keep it alive with even a 15-minute session.']); }
-        out.push(['⌛', 'CogniCoach has saved you about ' + fmtSaved(st.saved).replace(' h', ' hours').replace(' m', ' minutes') + ' of planning.']);
+        if (st.ready.low >= 3) { out.push(['battery-low', 'You checked in with low energy ' + st.ready.low + ' times lately. Sleep and recovery are training too.']); }
+        if (st.streak >= 3) { out.push(['flame', st.streak + '-day streak. Keep it alive with even a 15-minute session.']); }
+        out.push(['hourglass', 'CogniCoach has saved you about ' + fmtSaved(st.saved).replace(' h', ' hours').replace(' m', ' minutes') + ' of planning.']);
         return out.slice(0, 4);
     }
 
@@ -141,17 +146,18 @@
             '<fieldset class="ac-pick"><legend>Card frame</legend><div class="ac-frames">' +
             frameOpt('auto', 'Auto', 'Matches your rank', true, (prefs.frame || 'auto') === 'auto') +
             CS.TIERS.map(function (t, i) { return frameOpt(t.id, t.name, i <= st.peakIndex ? 'Unlocked' : 'Reach ' + t.name, i <= st.peakIndex, prefs.frame === t.id); }).join('') +
-            '</div></fieldset>' +
+            SHOP_FRAMES.filter(function (f) { return ownedFrames().indexOf(f[0]) >= 0; }).map(function (f) { return frameOpt(f[0], f[1], 'From the shop', true, prefs.frame === f[0]); }).join('') +
+            '</div><a class="ac-shop-link" href="arena.html#shop">' + (window.CogniIcons ? window.CogniIcons.svg('bag', { size: 16 }) : '') + ' More frames in the shop</a></fieldset>' +
 
             // titles
             '<div class="ac-pick"><label class="ac-title-label" for="acTitleSelect">Title on your card</label>' +
             '<select id="acTitleSelect">' + earnedTitles.map(function (t) { return '<option value="' + t.id + '"' + (title && t.id === title.id ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select>' +
             '<details class="ac-titles"><summary>All titles (' + earnedTitles.length + ' of ' + st.titles.length + ' earned)</summary><ul>' +
-            st.titles.map(function (t) { return '<li data-earned="' + t.earned + '"><span class="ac-t-icon" aria-hidden="true">' + (t.earned ? '🏆' : '🔒') + '</span><span><b>' + esc(t.name) + '</b><small>' + esc(t.how) + (t.earned ? '' : ' (locked)') + '</small></span></li>'; }).join('') +
+            st.titles.map(function (t) { return '<li data-earned="' + t.earned + '"><span class="ac-t-icon" aria-hidden="true">' + (t.earned ? ic('trophy-gold', 24) : ic('lock', 20)) + '</span><span><b>' + esc(t.name) + '</b><small>' + esc(t.how) + (t.earned ? '' : ' (locked)') + '</small></span></li>'; }).join('') +
             '</ul></details></div>' +
 
             '<div class="ac-insights"><h3>Coach insights</h3><ul>' +
-            insights(st).map(function (i) { return '<li><span class="ac-ins-icon" aria-hidden="true">' + i[0] + '</span><span>' + esc(i[1]) + '</span></li>'; }).join('') +
+            insights(st).map(function (i) { return '<li><span class="ac-ins-icon" aria-hidden="true">' + ic(i[0], 22) + '</span><span>' + esc(i[1]) + '</span></li>'; }).join('') +
             '</ul></div>' +
             '</div>' +
             '</div>';
@@ -170,7 +176,7 @@
     function frameOpt(id, name, sub, unlocked, checked) {
         return '<label class="ac-frame-opt" data-tier="' + id + '"' + (unlocked ? '' : ' data-locked="true"') + '>' +
             '<input type="radio" name="acFrame" value="' + id + '"' + (checked ? ' checked' : '') + (unlocked ? '' : ' disabled') + '>' +
-            '<span class="ac-swatch" aria-hidden="true">' + (unlocked ? '' : '🔒') + '</span>' +
+            '<span class="ac-swatch" aria-hidden="true">' + (unlocked ? '' : ic('lock', 16)) + '</span>' +
             '<span class="ac-frame-name">' + name + '</span><span class="ac-frame-sub">' + sub + '</span></label>';
     }
 
@@ -199,7 +205,8 @@
     // ------------------------------------------------------------------ PNG export
     var FRAME_STOPS = {
         none: ['#9fb4d3', '#5d6f8c'], bronze: ['#f0c39a', '#8a4b1f'], silver: ['#ffffff', '#7d8796'], gold: ['#fff1a8', '#b8860b'],
-        platinum: ['#e3fffb', '#1d8c84'], diamond: ['#e8f4ff', '#2f6fe0'], master: ['#f0d9ff', '#5b1fc0'], legend: ['#ffe28a', '#ff3d6e']
+        platinum: ['#e3fffb', '#1d8c84'], diamond: ['#e8f4ff', '#2f6fe0'], master: ['#f0d9ff', '#5b1fc0'], legend: ['#ffe28a', '#ff3d6e'],
+        neon: ['#00e0ff', '#ff2bd6'], carbon: ['#ff8a34', '#1b1f27'], aurora: ['#34c38f', '#8a3ffc'], prism: ['#ffcf4d', '#4ea8ff']
     };
     function download(st, name, frame, title) {
         var W = 720, H = 1040, c = document.createElement('canvas');
@@ -229,7 +236,11 @@
         var eg = g.createLinearGradient(0, 0, 96, 114); eg.addColorStop(0, t.light); eg.addColorStop(0.55, t.color); eg.addColorStop(1, '#1b2233');
         g.fillStyle = eg; g.fill(); g.lineWidth = 4; g.strokeStyle = t.light; g.stroke();
         g.textAlign = 'center'; g.fillStyle = '#fff'; g.font = '900 30px Orbitron, sans-serif';
-        g.fillText(st.rank.placed ? (st.rank.division || '★') : '?', 50, 72);
+        if (st.rank.placed && !st.rank.division) {   // Legend: a drawn star
+            g.beginPath();
+            for (var k = 0; k < 10; k++) { var rad = k % 2 ? 7 : 16, ang = -Math.PI / 2 + k * Math.PI / 5; g.lineTo(50 + Math.cos(ang) * rad, 60 + Math.sin(ang) * rad); }
+            g.closePath(); g.fill();
+        } else { g.fillText(st.rank.placed ? st.rank.division : '?', 50, 72); }
         g.font = '700 20px Orbitron, sans-serif'; g.fillStyle = '#ffe1c2'; g.fillText(st.rank.placed ? st.rank.tier.name.toUpperCase() : 'UNRANKED', 50, 148);
         g.restore();
         g.textAlign = 'center';

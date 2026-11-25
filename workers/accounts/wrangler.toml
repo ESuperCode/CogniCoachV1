@@ -16,9 +16,18 @@ GOOGLE_CLIENT_ID = "755545304533-589e3fhd1g6rdltlranqhg1p579a0l83.apps.googleuse
 name = "USERS"
 class_name = "UserAccount"
 
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "SocialHub"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["UserAccount"]
+
+# v2: one shared SQLite Durable Object for friends, public profiles and weekly leagues (src/social.js).
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["SocialHub"]
 
 [observability]
 enabled = true

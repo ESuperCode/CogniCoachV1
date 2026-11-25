@@ -44,7 +44,10 @@
         if (r.drillsTotal > 0 && !r.completed) { len = Math.round(len * (r.drillsCompleted || 0) / r.drillsTotal); }
         return len;
     }
-    function xpOf(r) { return minutesOf(r) + (r.completed ? 25 : 10); }
+    // XP is stored on each session since the economy update (boosts change it); older sessions use the formula.
+    function xpOf(r) { return typeof r.xp === 'number' ? r.xp : minutesOf(r) + (r.completed ? 25 : 10); }
+    function walletBonusXp() { try { var w = JSON.parse(localStorage.getItem('cognicoach-wallet') || '{}'); return Number(w && w.bonusXp) || 0; } catch (e) { return 0; } }
+    function frozenSet() { var s = {}; try { (JSON.parse(localStorage.getItem('cognicoach-wallet') || '{}').frozenDays || []).forEach(function (k) { var p = k.split('-'); s[+p[0] + '-' + (+p[1] - 1) + '-' + (+p[2])] = true; }); } catch (e) {} return s; }
     function dayKey(d) { d = new Date(d); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
     function levelFor(xp) {
         var i = 0;
@@ -55,12 +58,17 @@
     function streaks(h, asOf) {
         var days = {};
         h.forEach(function (r) { days[dayKey(r.date)] = true; });
+        var frozen = frozenSet();   // days covered by a Streak Freeze keep the streak alive (they don't add to it)
         var cur = 0, d = new Date(asOf || Date.now());
         if (!days[dayKey(d)]) { d.setDate(d.getDate() - 1); }   // still alive until the day ends
-        while (days[dayKey(d)]) { cur++; d.setDate(d.getDate() - 1); }
+        while (days[dayKey(d)] || frozen[dayKey(d)]) { if (days[dayKey(d)]) { cur++; } d.setDate(d.getDate() - 1); }
         var sorted = Object.keys(days).map(function (k) { var p = k.split('-'); return new Date(+p[0], +p[1], +p[2]).getTime(); }).sort(function (a, b) { return a - b; });
         var best = 0, run = 0, prev = null;
-        sorted.forEach(function (t) { run = prev !== null && Math.round((t - prev) / 864e5) === 1 ? run + 1 : 1; best = Math.max(best, run); prev = t; });
+        sorted.forEach(function (t) {
+            var gap = prev !== null ? Math.round((t - prev) / 864e5) : 0, bridged = gap === 1;
+            for (var g = 1; !bridged && prev !== null && g < gap; g++) { if (!frozen[dayKey(prev + g * 864e5)]) { break; } if (g === gap - 1) { bridged = true; } }
+            run = bridged ? run + 1 : 1; best = Math.max(best, run); prev = t;
+        });
         return { current: cur, best: best, activeDays: sorted.length };
     }
 
@@ -144,7 +152,7 @@
     function compute(h) {
         h = h || history();
         h = h.slice().sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
-        var xp = h.reduce(function (s, r) { return s + xpOf(r); }, 0);
+        var xp = h.reduce(function (s, r) { return s + xpOf(r); }, 0) + walletBonusXp();
         var minutes = h.reduce(function (s, r) { return s + minutesOf(r); }, 0);
         var stk = streaks(h);
         var sports = {};

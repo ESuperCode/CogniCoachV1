@@ -664,6 +664,8 @@ async function startSession() {
     }));
 
     appState.session.currentDrillIndex = 0;
+    appState.session.startedAt = Date.now();   // XP boosts running when the session started still count
+    appState.session.usedCoachMode = false;
 
     // Show session view
     document.getElementById('setupView').style.display = 'none';
@@ -1499,6 +1501,16 @@ function logSessionToHistory(completed) {
     };
     if (window.CogniCoachAdapt) {
         try { Object.assign(record, window.CogniCoachAdapt.sessionSummary()); } catch (e) {}
+    }
+    if (appState.session.usedCoachMode) record.coachMode = true;
+    // XP (with any active boost), coins, chests - scripts/economy.js; the recap shows them.
+    window.__lastSessionReward = null;
+    if (window.CogniEconomy) {
+        try {
+            const res = window.CogniEconomy.awardSession(record, appState.session);
+            Object.assign(record, res.fields);
+            window.__lastSessionReward = res.reward;
+        } catch (e) { console.warn('Economy reward failed:', e); }
     }
 
     try {

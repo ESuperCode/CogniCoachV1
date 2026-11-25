@@ -22,6 +22,7 @@
     var queue = [], pos = 0, run = 0, speaking = false, paused = false;
     var cueMarks = {};
 
+    function ic(n, s, c) { return window.CogniIcons ? window.CogniIcons.svg(n, { size: s || 20, cls: c }) : ''; }
     function prefs() {
         return (window.CogniA11y && window.CogniA11y.prefs) || { rate: 1, voice: '', autoRead: false, timerCues: false };
     }
@@ -155,11 +156,11 @@
         bar.dataset.state = state;
         playBtn.setAttribute('aria-pressed', speaking ? 'true' : 'false');
         playBtn.querySelector('.ra-label').textContent = speaking ? 'Stop reading' : 'Read aloud';
-        playBtn.querySelector('.ra-icon').textContent = speaking ? '■' : '🔊';
+        playBtn.querySelector('.ra-icon').innerHTML = ic(speaking ? 'stop' : 'volume', 18);
         pauseBtn.hidden = !speaking;
         pauseBtn.setAttribute('aria-pressed', paused ? 'true' : 'false');
         pauseBtn.querySelector('.ra-label').textContent = paused ? 'Resume' : 'Pause';
-        pauseBtn.querySelector('.ra-icon').textContent = paused ? '▶' : '❚❚';
+        pauseBtn.querySelector('.ra-icon').innerHTML = ic(paused ? 'play' : 'pause', 18);
         statusEl.textContent = '';
         document.dispatchEvent(new CustomEvent('cognicoach:read-aloud', { detail: { state: state } }));
     }

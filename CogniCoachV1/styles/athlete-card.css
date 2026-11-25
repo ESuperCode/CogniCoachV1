@@ -237,3 +237,39 @@ html.a11y-reduce-motion .ac-card,
 html.a11y-reduce-motion .ac-frame,
 html.a11y-reduce-motion .ac-frame::before { animation: none !important; }
 html.a11y-reduce-motion .ac-card { transform: none; }
+
+/* ---- shop frames (bought with coins in the Arena) ---------------------------------- */
+.ac-card[data-frame="neon"]   { --f1: #00e0ff; --f2: #ff2bd6; --f3: #b7f7ff; }
+.ac-card[data-frame="carbon"] { --f1: #2b313c; --f2: #11151b; --f3: #ff8a34; }
+.ac-card[data-frame="aurora"] { --f1: #34c38f; --f2: #4ea8ff; --f3: #8a3ffc; }
+.ac-card[data-frame="prism"]  { --f1: #ffcf4d; --f2: #8a3ffc; --f3: #34c38f; }
+.ac-card[data-frame="neon"] .ac-frame {
+    background: linear-gradient(135deg, #00e0ff, #ff2bd6 50%, #00e0ff);
+    background-size: 220% 220%;
+    animation: acShine 3s linear infinite;
+    box-shadow: 0 30px 60px rgba(13, 42, 82, 0.35), 0 0 18px #00e0ff, 0 0 36px rgba(255, 43, 214, 0.55);
+}
+.ac-card[data-frame="carbon"] .ac-frame {
+    background: repeating-linear-gradient(45deg, #1b1f27 0 5px, #2b313c 5px 10px);
+    box-shadow: 0 30px 60px rgba(13, 42, 82, 0.35), inset 0 0 0 2px #ff8a34;
+}
+.ac-card[data-frame="aurora"] .ac-frame {
+    background: linear-gradient(120deg, #34c38f, #4ea8ff, #8a3ffc, #34c38f);
+    background-size: 300% 300%;
+    animation: acAurora 9s ease-in-out infinite;
+    box-shadow: 0 30px 60px rgba(13, 42, 82, 0.35), 0 0 30px rgba(78, 168, 255, 0.5);
+}
+@keyframes acAurora { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+.ac-card[data-frame="prism"] .ac-frame {
+    background: conic-gradient(from calc(var(--ry, 0deg) * 8), #ff3d6e, #ffcf4d, #34c38f, #4ea8ff, #8a3ffc, #ff3d6e);
+    box-shadow: 0 30px 60px rgba(13, 42, 82, 0.35), 0 0 34px rgba(255, 255, 255, 0.6);
+}
+.ac-frame-opt[data-tier="neon"] .ac-swatch { background: linear-gradient(135deg, #00e0ff, #ff2bd6); }
+.ac-frame-opt[data-tier="carbon"] .ac-swatch { background: repeating-linear-gradient(45deg, #1b1f27 0 4px, #2b313c 4px 8px); }
+.ac-frame-opt[data-tier="aurora"] .ac-swatch { background: linear-gradient(135deg, #34c38f, #4ea8ff, #8a3ffc); }
+.ac-frame-opt[data-tier="prism"] .ac-swatch { background: conic-gradient(#ff3d6e, #ffcf4d, #34c38f, #4ea8ff, #8a3ffc, #ff3d6e); }
+.ac-shop-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 0.82rem; font-weight: 700; color: var(--primary-blue); text-decoration: none; }
+html.a11y-reduce-motion .ac-card[data-frame] .ac-frame { animation: none !important; }
+.ac-ins-icon { display: inline-flex; color: var(--primary-blue); }
+.ac-t-icon { display: inline-flex; color: var(--text-gray); }
+.ac-swatch .ci { color: #fff; }

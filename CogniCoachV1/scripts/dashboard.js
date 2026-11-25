@@ -81,6 +81,9 @@ function getSessionDaySet(history) {
 function computeStreaks(history) {
     const days = getSessionDaySet(history);
     if (days.size === 0) return { current: 0, longest: 0 };
+    // Days covered by a Streak Freeze (scripts/economy.js) keep a streak alive without adding to it.
+    let frozen = new Set();
+    try { frozen = new Set((JSON.parse(localStorage.getItem('cognicoach-wallet') || '{}').frozenDays) || []); } catch (e) {}
 
     const sorted = Array.from(days).sort();
     let longest = 1;
@@ -89,7 +92,16 @@ function computeStreaks(history) {
         const diffDays = Math.round(
             (new Date(sorted[i]) - new Date(sorted[i - 1])) / 86400000
         );
-        run = diffDays === 1 ? run + 1 : 1;
+        let bridged = diffDays === 1;
+        if (!bridged && diffDays > 1) {
+            bridged = true;
+            for (let g = 1; g < diffDays; g++) {
+                const mid = new Date(sorted[i - 1] + 'T12:00:00');
+                mid.setDate(mid.getDate() + g);
+                if (!frozen.has(toLocalDateStr(mid))) { bridged = false; break; }
+            }
+        }
+        run = bridged ? run + 1 : 1;
         longest = Math.max(longest, run);
     }
 
@@ -102,8 +114,8 @@ function computeStreaks(history) {
         cursor.setDate(cursor.getDate() - 1);
         cursorStr = toLocalDateStr(cursor);
     }
-    while (days.has(cursorStr)) {
-        current++;
+    while (days.has(cursorStr) || frozen.has(cursorStr)) {
+        if (days.has(cursorStr)) current++;
         cursor.setDate(cursor.getDate() - 1);
         cursorStr = toLocalDateStr(cursor);
     }
@@ -207,18 +219,18 @@ function computeBadges(history) {
     });
 
     return [
-        { icon: '🏁', name: 'First Step', desc: 'Complete your first session', unlocked: totalSessions >= 1 },
-        { icon: '🔥', name: 'Consistent', desc: '3-day streak', unlocked: longest >= 3 },
-        { icon: '⚡', name: 'On Fire', desc: '7-day streak', unlocked: longest >= 7 },
-        { icon: '💎', name: 'Iron Will', desc: '30-day streak', unlocked: longest >= 30 },
-        { icon: '🎯', name: 'Committed', desc: '10 total sessions', unlocked: totalSessions >= 10 },
-        { icon: '🏆', name: 'Century Club', desc: '50 total sessions', unlocked: totalSessions >= 50 },
-        { icon: '🧭', name: 'Explorer', desc: 'Train in 3 different sports', unlocked: sportsSet.size >= 3 },
-        { icon: '🌐', name: 'All-Rounder', desc: 'Train in 5 different sports', unlocked: sportsSet.size >= 5 },
-        { icon: '🏃', name: 'Marathoner', desc: 'Complete a 90+ min session', unlocked: longestSession >= 90 },
-        { icon: '🌅', name: 'Early Bird', desc: 'Train before 7am', unlocked: hasEarly },
-        { icon: '🌙', name: 'Night Owl', desc: 'Train after 9pm', unlocked: hasNight },
-        { icon: '🎉', name: 'Weekend Warrior', desc: 'Train on a weekend', unlocked: hasWeekend }
+        { icon: 'flag', name: 'First Step', desc: 'Complete your first session', unlocked: totalSessions >= 1 },
+        { icon: 'flame', name: 'Consistent', desc: '3-day streak', unlocked: longest >= 3 },
+        { icon: 'bolt', name: 'On Fire', desc: '7-day streak', unlocked: longest >= 7 },
+        { icon: 'gem', name: 'Iron Will', desc: '30-day streak', unlocked: longest >= 30 },
+        { icon: 'target', name: 'Committed', desc: '10 total sessions', unlocked: totalSessions >= 10 },
+        { icon: 'trophy-gold', name: 'Century Club', desc: '50 total sessions', unlocked: totalSessions >= 50 },
+        { icon: 'compass', name: 'Explorer', desc: 'Train in 3 different sports', unlocked: sportsSet.size >= 3 },
+        { icon: 'globe', name: 'All-Rounder', desc: 'Train in 5 different sports', unlocked: sportsSet.size >= 5 },
+        { icon: 'runner', name: 'Marathoner', desc: 'Complete a 90+ min session', unlocked: longestSession >= 90 },
+        { icon: 'sunrise', name: 'Early Bird', desc: 'Train before 7am', unlocked: hasEarly },
+        { icon: 'moon', name: 'Night Owl', desc: 'Train after 9pm', unlocked: hasNight },
+        { icon: 'party', name: 'Weekend Warrior', desc: 'Train on a weekend', unlocked: hasWeekend }
     ];
 }
 
@@ -231,7 +243,7 @@ function renderBadges(history) {
         const el = document.createElement('div');
         el.className = 'badge ' + (b.unlocked ? 'unlocked' : 'locked');
         el.innerHTML = `
-            <span class="badge-icon">${b.icon}</span>
+            <span class="badge-icon" aria-hidden="true">${window.CogniIcons ? window.CogniIcons.svg(b.icon, { size: 34 }) : ''}</span>
             <div class="badge-name">${b.name}</div>
             <div class="badge-desc">${b.desc}</div>
         `;

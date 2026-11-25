@@ -346,3 +346,23 @@ html.a11y-reduce-motion .recap-coin { animation: none; }
 }
 .recap-rank-up .recap-rank-badge { animation: recapBadge 1.2s ease-out 1; }
 @keyframes recapBadge { 0% { transform: scale(0.4) rotateY(180deg); } 70% { transform: scale(1.15) rotateY(0); } 100% { transform: scale(1); } }
+
+/* recap: rewards (scripts/economy.js) */
+.recap-coin .ci { filter: drop-shadow(0 4px 6px rgba(120, 70, 0, 0.35)); }
+.recap-rewards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 640px; margin: 4px auto 18px; }
+.rr-item { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 16px; background: #fff; border: 1px solid var(--line, #dbe7f3); text-align: left; box-shadow: 0 8px 18px rgba(30, 50, 80, 0.07); }
+.rr-item b { display: block; font-family: 'Orbitron', sans-serif; font-size: 1.15rem; color: #172033; }
+.rr-item small { display: block; font-size: 0.72rem; color: var(--text-gray); }
+.rr-boost { display: inline-flex; align-items: center; gap: 4px; font-size: 0.72rem; font-weight: 700; color: #5b1fc0; }
+.rr-goal .econ-ring-bg, .rr-goal .econ-ring-fg { stroke-width: 5; }
+.rr-chests { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-radius: 16px; background: linear-gradient(135deg, #fff7dc, #fff); border: 2px solid #ffd76a; text-align: left; }
+.rr-chests > span:nth-child(2) { flex: 1 1 160px; color: #5a4a1a; font-size: 0.88rem; }
+.rr-chest-icons { display: inline-flex; }
+.rr-chest-icons .ci + .ci { margin-left: -10px; }
+.rr-claim { grid-column: 1 / -1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 0.85rem; font-weight: 700; color: var(--primary-blue); text-decoration: none; min-height: 40px; }
+@media (max-width: 640px) { .recap-rewards { grid-template-columns: 1fr; } }
+.adapt-icon { display: inline-flex; color: var(--primary-blue); }
+.adapt-chip[aria-pressed="true"] .adapt-icon { color: #a8520f; }
+.adapt-badge .ci { vertical-align: -2px; }
+.coach-launch-icon .ci { color: #fff; }
+.cm-icon .ci, .cm-btn .ci { vertical-align: middle; }

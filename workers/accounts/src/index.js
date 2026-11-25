@@ -17,7 +17,11 @@
 //   POST   /delete   {key}                            -> {ok}
 //   POST   /google   {credential}                     -> {token, username, provider}  (Sign in with Google)
 //   GET    /config                                    -> {googleClientId}
+//   /social/*                                         friends, profiles, cheers, weekly leagues (src/social.js)
 // Access: the site's origins, or any origin with the X-Dev-Code header.
+
+import { SocialHub, isSocial, socialMethod, handleSocial, hub } from "./social.js";
+export { SocialHub };
 
 const DEFAULT_ORIGINS = "https://cognicoachai.com,https://www.cognicoachai.com";
 const USERNAME_RE = /^[a-z0-9][a-z0-9_.-]{2,23}$/;
@@ -299,6 +303,22 @@ async function callUser(env, username, payload) {
   return json(body, resp.status);
 }
 
+// /social/*: same origin, rate-limit and session checks as the account routes, then the hub.
+async function social(request, env, path) {
+  if (request.method !== socialMethod(path)) return json({ detail: "method not allowed" }, 405);
+  if (!allowed(request, env)) return json({ detail: "Accounts only work on the CogniCoach site.", code: "origin" }, 403);
+  if (!env.HUB) return json({ detail: "Friends and leagues aren't set up yet.", code: "social_off" }, 503);
+  const ip = request.headers.get("CF-Connecting-IP") || "local";
+  if (rateLimited("social:" + ip, 90)) return json({ detail: "Too many requests - wait a minute and try again.", code: "rate" }, 429, { "Retry-After": "60" });
+  const tok = parseToken(request);
+  if (!tok || !ACCOUNT_ID_RE.test(tok.username)) return json({ detail: "Sign in to use friends and leagues.", code: "signed_out" }, 401);
+  const who = await stub(env, tok.username).fetch("https://user/", { method: "POST", body: JSON.stringify({ action: "me", secret: tok.secret }) });
+  if (who.status !== 200) return json({ detail: "Please sign in again.", code: "signed_out" }, 401);
+  const acc = await who.json();
+  const body = request.method === "POST" ? await readJson(request) : {};
+  return handleSocial(env, path, { id: tok.username, display: String(acc.display || acc.username || "").slice(0, 40) }, body, request.headers.get("X-Test-Now"));
+}
+
 export default {
   async fetch(request, env) {
     const cors = corsHeaders(request);
@@ -313,6 +333,7 @@ export default {
       if (path === "/config") {
         return withCors(json({ googleClientId: env.GOOGLE_CLIENT_ID || "" }, 200, { "Cache-Control": "public, max-age=300" }));
       }
+      if (isSocial(path)) return withCors(await social(request, env, path));
       const routes = { "/signup": "POST", "/login": "POST", "/logout": "POST", "/me": "GET", "/profile": ["GET", "PUT"],
         "/password": "POST", "/delete": "POST", "/google": "POST" };
       const methods = routes[path];
@@ -364,7 +385,11 @@ export default {
       }
       const signedIn = await stub(env, tok.username).fetch("https://user/", { method: "POST", body: JSON.stringify({ action: "me", secret: tok.secret }) });
       if (signedIn.status !== 200) return withCors(json({ detail: "Please sign in again.", code: "signed_out" }, 401));
-      return withCors(await callUser(env, tok.username, { action: path.slice(1), key: body.key, newKey: body.newKey }));
+      const done = await callUser(env, tok.username, { action: path.slice(1), key: body.key, newKey: body.newKey });
+      if (path === "/delete" && done.status === 200 && env.HUB) {   // also remove friends, leagues and the public profile
+        await hub(env).fetch("https://hub/", { method: "POST", body: JSON.stringify({ op: "purge", me: { id: tok.username } }) });
+      }
+      return withCors(done);
     } catch (e) {
       const status = e.status || 500;
       console.log("[accounts] error", status, e && e.stack);

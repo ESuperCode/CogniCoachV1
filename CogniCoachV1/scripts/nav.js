@@ -26,10 +26,11 @@
 
 const NAV_LINKS = [
     { href: 'index.html', label: 'CogniCoach', brand: true },
-    { href: 'dashboard.html', label: 'Dashboard' },
-    { href: 'competition.html', label: 'Competition', short: 'Compete' },
-    { href: 'about.html', label: 'About Us', short: 'About' },
-    { href: 'contact.html', label: 'Contact' }
+    { href: 'dashboard.html', label: 'Dashboard', icon: 'grid' },
+    { href: 'arena.html', label: 'Arena', icon: 'podium' },
+    { href: 'competition.html', label: 'Competition', icon: 'flag' },
+    { href: 'about.html', label: 'About Us', icon: 'info' },
+    { href: 'contact.html', label: 'Contact', icon: 'mail' }
 ];
 
 class SiteNav extends HTMLElement {
@@ -41,7 +42,9 @@ class SiteNav extends HTMLElement {
             const logo = link.brand
                 ? `<img src="logo.png" alt="" class="site-nav-logo" onerror="this.style.display='none'">`
                 : '';
-            return `<a href="${link.href}" class="${classes}"${link.brand ? ` aria-label="${link.label}"` : ''}>${logo}<span class="site-nav-text">${link.short ? `<span class="nav-full">${link.label}</span><span class="nav-short">${link.short}</span>` : link.label}</span></a>`;
+            // SVG icons from scripts/icons.js (loaded before this file); on phones the nav shows icons only
+            const icon = link.icon && window.CogniIcons ? window.CogniIcons.svg(link.icon, { size: 18, cls: 'site-nav-icon' }) : '';
+            return `<a href="${link.href}" class="${classes}" title="${link.label}"${link.brand ? ` aria-label="${link.label}"` : ''}>${logo}${icon}<span class="site-nav-text">${link.label}</span></a>`;
         }).join('') + '<div class="nav-account" id="navAccount"></div>';
 
         this.highlightCurrentPage();
@@ -99,7 +102,7 @@ function loadSiteExtras() {
         { css: 'styles/tour.css', js: 'scripts/tour.js' },
         { css: 'styles/depth.css', js: 'scripts/depth.js' }
     ];
-    const v = 'v=20261124d';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
+    const v = 'v=20261125a';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
     extras.forEach(({ css: cssPath, js: jsPath }) => {
         const css = cssPath + '?' + v, js = jsPath + '?' + v;
         if (!document.querySelector(`link[href="${css}"]`)) {
