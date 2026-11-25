@@ -131,7 +131,7 @@
             '<div class="recap-advice"><span class="recap-advice-label">Coach’s note</span>' + esc(advice(rec)) + '</div>' +
             '<div class="recap-actions">' +
             '<button class="btn btn-primary" type="button" onclick="returnToSetup()">Start new session</button>' +
-            '<a class="btn btn-secondary" href="dashboard.html#athleteCard">See your Athlete Card</a>' +
+            '<a class="btn btn-secondary" href="dashboard.html#card">See your Athlete Card</a>' +
             '</div>';
         var title = card.querySelector('.recap-title');
         if (title) { title.focus({ preventScroll: true }); }

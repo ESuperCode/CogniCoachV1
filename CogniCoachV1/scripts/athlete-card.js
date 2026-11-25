@@ -86,7 +86,8 @@
 
     // ------------------------------------------------------------------ render
     function render() {
-        var anchor = document.getElementById('profileSummaryCard');
+        var mount = document.getElementById('athleteCardMount');   // the dashboard's Card tab
+        var anchor = mount || document.getElementById('profileSummaryCard');
         if (!anchor) { return; }
         var st = CS.compute();
         var prefs = CS.cardPrefs();
@@ -98,7 +99,7 @@
             host.id = 'athleteCard';
             host.className = 'card dash-card dash-span-12 athlete-section';
             host.setAttribute('aria-labelledby', 'athleteCardTitle');
-            anchor.parentNode.insertBefore(host, anchor);
+            if (mount) { mount.appendChild(host); } else { anchor.parentNode.insertBefore(host, anchor); }
         }
         var name = athleteName();
         var r = st.rank;
@@ -169,7 +170,6 @@
         });
         var sel = host.querySelector('#acTitleSelect');
         if (sel) { sel.addEventListener('change', function () { CS.saveCardPrefs({ title: sel.value }); render(); focusAgain('#acTitleSelect'); }); }
-        if (location.hash === '#athleteCard' && !render.scrolled) { render.scrolled = true; setTimeout(function () { host.scrollIntoView({ block: 'start' }); }, 200); }
     }
     function focusAgain(sel) { var el = document.querySelector('#athleteCard ' + sel); if (el) { el.focus(); } }
     function cell(v, l) { return '<div class="ac-cell"><b>' + v + '</b><span>' + l + '</span></div>'; }

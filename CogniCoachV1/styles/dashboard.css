@@ -11,8 +11,10 @@
     margin-top: 20px;
 }
 
-.dash-card {
+.dash-card,
+.dash-grid > * {   /* every grid child is full width on phones (mount points included) */
     grid-column: span 12;
+    min-width: 0;
 }
 
 @media (min-width: 860px) {

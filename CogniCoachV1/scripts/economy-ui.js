@@ -44,8 +44,8 @@
             '<a class="econ-chip econ-coins" href="arena.html#shop" title="Grit - spend it in the shop">' + ic('coin', 24) + '<span class="econ-num">' + w.coins + '</span><span class="a11y-sr-only">Grit</span></a>' +
             '<a class="econ-chip econ-goal' + (q.goalDone ? ' done' : '') + '" href="arena.html#quests" title="Daily XP goal">' + ring(frac) +
             '<span class="econ-goal-text"><span class="econ-num">' + q.todayXp + '<small>/' + q.goal + '</small></span><span class="econ-lbl">XP today</span></span></a>' +
-            (boost ? '<a class="econ-chip econ-boost" href="arena.html#bag" title="XP Boost running">' + ic('boost', 24) + '<span class="econ-num">' + boost.mult + 'x</span><span class="econ-lbl" data-boost-left>' + fmtLeft(boost.until - Date.now()) + '</span></a>' : '') +
-            '<a class="econ-chip econ-chests" href="arena.html#bag" title="Chests to open">' + ic('chest-gold', 26) + '<span class="econ-num">' + chests + '</span>' +
+            (boost ? '<a class="econ-chip econ-boost" href="arena.html#shop" title="XP Boost running">' + ic('boost', 24) + '<span class="econ-num">' + boost.mult + 'x</span><span class="econ-lbl" data-boost-left>' + fmtLeft(boost.until - Date.now()) + '</span></a>' : '') +
+            '<a class="econ-chip econ-chests" href="arena.html#shop" title="Chests to open">' + ic('chest-gold', 26) + '<span class="econ-num">' + chests + '</span>' +
             '<span class="a11y-sr-only">chests to open</span>' + (claim ? '<span class="econ-dot" title="' + claim + ' reward' + (claim > 1 ? 's' : '') + ' to claim"><span class="a11y-sr-only">' + claim + ' rewards to claim</span></span>' : '') + '</a>';
     }
     function repaint() { huds = huds.filter(function (h) { return h.isConnected; }); huds.forEach(paint); }

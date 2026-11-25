@@ -8,6 +8,10 @@
 //    Motion Preview playing a ready-made animation, its controls, the timer.
 // 4. Dashboard + account in the nav, then a finale.
 // Replay: index.html?tour=1 (account menu -> Take the tour).
+//
+// Page tours: the Dashboard and the Arena have their own short tours (PAGE_TOURS) that switch tabs
+// as they explain them (window.CogniTabs from dash-tabs.js / arena.js). They run the first time a
+// page is opened, from its "Tour this page" button, or with ?tour=1 on that page.
 // ==========================================================================
 (function () {
     'use strict';
@@ -72,14 +76,74 @@
         { demo: true, target: '#drillContent .timer-container', title: 'Timed for you',
           text: 'Start the timer when you are ready. Each drill is sized to fit your session, and Next Drill appears when it is done.' },
         { target: 'site-nav a[href="dashboard.html"]', smallTarget: '#navMenuBtn', nav: true, title: 'Your dashboard',
-          text: 'Streaks, XP levels, personal records and charts of every session you finish.' },
+          text: 'Your streak, Athlete Card, stats and past sessions. The first time you open it, a short tour shows you around.' },
         { target: 'site-nav a[href="arena.html"]', smallTarget: '#navMenuBtn', nav: true, title: 'The Arena',
-          text: 'Weekly leagues, friends, daily quests and the shop. Every session earns XP and Grit to spend on Streak Freezes, XP Boosts and card frames.' },
+          text: 'Daily quests, the shop, weekly leagues and friends. Every session earns XP and Grit to spend there, and it has its own quick tour too.' },
         { target: '#navAccount', nav: true, title: 'Sync everywhere',
           text: 'With a free account your profile and training follow you to every device you sign in on.' },
         { kind: 'hero', id: 'finale', title: "You're all set",
           text: 'Pick a sport, press Start, and your first drill is on its way.' }
     ];
+
+    // ---- page tours (dashboard.html, arena.html) ----
+    var PAGE_TOURS = {
+        dashboard: { key: 'cognicoach-tour-dashboard-done', steps: [
+            { kind: 'hero', id: 'page-intro', title: 'Your dashboard', next: 'Show me around',
+              text: 'Everything about your training lives here, split into five tabs so you only see one thing at a time.' },
+            { target: '#econHud', title: 'Your day in one line',
+              text: 'Your streak (and Streak Freezes), your Grit, today’s XP goal and any chests to open. Tap one to jump to the Arena.' },
+            { target: '.page-tabs', title: 'Five tabs',
+              text: 'Home is today. Card is your Athlete Card. Stats has charts. History lists past sessions and badges. Settings holds your profile and data.' },
+            { tab: 'home', target: '#dashWelcome', title: 'Home',
+              text: 'Start here: what to do next, with one tap to start training or check your quests.' },
+            { tab: 'home', target: '#dashOverview', title: 'At a glance',
+              text: 'This week’s sessions and minutes, your streak and favourite sport. Your level and weekly goal are just below.' },
+            { tab: 'card', target: '#athleteCard .ac-card', title: 'Your Athlete Card',
+              text: 'Your overall rating and rank. Three sessions get you ranked, and climbing ranks unlocks new card frames.' },
+            { tab: 'card', target: '#athleteCard .ac-pick', title: 'Make it yours',
+              text: 'Choose the frame and title your friends see. Frames you buy in the shop show up here too.' },
+            { tab: 'stats', target: '#myStatsMount', group: ['#myStats .ms-head', '#myStats .ms-kpis'], title: 'Stats',
+              text: 'Charts and a written analysis of your training. Pick a time range, drag the 3D charts to turn them, or press Table for the numbers.' },
+            { tab: 'history', target: '#dashSessions', title: 'History',
+              text: 'Every session you have finished, filterable by sport. Your streak calendar and badges are further down.' },
+            { tab: 'settings', target: '#profileSummaryCard', title: 'Settings',
+              text: 'Your sport, level and training preferences, your account, and backup or restore of your data.' },
+            { kind: 'hero', id: 'finale', title: 'Next stop: the Arena', cta: 'Show me the Arena', href: 'arena.html?tour=1', home: 'home',
+              text: 'Daily quests, the shop and weekly leagues with friends. Want a quick look?' }
+        ] },
+        arena: { key: 'cognicoach-tour-arena-done', steps: [
+            { kind: 'hero', id: 'page-intro', title: 'Welcome to the Arena', next: 'Show me around',
+              text: 'Training earns XP and Grit. The Arena is where you use them: daily quests, the shop, weekly leagues and friends.' },
+            { target: '#arenaHud', title: 'Your streak, Grit and goal',
+              text: 'The same strip you see on every page. The ring fills with today’s XP; the chest shows rewards waiting for you.' },
+            { target: '.page-tabs', title: 'Four tabs',
+              text: 'Quests for today’s goals, League for this week’s competition, Friends to train together, and Shop for your bag and items.' },
+            { tab: 'quests', target: '#panel-quests .qs-goal', title: 'Daily goal',
+              text: 'Fill the ring with XP from training to earn a chest. Tap Change to pick an easier or harder goal.' },
+            { tab: 'quests', target: '#panel-quests .qs-list', title: 'Daily quests',
+              text: 'Three new quests every day. When one is done, press its button to collect the Grit. Finish all three for a Silver Chest.' },
+            { tab: 'quests', target: '#panel-quests .qs-streak', title: 'Keep your streak',
+              text: 'Train every day to grow your streak. A Streak Freeze covers a day off so it doesn’t reset.' },
+            { tab: 'league', target: '#panel-league', title: 'Weekly league',
+              text: 'With a free account you join a group of up to 30 athletes. Earn the most XP this week to move up a league, from Amateur to Olympian.' },
+            { tab: 'friends', target: '#panel-friends', title: 'Friends',
+              text: 'Add friends by their @handle, compare weekly XP, see each other’s Athlete Cards and send a cheer.' },
+            { tab: 'shop', target: '#panel-shop .bg-list', title: 'Your bag',
+              text: 'Chests to open, boosts to switch on, your Streak Freezes and frames. Switch on Double XP right before you train.' },
+            { tab: 'shop', target: '#panel-shop .sh-grid', group: ['#panel-shop .sh-grid .sh-item:nth-child(1)', '#panel-shop .sh-grid .sh-item:nth-child(2)'], title: 'The shop',
+              text: 'Spend Grit on Streak Freezes, XP Boosts, chests and card frames.' },
+            { kind: 'hero', id: 'finale', title: 'Go earn some Grit', cta: 'Start training', href: 'index.html', home: 'quests',
+              text: 'Every session you finish fills your goal, moves your quests forward and climbs your league.' }
+        ] }
+    };
+    function pageName() {
+        if ($('#quickStartCard')) { return 'app'; }
+        if ($('#panel-home') && $('.page-tabs')) { return 'dashboard'; }
+        if ($('main.arena')) { return 'arena'; }
+        return '';
+    }
+    var page = '';   // set when a tour starts
+    function doneKey() { return page && page !== 'app' ? PAGE_TOURS[page].key : DONE_KEY; }
 
     var plan = [];   // the tour's steps, fixed when it starts (targets hide during the demo)
     var root, spot, card, idx = 0, active = false, repositionRaf = 0, inDemo = false, demoPlayed = false, needsSetup = false;
@@ -106,11 +170,12 @@
     function computeSteps() {
         // On small screens the nav links live in the Menu drop-down: point those steps at the Menu button.
         var small = window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
-        return STEPS.map(function (s) {
+        var source = page && page !== 'app' ? PAGE_TOURS[page].steps : STEPS;
+        return source.map(function (s) {
             if (small && s.smallTarget) { var c = {}; Object.keys(s).forEach(function (k) { c[k] = s[k]; }); c.target = s.smallTarget; return c; }
             return s;
         }).filter(function (s) {
-            if (!s.target || s.demo || s.nav) { return true; }
+            if (!s.target || s.demo || s.nav || s.tab) { return true; }   // tab steps are checked when shown
             return visible($(s.target));
         });
     }
@@ -331,8 +396,15 @@
         var list = steps();
         if (n >= list.length) { finish(false); return; }
         if (n < 0) { return; }
+        var dir = n >= idx ? 1 : -1;
         idx = n;
         var step = list[idx];
+        if (step.tab && window.CogniTabs) { window.CogniTabs.select(step.tab); }
+        if (step.home && window.CogniTabs) { window.CogniTabs.select(step.home); }
+        if (step.tab && !visible($(step.target))) {   // e.g. a card that needs history: skip it
+            var t = n + dir;
+            if (t >= 0 && t < list.length) { go(t); return; }
+        }
         if (step.demo) { enterDemo(); } else if (inDemo) { exitDemo(); }
         if (step.demo === 'play') { playDemo(); }
 
@@ -355,9 +427,9 @@
         card.querySelector('.tour-back').style.visibility = idx > 0 ? 'visible' : 'hidden';
         var anon = !(window.CogniAccount && window.CogniAccount.session());
         card.querySelector('.tour-next').textContent = step.id === 'welcome' ? (anon ? 'Take the tour' : "Let's go") :
-            step.id === 'finale' ? 'Start training' : 'Next';
-        card.querySelector('.tour-skip').textContent = 'Skip tour';
-        card.querySelector('.tour-skip').style.visibility = step.id === 'finale' ? 'hidden' : 'visible';
+            step.next ? step.next : step.id === 'finale' ? (step.cta || 'Start training') : 'Next';
+        card.querySelector('.tour-skip').textContent = step.id === 'finale' && step.href && page !== 'app' ? 'Done' : 'Skip tour';
+        card.querySelector('.tour-skip').style.visibility = step.id === 'finale' && !(step.href && page !== 'app') ? 'hidden' : 'visible';
 
         if (step.target) {
             var el = $(step.target);
@@ -387,9 +459,19 @@
     }
 
     function finish(skipped) {
+        var last = steps()[idx];
         active = false;
         exitDemo();
-        try { localStorage.setItem(DONE_KEY, JSON.stringify({ at: Date.now(), skipped: !!skipped })); } catch (e) {}
+        try { localStorage.setItem(doneKey(), JSON.stringify({ at: Date.now(), skipped: !!skipped })); } catch (e) {}
+        if (page && page !== 'app') {
+            if (root) { root.classList.remove('show'); }
+            document.documentElement.classList.remove('tour-on');
+            var pr = root; root = null;
+            setTimeout(function () { if (pr) { pr.remove(); } }, 350);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (!skipped && last && last.href) { setTimeout(function () { location.href = last.href; }, 250); }
+            return;
+        }
         if (root) { root.classList.remove('show'); }
         document.documentElement.classList.remove('tour-on');
         var r = root;
@@ -407,7 +489,19 @@
     }
 
     function start(opts) {
-        if (active || !$('#quickStartCard')) { return; }
+        if (active) { return; }
+        page = pageName();
+        if (!page) { return; }
+        if (page !== 'app') {
+            needsSetup = false;
+            plan = computeSteps();
+            build();
+            active = true;
+            idx = 0;
+            document.documentElement.classList.add('tour-on');
+            requestAnimationFrame(function () { root.classList.add('show'); go(0); });
+            return;
+        }
         var setup = $('#setupView');
         if (setup && getComputedStyle(setup).display === 'none') {   // mid-session: setup only, no tour
             if (!profile().onboarded && typeof completeOnboarding === 'function') { /* answered next visit */ }
@@ -422,7 +516,7 @@
         requestAnimationFrame(function () { root.classList.add('show'); go(0); });
     }
 
-    function seen() { try { return !!localStorage.getItem(DONE_KEY); } catch (e) { return true; } }
+    function seen(key) { try { return !!localStorage.getItem(key || DONE_KEY); } catch (e) { return true; } }
 
     function startWhenClear(delay) {
         var tries = 0;
@@ -440,9 +534,25 @@
 
     window.CogniTour = { start: function () { startWhenClear(200); }, reset: function () { try { localStorage.removeItem(DONE_KEY); } catch (e) {} } };
 
+    // "Tour this page" buttons
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest && e.target.closest('[data-page-tour]');
+        if (b) { e.preventDefault(); startWhenClear(50); }
+    });
+
     function init() {
-        if (!$('#quickStartCard')) { return; }
+        var pn = pageName();
+        if (!pn) { return; }
         var forced = new URLSearchParams(location.search).get('tour') === '1';
+        if (pn !== 'app') {
+            if (forced) {
+                try { history.replaceState(null, '', location.pathname + location.search.replace(/([?&])tour=1(&|$)/, '$1').replace(/[?&]$/, '') + location.hash); } catch (e) {}
+                startWhenClear(700);
+            } else if (!seen(PAGE_TOURS[pn].key)) {
+                startWhenClear(900);
+            }
+            return;
+        }
         if (forced) {
             try { history.replaceState(null, '', location.pathname + location.search.replace(/([?&])tour=1(&|$)/, '$1').replace(/[?&]$/, '') + location.hash); } catch (e) {}
             startWhenClear(400);

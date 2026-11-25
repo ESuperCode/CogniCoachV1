@@ -1,5 +1,6 @@
 // ==========================================================================
-// Arena page (arena.html): League, Friends, Quests, Shop and Bag tabs.
+// Arena page (arena.html): Quests, League, Friends and Shop tabs (the Shop also holds your bag:
+// chests to open, boosts to switch on, freezes, frames).
 // Economy: scripts/economy.js (+ economy-ui.js). Social: scripts/social.js -> /social/* on the
 // accounts Worker. Leagues and friends need an account; quests, shop and bag work for everyone.
 // ==========================================================================
@@ -11,8 +12,10 @@
     function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function $(s, r) { return (r || document).querySelector(s); }
     function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
-    var TABS = ['league', 'friends', 'quests', 'shop', 'bag'];
-    var current = 'league', social = null;
+    var TABS = ['quests', 'league', 'friends', 'shop'];
+    var ALIAS = { bag: 'shop', store: 'shop', leagues: 'league' };
+    var current = 'quests', social = null;
+    function intro(text) { return '<p class="panel-intro">' + text + '</p>'; }
     function signedIn() { return !!(S && S.signedIn()); }
     function openAccount() { if (window.CogniAccount && window.CogniAccount.open) { window.CogniAccount.open('signup'); } }
     function initial(name) { return esc(String(name || '?').trim().charAt(0).toUpperCase() || '?'); }
@@ -31,7 +34,8 @@
 
     // ------------------------------------------------------------------ tabs
     function select(tab, focus) {
-        if (TABS.indexOf(tab) < 0) { tab = 'league'; }
+        tab = ALIAS[tab] || tab;
+        if (TABS.indexOf(tab) < 0) { tab = signedIn() ? 'league' : 'quests'; }
         current = tab;
         TABS.forEach(function (t) {
             var b = $('#tab-' + t), p = $('#panel-' + t);
@@ -46,13 +50,13 @@
     }
     function render(tab) {
         var p = $('#panel-' + tab);
-        ({ league: league, friends: friends, quests: quests, shop: shop, bag: bag })[tab](p);
+        ({ league: league, friends: friends, quests: quests, shop: shop })[tab](p);
         dots();
     }
     function dots() {
         var q = E.claimableCount(), w = E.load();
         $('#tab-quests .tab-dot').hidden = !q;
-        $('#tab-bag .tab-dot').hidden = !w.inventory.chests.length;
+        $('#tab-shop .tab-dot').hidden = !w.inventory.chests.length;
     }
 
     // ------------------------------------------------------------------ League
@@ -69,7 +73,7 @@
         catch (e) { p.innerHTML = errorBox(e); return; }
         if (current !== 'league') { return; }
         var on = lg.leaguesOn !== false;
-        var html = '<div class="lg-head">' + ic('league-' + lg.tier, 84) + '<div><h2>' + esc(lg.league) + ' League</h2>' +
+        var html = intro('Every XP you earn this week counts. Finish near the top of your group to move up a league on Monday.') + '<div class="lg-head">' + ic('league-' + lg.tier, 84) + '<div><h2>' + esc(lg.league) + ' League</h2>' +
             '<p>' + (lg.joined ? (lg.promote ? 'Top ' + lg.promote + ' move up' : 'Top league - stay on top') + (lg.demote ? ' · bottom ' + lg.demote + ' move down' : '') + ' · ' : '') +
             'Ends in <b>' + timeLeft(lg.endsAt - Date.now()) + '</b></p></div></div>' +
             '<ol class="lg-ladder" aria-label="Leagues">' + lg.leagues.map(function (n, i) {
@@ -143,12 +147,14 @@
         var myColor = me.avatar;
         var board = social.friends.map(function (f) { return f; }).concat([{ handle: social.handle, display: social.display, avatar: myColor, weekXp: me.weekXp, streak: me.streak, me: true }])
             .sort(function (a, b) { return (b.weekXp || 0) - (a.weekXp || 0); });
-        var html = '<div class="fr-me">' + avatar(myColor, social.display, 56) + '<div class="fr-me-text"><b>' + esc(social.display) + '</b>' +
-            '<span class="fr-handle">@<span data-handle>' + esc(social.handle) + '</span> <button type="button" class="ar-link" data-copy>' + ic('copy', 14) + ' Copy</button> <button type="button" class="ar-link" data-edit-handle>Change</button></span>' +
-            '<form class="fr-handle-form" hidden><label for="newHandle" class="a11y-sr-only">New handle</label><input id="newHandle" value="' + esc(social.handle) + '" maxlength="24" autocomplete="off" spellcheck="false"><button class="econ-btn" type="submit">Save</button></form>' +
+        var html = intro('Share your handle so friends can add you. Compare weekly XP, cheer each other on and see each other\u2019s Athlete Cards.') +
+            '<div class="fr-me">' + avatar(myColor, social.display, 56) + '<div class="fr-me-text"><b>' + esc(social.display) + '</b>' +
+            '<span class="fr-handle">@<span data-handle>' + esc(social.handle) + '</span> <button type="button" class="ar-link" data-copy>' + ic('copy', 14) + ' Copy</button></span>' +
+            '<details class="fr-edit"><summary>Edit handle and colour</summary>' +
+            '<form class="fr-handle-form"><label for="newHandle">Handle</label><input id="newHandle" value="' + esc(social.handle) + '" maxlength="24" autocomplete="off" spellcheck="false"><button class="econ-btn" type="submit">Save</button></form>' +
             '<div class="fr-colors" role="radiogroup" aria-label="Avatar colour">' + S.AVATARS.map(function (c, i) {
                 return '<button type="button" role="radio" class="fr-color" style="--av:' + c + '" aria-checked="' + (c === myColor) + '" aria-label="Colour ' + (i + 1) + '" data-color="' + c + '"></button>';
-            }).join('') + '</div></div></div>';
+            }).join('') + '</div></details></div></div>';
         if (social.cheers && social.cheers.length) {
             html += '<div class="fr-cheers">' + ic('heart', 22) + '<span><b>' + social.cheers.map(function (c) { return esc(c.display); }).join(', ') + '</b> cheered you on!</span></div>';
         }
@@ -187,7 +193,6 @@
             (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { UI.toast('Copied <b>' + esc(t) + '</b>', 'copy'); }, function () { UI.toast('Your handle is <b>' + esc(t) + '</b>', 'user'); });
         });
         var form = $('.fr-handle-form', p);
-        $('[data-edit-handle]', p).addEventListener('click', function () { form.hidden = !form.hidden; if (!form.hidden) { $('#newHandle').focus(); } });
         form.addEventListener('submit', async function (ev) {
             ev.preventDefault();
             try { var r = await S.call('/social/handle', { body: { handle: $('#newHandle').value } }); UI.toast('Your handle is now <b>@' + esc(r.handle) + '</b>', 'check'); friends(p); }
@@ -273,13 +278,15 @@
     function quests(p) {
         var q = E.quests(), w = E.load(), st = E.streakInfo(w);
         var next = E.MILESTONES.filter(function (m) { return m > st.current; })[0];
-        var html = '<div class="qs-grid">' +
+        var html = intro('Train to fill your daily XP goal and finish today\u2019s three quests. Rewards are Grit and chests; new quests every day.') +
+            '<div class="qs-grid">' +
             '<div class="qs-goal"><div class="qs-ring">' + UI.ring(q.goal ? q.todayXp / q.goal : 0).replace('width="34" height="34"', 'width="132" height="132"') +
             '<div class="qs-ring-text"><b>' + q.todayXp + '</b><span>of ' + q.goal + ' XP</span></div></div>' +
             '<h2>Daily goal</h2>' +
+            '<details class="qs-change"' + (p._goalOpen ? ' open' : '') + '><summary>' + (E.GOALS.filter(function (g) { return g.xp === q.goal; })[0] || { name: 'Custom' }).name + ' \u00b7 ' + q.goal + ' XP a day <span>Change</span></summary>' +
             '<div class="qs-goals" role="radiogroup" aria-label="Daily XP goal">' + E.GOALS.map(function (g) {
                 return '<button type="button" role="radio" aria-checked="' + (g.xp === q.goal) + '" data-goal="' + g.xp + '"><b>' + g.name + '</b><small>' + g.xp + ' XP</small></button>';
-            }).join('') + '</div>' +
+            }).join('') + '</div></details>' +
             (q.goalDone ? (q.goalChestClaimed ? '<p class="qs-done">' + ic('check-circle', 18) + ' Goal reached today</p>' : '<button type="button" class="econ-btn econ-btn-primary" data-claim="goal">' + ic('chest-wood', 22) + ' Claim goal chest</button>')
                 : '<p class="ar-small">' + (q.goal - q.todayXp) + ' XP to go today</p>') + '</div>' +
 
@@ -302,7 +309,7 @@
             '<div class="qs-all' + (q.allDone ? ' done' : '') + '">' + ic('chest-silver', 52) + '<div><b>Finish all three</b><small>A Silver Chest for completing every quest today</small></div>' +
             (q.allChestClaimed ? '<span class="qs-claimed">' + ic('check', 18) + ' Claimed</span>' : '<button type="button" class="econ-btn econ-btn-primary" data-claim="all"' + (q.allDone ? '' : ' disabled') + '>Claim</button>') + '</div>';
         p.innerHTML = html;
-        $$('[data-goal]', p).forEach(function (b) { b.addEventListener('click', function () { E.setDailyGoal(Number(b.dataset.goal)); quests(p); $('[data-goal="' + b.dataset.goal + '"]', p).focus(); }); });
+        $$('[data-goal]', p).forEach(function (b) { b.addEventListener('click', function () { E.setDailyGoal(Number(b.dataset.goal)); p._goalOpen = true; quests(p); p._goalOpen = false; $('[data-goal="' + b.dataset.goal + '"]', p).focus(); }); });
         $$('[data-claim]', p).forEach(function (b) {
             b.addEventListener('click', function () {
                 var r = E.claim(b.dataset.claim);
@@ -317,9 +324,32 @@
     // ------------------------------------------------------------------ Shop
     var FRAME_SWATCH = { neon: 'linear-gradient(135deg,#00e0ff,#ff2bd6)', carbon: 'repeating-linear-gradient(45deg,#1b1f27 0 4px,#2b313c 4px 8px)', aurora: 'linear-gradient(135deg,#34c38f,#4ea8ff,#8a3ffc)', prism: 'conic-gradient(#ff3d6e,#ffcf4d,#34c38f,#4ea8ff,#8a3ffc,#ff3d6e)' };
     function shop(p) {
-        var w = E.load(), rep = E.repairable(w);
-        var html = '<div class="sh-head"><h2>Shop</h2><span class="sh-bal">' + ic('coin', 30) + '<b>' + w.coins + '</b> Grit</span></div>' +
-            '<p class="ar-small">Earn Grit by training, finishing quests, opening chests and placing in your league.</p><div class="sh-grid">';
+        var w = E.load(), rep = E.repairable(w), boost = E.boostActive(w), chests = w.inventory.chests;
+        var html = intro('Spend the Grit you earn from training on things that help you keep going. What you own is in your bag at the top.') +
+            '<div class="sh-head"><h2>Your bag</h2><span class="sh-bal">' + ic('coin', 30) + '<b>' + w.coins + '</b> Grit</span></div>';
+        // ---- bag: only what you actually have
+        var bagItems = '';
+        if (boost) {
+            bagItems += '<div class="bg-active">' + ic('boost', 44) + '<div><b>' + boost.mult + 'x XP is on</b><small>' + UI.fmtLeft(boost.until - Date.now()) + ' left. Sessions you finish now earn ' + boost.mult + 'x XP.</small></div></div>';
+        }
+        if (chests.length) {
+            bagItems += '<div class="bg-row">' + ic('chest-' + chests[0].tier, 48) + '<div><b>' + chests.length + ' chest' + (chests.length > 1 ? 's' : '') + ' to open</b><small>' +
+                esc(chests.map(function (c) { return E.CHEST_NAMES[c.tier]; }).slice(0, 3).join(', ')) + (chests.length > 3 ? '\u2026' : '') + '</small></div>' +
+                '<button type="button" class="econ-btn econ-btn-primary" data-open-all>' + ic('gift', 18) + ' Open' + (chests.length > 1 ? ' all' : '') + '</button></div>';
+        }
+        [['boost2', 'Double XP', '60 minutes of 2x XP'], ['boost3', 'Triple XP', '30 minutes of 3x XP']].forEach(function (b) {
+            if (!w.inventory[b[0]]) { return; }
+            bagItems += '<div class="bg-row">' + ic('boost', 44) + '<div><b>' + b[1] + ' <span class="sh-tag">\u00d7' + w.inventory[b[0]] + '</span></b><small>' + b[2] + '. Switch it on just before you train.</small></div>' +
+                '<button type="button" class="econ-btn' + (boost ? '' : ' econ-btn-primary') + '" data-activate="' + b[0] + '"' + (boost ? ' disabled' : '') + '>Activate</button></div>';
+        });
+        bagItems += '<div class="bg-row">' + ic('freeze', 44) + '<div><b>Streak Freezes ' + w.inventory.freeze + '/2</b><small>A missed day uses one automatically, so your streak survives.</small></div></div>';
+        if (w.owned.frames.length) {
+            bagItems += '<div class="bg-row">' + ic('sparkles', 40) + '<div><b>' + w.owned.frames.length + ' card frame' + (w.owned.frames.length > 1 ? 's' : '') + '</b><small>' +
+                esc(w.owned.frames.map(function (f) { return f.charAt(0).toUpperCase() + f.slice(1); }).join(', ')) + '</small></div><a class="econ-btn" href="dashboard.html#card">Equip</a></div>';
+        }
+        html += '<div class="bg-list">' + bagItems + '</div>';
+        // ---- buy
+        html += '<h2 class="ar-h2">Buy</h2><div class="sh-grid">';
         E.SHOP.forEach(function (it) {
             if (it.id === 'repair' && !rep) { return; }
             var owned = it.frame && w.owned.frames.indexOf(it.frame) >= 0;
@@ -330,12 +360,31 @@
                 (it.frame ? '<span class="sh-swatch" style="background:' + FRAME_SWATCH[it.frame] + '" aria-hidden="true"></span>' : ic(it.icon, 56)) +
                 '<b>' + esc(it.name) + (it.id === 'boost3' ? ' <span class="sh-tag">3x</span>' : it.id === 'boost2' ? ' <span class="sh-tag">2x</span>' : '') + '</b>' +
                 '<small>' + esc(it.id === 'repair' ? 'Bring back your ' + rep.lost + '-day streak.' : it.desc) + '</small>' +
-                (it.id === 'freeze' ? '<span class="sh-own">' + w.inventory.freeze + '/2 equipped</span>' : it.id === 'boost2' || it.id === 'boost3' ? '<span class="sh-own">' + w.inventory[it.id] + ' in bag</span>' : '') +
                 '<button type="button" class="econ-btn ' + (status || short ? '' : 'econ-btn-primary') + '" data-buy="' + it.id + '"' + (status || short ? ' disabled' : '') + '>' +
                 (status ? ic('check', 16) + ' ' + status : ic('coin', 20) + ' ' + it.price + (short ? '<span class="a11y-sr-only"> - not enough Grit</span>' : '')) + '</button></div>';
         });
         html += '</div>';
+        // ---- history, folded away
+        var LEDGER_ICON = { coins: 'coin', xp: 'xp', freeze: 'freeze', boost: 'boost' };
+        var led = (w.ledger || []).slice(-15).reverse();
+        if (led.length) {
+            html += '<details class="bg-history"><summary>Recent activity</summary><ul class="bg-ledger">' + led.map(function (l) {
+                return '<li>' + ic(LEDGER_ICON[l.type] || 'info', 24) + '<span>' + esc(l.note || l.type) + '</span>' +
+                    (l.amount ? '<b class="' + (l.amount > 0 ? 'pos' : 'neg') + '">' + (l.amount > 0 ? '+' : '') + l.amount + (l.type === 'xp' ? ' XP' : '') + '</b>' : '<b></b>') +
+                    '<time datetime="' + new Date(l.t).toISOString() + '">' + new Date(l.t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '</time></li>';
+            }).join('') + '</ul></details>';
+        }
         p.innerHTML = html;
+        var all = $('[data-open-all]', p);
+        if (all) { all.addEventListener('click', function () { UI.openChests(E.load().inventory.chests.map(function (c) { return c.id; }), function () { shop(p); dots(); }); }); }
+        $$('[data-activate]', p).forEach(function (b) {
+            b.addEventListener('click', function () {
+                var r = E.activateBoost(b.dataset.activate);
+                if (!r.ok) { UI.toast(esc(r.error), 'info'); return; }
+                UI.toast('<b>' + r.boost.mult + 'x XP</b> is on - go train!', 'boost');
+                shop(p);
+            });
+        });
         $$('[data-buy]', p).forEach(function (b) {
             b.addEventListener('click', function () {
                 var r = E.buy(b.dataset.buy);
@@ -343,60 +392,11 @@
                 var it = r.item;
                 if (it.id === 'chest-silver' || it.id === 'chest-gold') {
                     var c = E.load().inventory.chests.slice(-1)[0];
-                    UI.openChests([c.id], function () { shop(p); });
+                    UI.openChests([c.id], function () { shop(p); dots(); });
                 } else {
-                    UI.toast('Bought <b>' + esc(it.name) + '</b>' + (it.frame ? ' - equip it on your Athlete Card' : it.id.indexOf('boost') === 0 ? ' - activate it in your bag' : ''), it.frame ? 'sparkles' : it.icon);
+                    UI.toast('Bought <b>' + esc(it.name) + '</b>' + (it.frame ? ' - equip it on your Athlete Card' : it.id.indexOf('boost') === 0 ? ' - it\u2019s in your bag' : ''), it.frame ? 'sparkles' : it.icon);
                 }
                 shop(p); dots();
-            });
-        });
-    }
-
-    // ------------------------------------------------------------------ Bag
-    function bag(p) {
-        var w = E.load(), boost = E.boostActive(w);
-        var chests = w.inventory.chests;
-        var html = '<h2 class="ar-h2">Chests</h2>';
-        if (!chests.length) { html += '<div class="ar-empty small">' + ic('chest-wood', 56) + '<p>No chests right now. Finish a session to earn one.</p></div>'; }
-        else {
-            html += '<div class="bg-chests">' + chests.map(function (c) {
-                return '<button type="button" class="bg-chest" data-open="' + c.id + '">' + ic('chest-' + c.tier, 72) + '<b>' + esc(E.CHEST_NAMES[c.tier]) + '</b><small>' + esc(c.source || '') + '</small></button>';
-            }).join('') + '</div>' + (chests.length > 1 ? '<button type="button" class="econ-btn econ-btn-primary" data-open-all>' + ic('gift', 18) + ' Open all ' + chests.length + '</button>' : '');
-        }
-        html += '<h2 class="ar-h2">Boosts</h2><div class="bg-boosts">';
-        if (boost) {
-            html += '<div class="bg-active">' + ic('boost', 48) + '<div><b>' + boost.mult + 'x XP is on</b><small>' + UI.fmtLeft(boost.until - Date.now()) + ' left - every session you finish now earns ' + boost.mult + 'x XP.</small></div></div>';
-        }
-        [['boost2', 'Double XP', '60 minutes of 2x XP'], ['boost3', 'Triple XP', '30 minutes of 3x XP']].forEach(function (b) {
-            html += '<div class="bg-boost">' + ic('boost', 44) + '<div><b>' + b[1] + ' <span class="sh-tag">' + w.inventory[b[0]] + '</span></b><small>' + b[2] + '. Turn it on just before you train.</small></div>' +
-                '<button type="button" class="econ-btn' + (w.inventory[b[0]] && !boost ? ' econ-btn-primary' : '') + '" data-activate="' + b[0] + '"' + (w.inventory[b[0]] && !boost ? '' : ' disabled') + '>Activate</button></div>';
-        });
-        html += '</div><h2 class="ar-h2">Streak Freezes</h2><div class="qs-freezes big">' + [0, 1].map(function (i) { return '<span class="qs-slot' + (i < w.inventory.freeze ? ' full' : '') + '">' + ic('freeze', 44) + '</span>'; }).join('') +
-            '<span class="ar-small">' + w.inventory.freeze + ' of 2 equipped. A missed day uses one automatically.</span></div>';
-        if (w.owned.frames.length) {
-            html += '<h2 class="ar-h2">Card frames</h2><div class="bg-frames">' + w.owned.frames.map(function (f) {
-                return '<span class="bg-frame"><span class="sh-swatch" style="background:' + FRAME_SWATCH[f] + '"></span>' + esc(f.charAt(0).toUpperCase() + f.slice(1)) + '</span>';
-            }).join('') + '<a class="econ-btn" href="dashboard.html#athleteCard">Equip on your card ' + ic('arrow-right', 16) + '</a></div>';
-        }
-        var LEDGER_ICON = { coins: 'coin', xp: 'xp', freeze: 'freeze', boost: 'boost' };
-        var led = (w.ledger || []).slice(-12).reverse();
-        if (led.length) {
-            html += '<h2 class="ar-h2">Recent activity</h2><ul class="bg-ledger">' + led.map(function (l) {
-                return '<li>' + ic(LEDGER_ICON[l.type] || 'info', 24) + '<span>' + esc(l.note || l.type) + '</span>' +
-                    (l.amount ? '<b class="' + (l.amount > 0 ? 'pos' : 'neg') + '">' + (l.amount > 0 ? '+' : '') + l.amount + (l.type === 'xp' ? ' XP' : '') + '</b>' : '<b></b>') +
-                    '<time datetime="' + new Date(l.t).toISOString() + '">' + new Date(l.t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '</time></li>';
-            }).join('') + '</ul>';
-        }
-        p.innerHTML = html;
-        $$('[data-open]', p).forEach(function (b) { b.addEventListener('click', function () { UI.openChests([b.dataset.open], function () { bag(p); }); }); });
-        var all = $('[data-open-all]', p);
-        if (all) { all.addEventListener('click', function () { UI.openChests(E.load().inventory.chests.map(function (c) { return c.id; }), function () { bag(p); }); }); }
-        $$('[data-activate]', p).forEach(function (b) {
-            b.addEventListener('click', function () {
-                var r = E.activateBoost(b.dataset.activate);
-                if (!r.ok) { UI.toast(esc(r.error), 'info'); return; }
-                UI.toast('<b>' + r.boost.mult + 'x XP</b> is on - go train!', 'boost');
-                bag(p);
             });
         });
     }
@@ -414,11 +414,13 @@
                 if (n) { e.preventDefault(); select(n.dataset.tab, true); }
             });
         });
-        select((location.hash || '#league').slice(1));
-        window.addEventListener('hashchange', function () { var t = location.hash.slice(1); if (t !== current && TABS.indexOf(t) >= 0) { select(t); } });
-        document.addEventListener('cognicoach:wallet', function () { dots(); if (current === 'shop' || current === 'bag' || current === 'quests') { /* panels refresh after their own actions */ } });
+        select(location.hash.slice(1) || (signedIn() ? 'league' : 'quests'));
+        window.addEventListener('hashchange', function () { var t = location.hash.slice(1); t = ALIAS[t] || t; if (t !== current && TABS.indexOf(t) >= 0) { select(t); } });
+        document.addEventListener('cognicoach:wallet', dots);
         window.addEventListener('cognicoach:account', function () { setTimeout(function () { render(current); }, 600); });
         window.addEventListener('cognicoach:synced', function () { if (current !== 'friends' && current !== 'league') { render(current); } });
     }
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', boot); } else { boot(); }
+
+    window.CogniTabs = { select: function (t, f) { select(t, f); }, current: function () { return current; } };
 })();

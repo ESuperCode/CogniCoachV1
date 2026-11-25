@@ -72,7 +72,8 @@
 
     // ------------------------------------------------------------------ render shell
     function render() {
-        var anchor = document.getElementById('athleteCard') || document.getElementById('profileSummaryCard');
+        var mount = document.getElementById('myStatsMount');   // the dashboard's Stats tab
+        var anchor = mount || document.getElementById('athleteCard') || document.getElementById('profileSummaryCard');
         if (!anchor) { return; }
         var host = document.getElementById('myStats');
         if (!host) {
@@ -80,7 +81,7 @@
             host.id = 'myStats';
             host.className = 'card dash-card dash-span-12 ms-section';
             host.setAttribute('aria-labelledby', 'myStatsTitle');
-            anchor.parentNode.insertBefore(host, anchor.nextSibling);
+            if (mount) { mount.appendChild(host); } else { anchor.parentNode.insertBefore(host, anchor.nextSibling); }
         }
         var all = CS.history().sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
         if (!all.length) {

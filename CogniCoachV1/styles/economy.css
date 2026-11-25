@@ -164,3 +164,52 @@ html.a11y-reduce-motion .chest-reward, html.a11y-reduce-motion .econ-toast { ani
     .econ-freeze { padding: 1px 4px 1px 1px; }
     .econ-freeze .ci { width: 14px; height: 14px; }
 }
+
+/* ---- shared page tabs (dashboard.html, arena.html) -------------------------------------- */
+.page-tabs {
+    position: relative; z-index: 5;
+    display: flex; gap: 4px; justify-content: center;
+    margin: 0 auto 10px; padding: 5px; max-width: 680px;
+    border-radius: 20px; background: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--line, #dbe7f3);
+    box-shadow: 0 12px 26px rgba(30, 50, 80, 0.1);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.page-tabs [role="tab"] {
+    position: relative; flex: 1 1 0; min-width: 0;
+    display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 56px; padding: 6px 4px;
+    border: 0; border-radius: 15px; background: transparent;
+    color: #4d5a6e; font-family: 'Space Mono', monospace; font-size: 0.78rem; font-weight: 700; cursor: pointer;
+}
+.page-tabs [role="tab"]:hover { color: var(--text-white); background: var(--medium-gray, #edf3fb); }
+.page-tabs [role="tab"][aria-selected="true"] { color: #fff; background: linear-gradient(180deg, #3d8ef0, #1a6dcc); box-shadow: 0 8px 18px rgba(26, 109, 204, 0.35); }
+.page-tabs .tab-dot { position: absolute; top: 7px; right: calc(50% - 20px); width: 10px; height: 10px; border-radius: 50%; background: #e34948; box-shadow: 0 0 0 2px #fff; }
+.page-tabs .tab-dot[hidden] { display: none; }
+.page-tour-btn {
+    display: flex; align-items: center; gap: 6px; margin: 0 auto 22px;
+    min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent;
+    color: var(--primary-blue); font-family: 'Space Mono', monospace; font-size: 0.8rem; font-weight: 700; cursor: pointer;
+}
+.page-tour-btn:hover { background: rgba(26, 109, 204, 0.08); }
+.dash-intro, .panel-intro { max-width: 680px; margin: 0 auto 18px; text-align: center; color: #4d5a6e; font-size: 0.9rem; line-height: 1.55; }
+.panel-intro { margin-bottom: 20px; }
+.dash-panel:focus-visible { outline: 3px solid var(--primary-blue); outline-offset: 4px; border-radius: 16px; }
+@media (max-width: 640px) {
+    .page-tabs { gap: 2px; padding: 4px; border-radius: 16px; }
+    .page-tabs [role="tab"] { min-height: 52px; font-size: 0.66rem; border-radius: 12px; }
+    .page-tour-btn { margin-bottom: 14px; }
+}
+
+/* dashboard Home: welcome card */
+.dash-welcome { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap;
+    background: linear-gradient(135deg, #0f1f3a, #1b355f 60%, #4a2a17) !important; color: #eaf2ff; border: 0 !important; }
+.dash-welcome h2 { font-family: 'Orbitron', sans-serif; font-size: 1.5rem; margin: 0 0 6px; color: #fff; }
+.dash-welcome p { margin: 0; color: #c9d8ee; line-height: 1.5; }
+.dw-text { flex: 1 1 280px; }
+.dw-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.dw-actions .btn { display: inline-flex; align-items: center; gap: 8px; }
+.dash-welcome .btn-secondary { background: rgba(255, 255, 255, 0.1); color: #fff; border-color: rgba(255, 255, 255, 0.35); }
+@media (max-width: 640px) { .dw-actions, .dw-actions .btn { width: 100%; justify-content: center; } .dash-welcome h2 { font-size: 1.25rem; } }
+
+.dash-welcome a.btn, #smartActions a.btn, .competition-cta a.btn { text-decoration: none; }
