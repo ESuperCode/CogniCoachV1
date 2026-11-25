@@ -366,3 +366,29 @@ html.a11y-reduce-motion .recap-coin { animation: none; }
 .adapt-badge .ci { vertical-align: -2px; }
 .coach-launch-icon .ci { color: #fff; }
 .cm-icon .ci, .cm-btn .ci { vertical-align: middle; }
+
+/* ---- simpler drill card: timer first, muscle list behind Edit (scripts/app-simple.js) ---- */
+.end-early-link {
+    display: block; margin: 14px auto 0; padding: 8px 12px; min-height: 40px;
+    background: none; border: 0; cursor: pointer;
+    font: inherit; font-size: 0.85rem; color: #b42318; text-decoration: underline; text-underline-offset: 3px;
+}
+.end-early-link:hover { color: #8a1a12; }
+.muscle-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: -0.5rem -1rem 0.5rem; padding: 0 1rem 0.5rem; background: var(--dark-gray); }
+.muscle-groups .muscle-head .muscle-diagram-heading { margin: 0; padding: 0; text-align: left; }
+.muscle-edit-btn { box-shadow: none; }
+.muscle-hint { margin: 0 0 6px; font-size: 0.82rem; color: var(--text-gray); }
+.muscle-list[hidden] { display: none; }
+.muscle-groups .muscle-diagram-container { margin: 16px 0; }
+.timer-container #pauseBtn:disabled { display: none; }
+.adapt-feedback .adapt-status { margin-bottom: 0; }
+.adapt-feedback .adapt-status:empty { min-height: 0; margin: 0; }
+.muscle-groups .muscle-head .muscle-diagram-heading { background: transparent !important; }
+.muscle-groups .muscle-head { background: rgba(31, 122, 224, 0.08); padding-top: 0.5rem; }
+.btn-chip:not(.btn-chip-danger):hover { color: #fff; }
+/* With the list folded away the body map sits in normal flow (as on phones), on every screen. */
+.muscle-list[hidden] ~ .muscle-diagram-container { position: static; justify-content: center; }
+.muscle-list[hidden] ~ .muscle-diagram-container svg {
+    position: static; right: auto; bottom: auto; display: block;
+    width: 100%; max-width: 340px; height: auto; margin: 0 auto;
+}

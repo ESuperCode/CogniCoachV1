@@ -921,8 +921,8 @@ function getAppPassword() {
 }
 
 async function requestDrillFromApi(drillRequest, turnstileToken) {
-    const temperatureInput = document.getElementById("temperature").value;
-    const temperature = Number(temperatureInput);
+    const temperatureInput = String(document.getElementById("temperature").value || '').trim();
+    const temperature = temperatureInput === '' ? NaN : Number(temperatureInput);
 
     const payload = {
         ...drillRequest,

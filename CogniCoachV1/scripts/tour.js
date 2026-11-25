@@ -51,13 +51,13 @@
         { kind: 'hero', id: 'welcome' },
         { target: '#quickStartCard', group: ['#quickStartCard .quick-start-header', '#sportSwitcher'], title: 'Quick Start',
           text: 'The fastest way to train. CogniCoach remembers your sport and level, so most days this is all you touch.' },
-        { target: '#location', group: ['#location', '#workoutLength', '#focus'], title: 'Where, how long, what',
-          text: 'Tell it where you are, how many minutes you have and what to work on - the AI plans every drill to fit.' },
+        { target: '#quickStartCard .qs-length', group: ['#quickStartCard .qs-length', '#qsDetails'], title: 'How long, where, what',
+          text: 'Tap how many minutes you have. Edit tells it where you are and what to work on - the AI plans every drill to fit.' },
         { target: '#readinessCheck', title: 'Your coach listens',
           text: 'Tell CogniCoach how you feel today. Low energy gets you easier drills, fired up gets harder ones. During a session, rate each drill and the next ones adjust.' },
         { target: '#quickStartBtn', title: 'One tap to train',
           text: 'Press Start and the AI builds your session drill by drill. While you do one drill, the next is already being prepared.' },
-        { target: '#advancedSetup', title: 'Full control',
+        { target: '#advancedSetup', title: 'Build my own plan',
           text: 'Pick muscle groups, set your level, or drag drills into your own warm-up, main work and cool-down timeline.' },
         { demo: 'enter', target: '#drillContent .drill-display', title: 'Inside a session',
           text: "Here's a sample drill. Each one tells you exactly what to do and what it focuses on." },
@@ -83,6 +83,35 @@
           text: 'With a free account your profile and training follow you to every device you sign in on.' },
         { kind: 'hero', id: 'finale', title: "You're all set",
           text: 'Pick a sport, press Start, and your first drill is on its way.' }
+    ];
+
+    // First visit: a short tour of just what is needed to train. The session features are shown
+    // in context the first time a real drill opens (SESSION_STEPS). ?tour=1 replays the full tour.
+    var SHORT_STEPS = [
+        { kind: 'hero', id: 'welcome' },
+        { target: '#quickStartCard', group: ['#sportSwitcher', '#quickStartCard .qs-length'], title: 'Pick your sport and time',
+          text: 'That is all CogniCoach needs. Edit adds where you are and what to work on - it is optional.' },
+        { target: '#readinessCheck', title: 'How do you feel?',
+          text: 'Optional. Low energy gets you easier drills, fired up gets harder ones.' },
+        { target: '#quickStartBtn', title: 'Press Start',
+          text: 'Your coach builds the session drill by drill. The first time, we will point out the tools on the drill screen.' },
+        { target: 'site-nav a[href="dashboard.html"]', smallTarget: '#navMenuBtn', nav: true, title: 'After you train',
+          text: 'Dashboard shows your progress. Arena has daily quests and rewards. Both are in the menu.' },
+        { kind: 'hero', id: 'finale', title: "You're all set",
+          text: 'Pick your time, press Start, and your first drill is on its way.' }
+    ];
+    var SESSION_KEY = 'cognicoach-tour-session-done';
+    var SESSION_STEPS = [
+        { target: '#drillContent .drill-display', title: 'Your first drill',
+          text: 'Read what to do here, or press Read aloud to hear it.' },
+        { target: '#drillContent .timer-container', title: 'Start when ready',
+          text: 'The timer is sized to fit your session. When it ends, Next Drill appears.' },
+        { target: '#drillContent .adapt-feedback', title: 'Tell your coach',
+          text: 'Too hard or too easy? Tap it and the next drills adjust.' },
+        { target: '#coachModeBtn', title: 'Coach Mode',
+          text: 'Hands-free and full screen: it reads each drill, counts you in, times it and moves on.' },
+        { target: '#motionViewer', title: 'Watch it in 3D',
+          text: 'Not sure how a drill looks? Generate Animation shows a 3D athlete doing it.' }
     ];
 
     // ---- page tours (dashboard.html, arena.html) ----
@@ -143,7 +172,8 @@
         return '';
     }
     var page = '';   // set when a tour starts
-    function doneKey() { return page && page !== 'app' ? PAGE_TOURS[page].key : DONE_KEY; }
+    var fullTour = false;   // ?tour=1 / account menu: the full tour with the demo drill
+    function doneKey() { return page === 'session' ? SESSION_KEY : page && page !== 'app' ? PAGE_TOURS[page].key : DONE_KEY; }
 
     var plan = [];   // the tour's steps, fixed when it starts (targets hide during the demo)
     var root, spot, card, idx = 0, active = false, repositionRaf = 0, inDemo = false, demoPlayed = false, needsSetup = false;
@@ -170,9 +200,12 @@
     function computeSteps() {
         // On small screens the nav links live in the Menu drop-down: point those steps at the Menu button.
         var small = window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
-        var source = page && page !== 'app' ? PAGE_TOURS[page].steps : STEPS;
+        var source = page === 'session' ? SESSION_STEPS : page && page !== 'app' ? PAGE_TOURS[page].steps : (fullTour ? STEPS : SHORT_STEPS);
         return source.map(function (s) {
             if (small && s.smallTarget) { var c = {}; Object.keys(s).forEach(function (k) { c[k] = s[k]; }); c.target = s.smallTarget; return c; }
+            return s;
+        }).map(function (s) {
+            if (s.alt && !$(s.target) && $(s.alt)) { var c = {}; Object.keys(s).forEach(function (k) { c[k] = s[k]; }); c.target = s.alt; return c; }
             return s;
         }).filter(function (s) {
             if (!s.target || s.demo || s.nav || s.tab) { return true; }   // tab steps are checked when shown
@@ -259,17 +292,21 @@
     // continue with Google, sign in - or just take the tour.
     function welcomeBody() {
         var signedIn = window.CogniAccount && window.CogniAccount.session();
-        if (signedIn) {
-            return '<h2 class="tour-title" id="tourTitle">Welcome to CogniCoachAI</h2>' +
-                '<p class="tour-text">Your AI coach builds a full training session around your sport, your space and your time. Take a quick look around?</p>';
+        var p = profile(), chosen = p.defaultSport || '';
+        var sports = (typeof PROFILE_SPORTS !== 'undefined' && PROFILE_SPORTS) || ['Basketball', 'Soccer', 'Tennis', 'Football', 'Baseball', 'Volleyball', 'Swimming', 'Cricket', 'Rugby', 'Golf'];
+        var pickHtml = '<div class="tour-sports" role="group" aria-label="Your main sport">' + sports.map(function (sp) {
+            return '<button type="button" class="tour-sport" data-t="sport" data-sport="' + esc(sp) + '" aria-pressed="' + (sp === chosen ? 'true' : 'false') + '">' + esc(sp) + '</button>';
+        }).join('') + '</div><p class="tour-sport-note">Not listed? Pick any and type yours on Quick Start.</p>';
+        var html = '<h2 class="tour-title" id="tourTitle">Welcome to CogniCoachAI</h2>' +
+            '<p class="tour-text">Your free AI coach. Tell it your sport and time, and it plans every drill.</p>' +
+            '<p class="tour-q">What sport do you train?</p>' + pickHtml;
+        if (!signedIn) {
+            html += '<div class="tour-join">' +
+                '  <p class="tour-have">Save progress on every device: <button type="button" class="tour-link" data-t="create">Create free account</button> or <button type="button" class="tour-link" data-t="signin">Sign in</button></p>' +
+                '  <div class="tour-google" id="tourGoogle"></div>' +
+                '</div>';
         }
-        return '<h2 class="tour-title" id="tourTitle">Welcome to CogniCoachAI</h2>' +
-            '<p class="tour-text">Your AI coach builds a full training session around your sport, your space and your time.</p>' +
-            '<div class="tour-join">' +
-            '  <button type="button" class="tour-create" data-t="create">Create free account</button>' +
-            '  <div class="tour-google" id="tourGoogle"></div>' +
-            '  <p class="tour-have">Already have an account? <button type="button" class="tour-link" data-t="signin">Sign in</button></p>' +
-            '</div>';
+        return html;
     }
 
     // Taking the tour without an account still counts as finishing the first-run setup
@@ -308,6 +345,17 @@
             var b = e.target.closest('[data-t]');
             if (!b) { return; }
             var t = b.getAttribute('data-t');
+            if (t === 'sport') {
+                var sp = b.getAttribute('data-sport');
+                if (typeof completeOnboarding === 'function') { completeOnboarding(sp, ''); }
+                else if (typeof setDefaultSport === 'function') { setDefaultSport(sp, false); }
+                needsSetup = false;
+                window.__quickStartSportOverride = null;
+                if (typeof refreshQuickStartUI === 'function') { refreshQuickStartUI(); }
+                root.querySelectorAll('.tour-sport').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+                var nb = root.querySelector('.tour-next'); if (nb) { nb.disabled = false; nb.focus(); }
+                return;
+            }
             if (t === 'next') { next(); }
             else if (t === 'back') { go(idx - 1); }
             else if (t === 'signin') { if (window.CogniAccount) { window.CogniAccount.open('login'); } }
@@ -413,7 +461,7 @@
         card.classList.add('enter');
         var hero = step.kind === 'hero';
         card.classList.toggle('hero', hero);
-        card.classList.toggle('with-form', step.id === 'welcome' && !(window.CogniAccount && window.CogniAccount.session()));
+        card.classList.toggle('with-form', step.id === 'welcome');
         var body = card.querySelector('.tour-body');
         body.innerHTML = step.id === 'welcome' ? welcomeBody() :
             '<h2 class="tour-title" id="tourTitle">' + esc(step.title) + '</h2><p class="tour-text">' + esc(step.text) + '</p>';
@@ -421,14 +469,15 @@
             var g = card.querySelector('#tourGoogle');
             if (g) { window.CogniAccount.renderGoogleButton(g); }
         }
-        var total = list.length - 2;
-        card.querySelector('.tour-step-num').textContent = hero ? '' : ('Step ' + idx + ' of ' + total);
+        var numbered = list.filter(function (x) { return x.kind !== 'hero'; });
+        card.querySelector('.tour-step-num').textContent = hero ? '' : ('Step ' + (numbered.indexOf(step) + 1) + ' of ' + numbered.length);
         card.querySelector('.tour-dots').innerHTML = list.map(function (s, i) { return '<i class="' + (i === idx ? 'on' : i < idx ? 'done' : '') + '"></i>'; }).join('');
         card.querySelector('.tour-back').style.visibility = idx > 0 ? 'visible' : 'hidden';
-        var anon = !(window.CogniAccount && window.CogniAccount.session());
-        card.querySelector('.tour-next').textContent = step.id === 'welcome' ? (anon ? 'Take the tour' : "Let's go") :
-            step.next ? step.next : step.id === 'finale' ? (step.cta || 'Start training') : 'Next';
-        card.querySelector('.tour-skip').textContent = step.id === 'finale' && step.href && page !== 'app' ? 'Done' : 'Skip tour';
+        var nextBtn = card.querySelector('.tour-next');
+        nextBtn.textContent = step.id === 'welcome' ? "Let's go" :
+            step.next ? step.next : step.id === 'finale' ? (step.cta || 'Start training') : (page === 'session' && idx === list.length - 1 ? 'Got it' : 'Next');
+        nextBtn.disabled = false;
+        card.querySelector('.tour-skip').textContent = step.id === 'finale' && step.href && page !== 'app' ? 'Done' : page === 'session' ? 'Skip tips' : 'Skip tour';
         card.querySelector('.tour-skip').style.visibility = step.id === 'finale' && !(step.href && page !== 'app') ? 'hidden' : 'visible';
 
         if (step.target) {
@@ -454,7 +503,7 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
             position();
         }
-        var focusEl = card.querySelector('.tour-create') || card.querySelector('.tour-next');
+        var focusEl = card.querySelector('.tour-sport[aria-pressed="true"]') || card.querySelector('.tour-next');
         if (focusEl) { focusEl.focus({ preventScroll: true }); }
     }
 
@@ -463,6 +512,14 @@
         active = false;
         exitDemo();
         try { localStorage.setItem(doneKey(), JSON.stringify({ at: Date.now(), skipped: !!skipped })); } catch (e) {}
+        if (page === 'session') {
+            if (root) { root.classList.remove('show'); }
+            document.documentElement.classList.remove('tour-on');
+            var sr = root; root = null;
+            setTimeout(function () { if (sr) { sr.remove(); } }, 350);
+            var sb = $('#startTimerBtn'); if (sb && visible(sb)) { sb.focus({ preventScroll: true }); sb.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+            return;
+        }
         if (page && page !== 'app') {
             if (root) { root.classList.remove('show'); }
             document.documentElement.classList.remove('tour-on');
@@ -490,8 +547,21 @@
 
     function start(opts) {
         if (active) { return; }
-        page = pageName();
+        opts = opts || {};
+        page = opts.session ? 'session' : pageName();
         if (!page) { return; }
+        fullTour = !!opts.full;
+        if (page === 'session') {
+            needsSetup = false;
+            plan = computeSteps();
+            if (!plan.length) { return; }
+            build();
+            active = true;
+            idx = 0;
+            document.documentElement.classList.add('tour-on');
+            requestAnimationFrame(function () { root.classList.add('show'); go(0); });
+            return;
+        }
         if (page !== 'app') {
             needsSetup = false;
             plan = computeSteps();
@@ -518,7 +588,7 @@
 
     function seen(key) { try { return !!localStorage.getItem(key || DONE_KEY); } catch (e) { return true; } }
 
-    function startWhenClear(delay) {
+    function startWhenClear(delay, opts) {
         var tries = 0;
         (function wait() {
             if ($('#profileModalOverlay') || $('#accountModal')) {
@@ -527,12 +597,23 @@
             }
             setTimeout(function () {
                 if ($('#profileModalOverlay') || $('#accountModal')) { wait(); return; }
-                start();
+                start(opts);
             }, delay);
         })();
     }
 
-    window.CogniTour = { start: function () { startWhenClear(200); }, reset: function () { try { localStorage.removeItem(DONE_KEY); } catch (e) {} } };
+    window.CogniTour = { start: function (o) { startWhenClear(200, o); }, reset: function () { try { localStorage.removeItem(DONE_KEY); localStorage.removeItem(SESSION_KEY); } catch (e) {} } };
+
+    // Skipping the first tour means "no tours please": the other pages then wait for their
+    // "Tour this page" button instead of starting on their own.
+    function skippedMain() { try { var v = JSON.parse(localStorage.getItem(DONE_KEY) || 'null'); return !!(v && v.skipped); } catch (e) { return false; } }
+
+    // Session tips: the first time a real drill is on screen.
+    document.addEventListener('cognicoach:drill-rendered', function () {
+        if (active || seen(SESSION_KEY) || skippedMain()) { return; }
+        try { localStorage.setItem(SESSION_KEY, JSON.stringify({ at: Date.now(), pending: true })); } catch (e) {}
+        setTimeout(function () { startWhenClear(0, { session: true }); }, 700);
+    });
 
     // "Tour this page" buttons
     document.addEventListener('click', function (e) {
@@ -548,14 +629,14 @@
             if (forced) {
                 try { history.replaceState(null, '', location.pathname + location.search.replace(/([?&])tour=1(&|$)/, '$1').replace(/[?&]$/, '') + location.hash); } catch (e) {}
                 startWhenClear(700);
-            } else if (!seen(PAGE_TOURS[pn].key)) {
+            } else if (!seen(PAGE_TOURS[pn].key) && !skippedMain()) {
                 startWhenClear(900);
             }
             return;
         }
         if (forced) {
             try { history.replaceState(null, '', location.pathname + location.search.replace(/([?&])tour=1(&|$)/, '$1').replace(/[?&]$/, '') + location.hash); } catch (e) {}
-            startWhenClear(400);
+            startWhenClear(400, { full: true });
         } else if (!seen() || window.cognicoachOnboardingRequested || !profile().onboarded) {
             startWhenClear(500);
         }

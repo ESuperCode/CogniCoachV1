@@ -190,6 +190,8 @@ function sessionsThisWeek(history) {
 function renderGoal(history, settings) {
     const input = document.getElementById('weeklyGoalInput');
     input.value = settings.weeklyGoal;
+    const goalNow = document.getElementById('weeklyGoalNow');
+    if (goalNow) goalNow.textContent = `${settings.weeklyGoal} session${settings.weeklyGoal == 1 ? '' : 's'} a week`;
 
     const done = sessionsThisWeek(history);
     const goal = Math.max(1, parseInt(settings.weeklyGoal, 10) || 1);
@@ -268,34 +270,36 @@ function getRecommendedSports(history) {
         if (!lastPracticed[sport] || d > lastPracticed[sport]) lastPracticed[sport] = d;
     });
 
-    const neverTried = ALL_SPORTS.filter(
-        s => !Object.keys(countBySport).some(t => t.toLowerCase() === s.toLowerCase())
-    );
-    const triedSorted = Object.keys(lastPracticed).sort(
-        (a, b) => lastPracticed[a] - lastPracticed[b]
-    );
-
-    const ranked = [...neverTried, ...triedSorted];
+    // Your own sports first: your main sport, then the ones you have not trained for a while,
+    // then one new sport to try.
+    let main = '';
+    try { main = (typeof loadProfile === 'function' && loadProfile().defaultSport) || ''; } catch (e) {}
+    const tried = Object.keys(lastPracticed).sort((a, b) => lastPracticed[a] - lastPracticed[b]);
+    const has = (list, s) => list.some(t => t.toLowerCase() === String(s).toLowerCase());
     const result = [];
-    ranked.forEach(sport => {
-        if (result.length < 3 && !result.includes(sport)) result.push(sport);
-    });
-    if (result.length === 0) return ALL_SPORTS.slice(0, 3).map(s => ({ sport: s, reason: 'A fresh sport to try' }));
+    if (main) result.push(main);
+    tried.forEach(s => { if (result.length < 3 && !has(result, s)) result.push(s); });
+    const fresh = ALL_SPORTS.find(s => !has(result, s) && !has(Object.keys(countBySport), s));
+    if (result.length < 3 && fresh) result.push(fresh);
 
     return result.map(sport => {
-        const isNew = !Object.keys(countBySport).some(t => t.toLowerCase() === sport.toLowerCase());
-        if (isNew) return { sport, reason: "You haven't trained this yet" };
-        const days = Math.round((new Date() - lastPracticed[sport]) / 86400000);
-        return { sport, reason: days <= 0 ? 'Trained today' : `Last trained ${days} day${days > 1 ? 's' : ''} ago` };
+        const key = Object.keys(lastPracticed).find(t => t.toLowerCase() === sport.toLowerCase());
+        if (!key) return { sport, reason: sport === main ? 'Your main sport' : 'Something new to try' };
+        const days = Math.floor((new Date() - lastPracticed[key]) / 86400000);
+        const when = days <= 0 ? 'Trained today' : `Last trained ${days} day${days > 1 ? 's' : ''} ago`;
+        return { sport, reason: sport === main ? `Your main sport · ${when.toLowerCase()}` : when };
     });
 }
 
 function buildQuickStartUrl(sport, opts) {
+    // Use what this athlete usually picks for the sport (scripts/profile.js), when it knows.
+    let learned = {};
+    try { if (typeof getSmartDefaults === 'function') learned = getSmartDefaults(sport) || {}; } catch (e) {}
     const params = new URLSearchParams({
         sport,
-        location: (opts && opts.location) || 'Gym',
-        focus: (opts && opts.focus) || '',
-        workoutLength: (opts && opts.workoutLength) || 45
+        location: (opts && opts.location) || learned.location || 'Gym',
+        focus: (opts && opts.focus) || learned.focus || '',
+        workoutLength: (opts && opts.workoutLength) || learned.workoutLength || 45
     });
     return `index.html?${params.toString()}`;
 }
@@ -311,7 +315,7 @@ function renderRecommendations(history) {
         el.innerHTML = `
             <div class="recommend-sport">${sport}</div>
             <div class="recommend-reason">${reason}</div>
-            <a class="btn btn-secondary" href="${buildQuickStartUrl(sport)}">Quick Start</a>
+            <a class="btn btn-secondary" href="${buildQuickStartUrl(sport)}" aria-label="Start a ${sport} workout">Start</a>
         `;
         grid.appendChild(el);
     });
@@ -393,8 +397,9 @@ function renderAll() {
     renderRecommendations(history);
     renderSmartActions(history);
 
-    const emptyState = document.getElementById('dashEmptyState');
-    emptyState.style.display = history.length === 0 ? 'block' : 'none';
+    // Before the first session there is nothing to show yet: Home keeps just the welcome card.
+    const home = document.getElementById('panel-home');
+    if (home) home.classList.toggle('dash-new', history.length === 0);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -409,6 +414,19 @@ document.addEventListener('DOMContentLoaded', () => {
         saveDashboardSettings(settings);
         renderGoal(loadHistory(), settings);
     });
+
+    // The goal number sits behind a small Change toggle.
+    const goalBtn = document.getElementById('weeklyGoalChange');
+    const goalRow = document.getElementById('weeklyGoalRow');
+    if (goalBtn && goalRow) {
+        goalBtn.addEventListener('click', () => {
+            const open = goalRow.hidden;
+            goalRow.hidden = !open;
+            goalBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            goalBtn.textContent = open ? 'Done' : 'Change';
+            if (open) document.getElementById('weeklyGoalInput').focus();
+        });
+    }
 
     document.getElementById('exportDataBtn').addEventListener('click', () => {
         let profile = null;

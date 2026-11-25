@@ -401,3 +401,37 @@
 .settings-section.text-center .btn {
     margin: 6px;
 }
+/* -- Simpler Quick Start (scripts/app-simple.js) --------------------------- */
+.qs-label {
+    font-size: 0.85rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-gray); margin-bottom: 10px;
+}
+.qs-length-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.qs-length-chips .adapt-chip { min-width: 76px; justify-content: center; }
+.qs-length .slider-container { margin-top: 14px; display: flex; align-items: center; gap: 10px; }
+.qs-length .slider-container[hidden] { display: none; }
+.qs-length .slider-value { margin-left: 0; white-space: nowrap; }
+.qs-details {
+    margin: 4px 0 18px; padding: 12px 14px;
+    border: 1px solid var(--line, #dbe7f3); border-radius: 14px;
+    background: rgba(255, 255, 255, 0.6);
+}
+.qs-details-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.qs-details-summary { margin: 0; font-size: 0.88rem; color: var(--text-gray); overflow-wrap: anywhere; }
+.qs-details-summary b { color: var(--text-white, #172033); }
+.qs-details .quick-start-grid { margin-top: 14px; }
+.qs-details .quick-start-grid[hidden] { display: none; }
+.qs-details .form-group { margin-bottom: 12px; }
+.qs-more { display: flex; justify-content: center; margin: -10px 0 18px; }
+.qs-more .btn-chip { box-shadow: none; }
+.advanced-setup summary .adv-sub { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.seo-guides { margin-top: 40px; text-align: center; }
+.seo-guides-title { font-size: 1rem; color: var(--text-gray); letter-spacing: 0.08em; text-transform: uppercase; }
+.sport-switcher-panel .qs-label { margin-top: 4px; }
+.sport-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sport-other { display: flex; gap: 8px; margin-top: 10px; }
+.sport-other.hidden { display: none; }
+.sport-other input { flex: 1; min-width: 0; }
+.sport-once { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: 0.82rem; color: var(--text-gray); cursor: pointer; }
+.sport-once input { width: auto; margin-top: 3px; }
+.sport-switcher-panel:first-child { margin-top: 0; padding-top: 0; border-top: 0; }

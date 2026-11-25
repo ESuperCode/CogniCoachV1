@@ -1644,8 +1644,6 @@ main .info a {
    ========================================================================== */
 
 @media (max-width: 768px) {
-    #marketingIntro .seo-intro,
-    #marketingIntro .seo-links,
     #marketingIntro .seo-section {
         display: none;
     }

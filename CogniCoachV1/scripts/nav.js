@@ -46,7 +46,7 @@ class SiteNav extends HTMLElement {
         };
         // Brand, then the page links (a drop-down "Menu" on small screens), then display settings + account.
         this.innerHTML = linkHtml(NAV_LINKS[0]) +
-            '<button type="button" class="nav-menu-btn" id="navMenuBtn" aria-expanded="false" aria-controls="navLinks">' +
+            '<button type="button" class="nav-menu-btn" id="navMenuBtn" aria-label="Menu" aria-expanded="false" aria-controls="navLinks">' +
             '<span class="nav-menu-bars" aria-hidden="true"><i></i><i></i><i></i></span><span class="nav-menu-text">Menu</span></button>' +
             '<div class="site-nav-links" id="navLinks">' + NAV_LINKS.slice(1).map(linkHtml).join('') + '</div>' +
             '<div class="nav-account" id="navAccount"></div>';
@@ -126,7 +126,7 @@ function loadSiteExtras() {
         { css: 'styles/tour.css', js: 'scripts/tour.js' },
         { css: 'styles/depth.css', js: 'scripts/depth.js' }
     ];
-    const v = 'v=20261125c';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
+    const v = 'v=20261125d';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
     extras.forEach(({ css: cssPath, js: jsPath }) => {
         const css = cssPath + '?' + v, js = jsPath + '?' + v;
         if (!document.querySelector(`link[href="${css}"]`)) {

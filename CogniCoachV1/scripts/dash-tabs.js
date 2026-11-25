@@ -57,7 +57,11 @@
             else if (st.current) { line = 'You’re on a ' + st.current + '-day streak. Train today to keep it going.'; }
             else { line = 'Ready when you are. One session starts a new streak.'; }
         } else { line = 'Ready when you are.'; }
-        el.innerHTML = '<div class="dw-text"><h2>' + esc(hello) + (n ? ', ' + esc(n) : '') + '</h2><p>' + esc(line) + '</p></div>' +
+        var steps = hist.length ? '' : '<ol class="dw-steps">' +
+            '<li><span class="dw-n">1</span>Do a workout: pick your sport and time, press Start.</li>' +
+            '<li><span class="dw-n">2</span>Come back here for your streak, level and Athlete Card.</li>' +
+            '<li><span class="dw-n">3</span>Visit the Arena for daily quests and rewards.</li></ol>';
+        el.innerHTML = '<div class="dw-text"><h2>' + esc(hello) + (n ? ', ' + esc(n) : '') + '</h2><p>' + esc(line) + '</p>' + steps + '</div>' +
             '<div class="dw-actions"><a class="btn btn-primary dw-start" href="index.html">' + ic('play', 16) + ' Start training</a>' +
             '<a class="btn btn-secondary" href="arena.html">' + ic('target', 16) + ' Quests &amp; leagues</a></div>';
     }

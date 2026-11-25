@@ -36,17 +36,27 @@
     function paint(el) {
         var w = E.load(), st = E.streakInfo(w), q = E.quests(), boost = E.boostActive(w), chests = w.inventory.chests.length, claim = E.claimableCount();
         var frac = q.goal ? q.todayXp / q.goal : 0;
+        // A brand-new athlete sees nothing to track yet: pages can hide the strip until the first session.
+        var host = el.parentNode;
+        if (host && host.hasAttribute && host.hasAttribute('data-hide-new')) {
+            var fresh = !hasHistory() && !w.coins && !chests && !q.todayXp;
+            el.hidden = fresh;
+        }
+        function stack(num, lbl) { return '<span class="econ-stack"><span class="econ-num">' + num + '</span><span class="econ-lbl">' + lbl + '</span></span>'; }
         el.innerHTML =
-            '<a class="econ-chip econ-streak' + (st.trainedToday ? ' on' : '') + '" href="arena.html#quests" title="Streak">' + ic(st.trainedToday ? 'flame' : 'flame-off', 26) +
-            '<span class="econ-num">' + st.current + '</span><span class="econ-lbl">day' + (st.current === 1 ? '' : 's') + '</span>' +
+            '<a class="econ-chip econ-streak' + (st.trainedToday ? ' on' : '') + '" href="arena.html#quests" title="Your streak: days in a row you trained">' + ic(st.trainedToday ? 'flame' : 'flame-off', 26) +
+            stack(st.current, 'day streak') +
             (w.inventory.freeze ? '<span class="econ-freeze" title="' + w.inventory.freeze + ' Streak Freeze' + (w.inventory.freeze > 1 ? 's' : '') + ' equipped">' + ic('freeze', 16) + '<b>' + w.inventory.freeze + '</b></span>' : '') +
-            '<span class="a11y-sr-only">' + st.current + ' day streak' + (st.trainedToday ? ', trained today' : ', not trained yet today') + '</span></a>' +
-            '<a class="econ-chip econ-coins" href="arena.html#shop" title="Grit - spend it in the shop">' + ic('coin', 24) + '<span class="econ-num">' + w.coins + '</span><span class="a11y-sr-only">Grit</span></a>' +
+            '<span class="a11y-sr-only">' + (st.trainedToday ? ', trained today' : ', not trained yet today') + '</span></a>' +
+            '<a class="econ-chip econ-coins" href="arena.html#shop" title="Grit: earned by training, spend it in the shop">' + ic('coin', 24) + stack(w.coins, 'Grit') + '</a>' +
             '<a class="econ-chip econ-goal' + (q.goalDone ? ' done' : '') + '" href="arena.html#quests" title="Daily XP goal">' + ring(frac) +
-            '<span class="econ-goal-text"><span class="econ-num">' + q.todayXp + '<small>/' + q.goal + '</small></span><span class="econ-lbl">XP today</span></span></a>' +
-            (boost ? '<a class="econ-chip econ-boost" href="arena.html#shop" title="XP Boost running">' + ic('boost', 24) + '<span class="econ-num">' + boost.mult + 'x</span><span class="econ-lbl" data-boost-left>' + fmtLeft(boost.until - Date.now()) + '</span></a>' : '') +
-            '<a class="econ-chip econ-chests" href="arena.html#shop" title="Chests to open">' + ic('chest-gold', 26) + '<span class="econ-num">' + chests + '</span>' +
-            '<span class="a11y-sr-only">chests to open</span>' + (claim ? '<span class="econ-dot" title="' + claim + ' reward' + (claim > 1 ? 's' : '') + ' to claim"><span class="a11y-sr-only">' + claim + ' rewards to claim</span></span>' : '') + '</a>';
+            stack(q.todayXp + '<small>/' + q.goal + '</small>', 'XP today') + '</a>' +
+            (boost ? '<a class="econ-chip econ-boost" href="arena.html#shop" title="XP Boost running">' + ic('boost', 24) + '<span class="econ-stack"><span class="econ-num">' + boost.mult + 'x</span><span class="econ-lbl" data-boost-left>' + fmtLeft(boost.until - Date.now()) + '</span></span></a>' : '') +
+            '<a class="econ-chip econ-chests" href="arena.html#shop" title="Chests to open">' + ic('chest-gold', 26) + stack(chests, chests === 1 ? 'chest' : 'chests') +
+            (claim ? '<span class="econ-dot" title="' + claim + ' reward' + (claim > 1 ? 's' : '') + ' to claim"><span class="a11y-sr-only">' + claim + ' rewards to claim</span></span>' : '') + '</a>';
+    }
+    function hasHistory() {
+        try { var h = JSON.parse(localStorage.getItem('cognicoach-history') || '[]'); return Array.isArray(h) && h.length > 0; } catch (e) { return false; }
     }
     function repaint() { huds = huds.filter(function (h) { return h.isConnected; }); huds.forEach(paint); }
     document.addEventListener('cognicoach:wallet', repaint);

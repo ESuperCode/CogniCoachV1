@@ -196,5 +196,17 @@ html.tour-on site-nav { z-index: 1800; }
 .tour-create:hover { transform: translateY(-2px); box-shadow: 0 14px 30px var(--glow-blue); }
 .tour-have { margin: 0; font-size: 0.8rem; color: var(--text-gray); }
 .tour-link { border: 0; background: none; padding: 0; color: var(--primary-blue); font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
-.tour-card.with-form .tour-next { background: transparent; color: var(--primary-blue); box-shadow: none; border: 1.5px solid var(--primary-blue); }
-.tour-card.with-form .tour-next:hover { background: rgba(31, 122, 224, 0.08); transform: none; }
+.tour-have .tour-link { min-height: 32px; }
+/* welcome card: sport pick */
+.tour-q { margin: 14px 0 8px; font-weight: 700; font-size: 0.9rem; color: var(--text-white, #172033); }
+.tour-sports { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.tour-sport {
+    min-height: 36px; padding: 6px 12px; border-radius: 999px;
+    border: 1.5px solid var(--line, #c9d8ea); background: #fff; color: #172033;
+    font: inherit; font-size: 0.82rem; font-weight: 700; cursor: pointer;
+}
+.tour-sport:hover { border-color: var(--primary-blue); }
+.tour-sport[aria-pressed="true"] { background: var(--primary-blue, #1a6dcc); border-color: var(--primary-blue, #1a6dcc); color: #fff; }
+.tour-sport:focus-visible { outline: 3px solid var(--primary-blue, #1a6dcc); outline-offset: 2px; }
+.tour-sport-note { margin: 8px 0 0; font-size: 0.75rem; color: var(--text-gray); }
+.tour-card.with-form .tour-join { margin-top: 14px; }

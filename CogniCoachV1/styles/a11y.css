@@ -255,8 +255,9 @@ html.a11y-reduce-motion .btn:hover { transform: none !important; }
 /* ---- phones: bigger tap targets, easier reading ---------------------------- */
 @media (max-width: 768px) {
     .drill-description { text-align: left; letter-spacing: 0; line-height: 1.65; font-size: 1.05rem; }
-    .timer-container .flex-center { flex-direction: column; align-items: stretch; }
-    .timer-container .flex-center .btn { width: 100%; margin: 0 !important; min-height: 48px; }
+    .timer-container .flex-center { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .timer-container .flex-center .btn { width: 100%; margin: 0 !important; min-height: 48px; padding: 12px 10px; }
+    .timer-container .flex-center #startTimerBtn { grid-column: 1 / -1; }
     .muscle-groups label { width: auto; min-height: 32px; display: flex; align-items: center; font-size: 0.78rem; }
     .site-nav-link { min-height: 36px; }
 }
@@ -294,3 +295,6 @@ html.a11y-reduce-motion .btn:hover { transform: none !important; }
 .muscle-groups label.ai-selected,
 .muscle-groups input:checked + label.ai-selected { color: #a8520f !important; }
 
+/* chip buttons on tinted backgrounds: darker blue keeps 4.5:1 */
+.btn-chip:not(.btn-chip-danger):not(:hover) { color: #1559a8; }
+.seo-guides .seo-intro { opacity: 1; }

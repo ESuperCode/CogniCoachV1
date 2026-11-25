@@ -489,3 +489,18 @@ table.sessions .num { text-align: right; font-variant-numeric: tabular-nums; }
 .badge-icon { display: flex; justify-content: center; color: var(--primary-blue); }
 .badge.unlocked .badge-icon { color: #a8520f; }
 .pill .ci { vertical-align: -1px; }
+
+/* Simpler Home: before the first session only the welcome card shows. */
+#panel-home.dash-new #dashOverview,
+#panel-home.dash-new #levelCard,
+#panel-home.dash-new #dashGoal,
+#panel-home.dash-new #dashRecommend,
+#panel-home.dash-new #dashCompetition,
+#panel-home #dashEmptyState { display: none !important; }
+.goal-now { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 14px; color: var(--text-gray); }
+.goal-now b { color: var(--text-white, #172033); }
+.goal-change { box-shadow: none; }
+.goal-row[hidden] { display: none; }
+.dw-steps { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.dw-steps li { display: flex; gap: 10px; align-items: center; font-size: 0.9rem; opacity: 0.92; }
+.dw-steps .dw-n { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,0.16); font-weight: 700; font-size: 0.8rem; }
