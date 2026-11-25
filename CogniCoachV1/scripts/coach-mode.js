@@ -20,6 +20,7 @@
     try { var saved = JSON.parse(localStorage.getItem(KEY) || '{}'); Object.keys(opts).forEach(function (k) { if (k in saved) { opts[k] = saved[k]; } }); } catch (e) {}
     function saveOpts() { try { localStorage.setItem(KEY, JSON.stringify(opts)); } catch (e) {} }
 
+    var slot3d, btn3d, viewerHome = null;
     var root, ring, ringFg, digits, phaseEl, metaEl, upNextEl, mainBtn, nextBtn, skipBtn, readBtn, micBtn, micText, slot, slotFb;
     var isOpen = false, phase = 'idle', countdownTimer = 0, restLeft = 0, restTotal = 0, restPaused = false;
     var audio = null, wakeLock = null, rec = null, recOn = false, lastFocus = null;
@@ -103,10 +104,11 @@
             '      <button type="button" class="cm-btn cm-main">Start</button>' +
             '      <button type="button" class="cm-btn cm-skip">' + ic('skip', 20) + ' Skip</button>' +
             '    </div>' +
+            '    <button type="button" class="cm-btn cm-3d" aria-expanded="false" aria-controls="cmSlot3d">' + ic('cube', 20) + ' <span class="cm-3d-label">Watch in 3D</span></button>' +
             '    <button type="button" class="cm-btn cm-next" hidden>Next drill →</button>' +
             '    <p class="cm-mic-text" aria-live="polite"></p>' +
             '  </div>' +
-            '  <div class="cm-card"><div class="cm-slot"></div><div class="cm-slot-fb"></div></div>' +
+            '  <div class="cm-card"><div class="cm-slot"></div><div class="cm-slot-3d" id="cmSlot3d" hidden></div><div class="cm-slot-fb"></div></div>' +
             '</div>' +
             '<p class="cm-live a11y-sr-only" aria-live="assertive"></p>';
         document.body.appendChild(root);
@@ -127,6 +129,9 @@
         micText = root.querySelector('.cm-mic-text');
         slot = root.querySelector('.cm-slot');
         slotFb = root.querySelector('.cm-slot-fb');
+        slot3d = root.querySelector('.cm-slot-3d');
+        btn3d = root.querySelector('.cm-3d');
+        btn3d.addEventListener('click', function () { show3d(slot3d.hidden); });
 
         var hf = root.querySelector('.cm-hf');
         hf.checked = opts.handsFree;
@@ -172,16 +177,53 @@
     }
 
     // ------------------------------------------------------------------ open / close
+    // Element.moveBefore keeps an iframe (the 3D viewer) running while it moves; plain
+    // insertBefore reloads it, so the viewer is told to bring its animation back.
+    function place(parent, node, before) {
+        var kept = typeof parent.moveBefore === 'function';
+        if (kept) { try { parent.moveBefore(node, before || null); } catch (e) { kept = false; } }
+        if (!kept) { parent.insertBefore(node, before || null); }
+        if (!kept && node.id === 'motionViewer' && window.CogniMotionViewer && window.CogniMotionViewer.reattach) {
+            window.CogniMotionViewer.reattach();
+        }
+    }
     function moveIn(node, into) {
         if (!node) { return; }
         var ph = document.createComment('coach-mode');
         node.parentNode.insertBefore(ph, node);
-        into.appendChild(node);
+        place(into, node, null);
         homes.push({ node: node, placeholder: ph });
     }
     function moveBack() {
-        homes.forEach(function (h) { if (h.placeholder.parentNode) { h.placeholder.parentNode.insertBefore(h.node, h.placeholder); h.placeholder.remove(); } });
+        homes.forEach(function (h) { if (h.placeholder.parentNode) { place(h.placeholder.parentNode, h.node, h.placeholder); h.placeholder.remove(); } });
         homes = [];
+        if (viewerHome) { putViewerBack(); }
+    }
+
+    // ---- the 3D preview inside Coach Mode (moved in only while it is shown)
+    function putViewerBack() {
+        var v = document.getElementById('motionViewer');
+        if (v && viewerHome && viewerHome.parentNode) { place(viewerHome.parentNode, v, viewerHome); viewerHome.remove(); }
+        viewerHome = null;
+    }
+    function show3d(on) {
+        var v = document.getElementById('motionViewer');
+        if (!slot3d || !v) { return; }
+        if (on && !viewerHome) {
+            viewerHome = document.createComment('coach-mode-3d');
+            v.parentNode.insertBefore(viewerHome, v);
+            place(slot3d, v, null);
+        } else if (!on && viewerHome) {
+            putViewerBack();
+        }
+        slot3d.hidden = !on;
+        btn3d.setAttribute('aria-expanded', on ? 'true' : 'false');
+        btn3d.querySelector('.cm-3d-label').textContent = on ? 'Hide 3D' : 'Watch in 3D';
+        if (on) {
+            slot3d.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            var g = slot3d.querySelector('.motion-generate');
+            if (g && v.getAttribute('data-mode') === 'idle') { g.focus({ preventScroll: true }); }
+        }
     }
 
     function open() {
@@ -211,6 +253,7 @@
         setVoice(false, true);
         var ra = RA(); if (ra) { ra.stop(); }
         moveBack();
+        if (slot3d) { slot3d.hidden = true; btn3d.setAttribute('aria-expanded', 'false'); btn3d.querySelector('.cm-3d-label').textContent = 'Watch in 3D'; }
         document.querySelectorAll('main, site-nav, .session-dock').forEach(function (el) { el.inert = false; });
         root.hidden = true;
         isOpen = false;
@@ -347,7 +390,7 @@
     function onKey(e) {
         if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) { return; }
         if (e.key === 'Escape') { e.preventDefault(); close(); }
-        else if (e.key === ' ' && !(e.target.closest && e.target.closest('button, a, label'))) { e.preventDefault(); mainAction(); }
+        else if (e.key === ' ' && !(e.target.closest && e.target.closest('button, a, label, .motion-viewer'))) { e.preventDefault(); mainAction(); }
         else if (e.key === 'n' || e.key === 'N') { if (phase === 'rest' || phase === 'done') { goNext(); } }
         else if (e.key === 'r' || e.key === 'R') { if (!e.altKey) { var ra = RA(); if (ra) { ra.toggle(); } } }
     }

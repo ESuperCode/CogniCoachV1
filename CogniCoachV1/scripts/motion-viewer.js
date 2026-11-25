@@ -452,7 +452,27 @@
         setMode('idle');
     }
 
-    window.CogniMotionViewer = { motionTextFor: motionTextFor, generate: generate, demo: demo, endDemo: endDemo,
+    // The viewer's element was moved in a way that reloaded its iframe (Coach Mode in browsers
+    // without Element.moveBefore): wait for the fresh page, then bring the animation back.
+    function reattach() {
+        if (!frame) { return; }
+        state.loaded = false;
+        state.iframeReady = false;
+        state.unityProgress = 0;
+        var drill = state.activeDrill || currentDrill();
+        var saved = !state.demo && drill && savedFor(drill);
+        if (state.hasAnimation && saved) {
+            state.drillKey = drill.name + '|' + drill.html;
+            restore(drill, saved);
+        } else if (state.generating && !state.pending) {
+            generate();   // the request was running inside the old page
+        } else if (state.hasAnimation) {
+            state.hasAnimation = false;
+            setMode('idle');
+        }
+    }
+
+    window.CogniMotionViewer = { motionTextFor: motionTextFor, generate: generate, demo: demo, endDemo: endDemo, reattach: reattach,
         mode: function () { return root ? root.getAttribute('data-mode') : ''; } };
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', build); } else { build(); }
 })();
