@@ -435,3 +435,9 @@
 .sport-once { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: 0.82rem; color: var(--text-gray); cursor: pointer; }
 .sport-once input { width: auto; margin-top: 3px; }
 .sport-switcher-panel:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+/* home FAQ: collapsed questions under the sport guides */
+.seo-guides-title + .home-faq, .home-faq { max-width: 760px; margin: 10px auto 0; display: grid; gap: 8px; text-align: left; }
+#homeFaqTitle { margin-top: 34px; }
+.home-faq details { border: 1px solid var(--line, #dbe7f3); border-radius: 14px; background: rgba(255, 255, 255, 0.85); }
+.home-faq summary { cursor: pointer; padding: 14px 16px; font-weight: 700; font-size: 0.92rem; color: var(--text-white, #172033); list-style-position: inside; }
+.home-faq details p { margin: 0; padding: 0 16px 14px; font-size: 0.88rem; line-height: 1.6; color: var(--text-gray); }

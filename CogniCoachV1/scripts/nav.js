@@ -40,7 +40,7 @@ class SiteNav extends HTMLElement {
         const linkHtml = link => {
             const classes = 'site-nav-link' + (link.brand ? ' site-nav-brand' : '');
             const logo = link.brand
-                ? `<img src="logo.png" alt="" class="site-nav-logo" onerror="this.style.display='none'">`
+                ? `<img src="logo-192.png" width="192" height="192" alt="" class="site-nav-logo" onerror="this.style.display='none'">`
                 : '';
             return `<a href="${link.href}" class="${classes}"${link.brand ? ` aria-label="${link.label}"` : ''}>${logo}<span class="site-nav-text">${link.label}</span></a>`;
         };
@@ -126,7 +126,7 @@ function loadSiteExtras() {
         { css: 'styles/tour.css', js: 'scripts/tour.js' },
         { css: 'styles/depth.css', js: 'scripts/depth.js' }
     ];
-    const v = 'v=20261125g';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
+    const v = 'v=20261125h';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
     extras.forEach(({ css: cssPath, js: jsPath }) => {
         const css = cssPath + '?' + v, js = jsPath + '?' + v;
         if (!document.querySelector(`link[href="${css}"]`)) {

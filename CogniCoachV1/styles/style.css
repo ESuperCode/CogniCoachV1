@@ -1824,3 +1824,32 @@ main .info a {
         opacity: 1 !important;
     }
 }
+/* Inner pages: the brand name looks like the big title but is not a heading; the page name is the h1. */
+.brand-title {
+    margin: 0;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 3.5rem;
+    font-weight: 900;
+    line-height: 1.2;
+    letter-spacing: 0;
+    background: linear-gradient(90deg, var(--primary-blue), var(--secondary-orange));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+h1.page-name {
+    font-family: inherit;
+    font-size: 1.1rem;
+    font-weight: 400;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+    color: var(--text-gray);
+    line-height: 1.5;
+}
+@media (max-width: 768px) { .brand-title { font-size: 2.5rem; } }
+@media (max-width: 480px) {
+    .brand-title { font-size: 1.9rem; letter-spacing: -1px; }
+    h1.page-name { font-size: 0.9rem; letter-spacing: 1px; }
+}

@@ -1,0 +1,33 @@
+/* Sport guide pages (basketball-drills.html etc.): one column, short sections, nothing extra. */
+.sport-page { max-width: 820px; }
+.sport-crumbs { margin: 4px 0 14px; font-size: 0.82rem; color: var(--text-gray); }
+.sport-crumbs a { color: var(--primary-blue); }
+.sport-page .card { margin-bottom: 16px; }
+.sport-hero { text-align: left; }
+.sport-kicker { margin: 0 0 6px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a8520f; }
+.sport-hero h1 { font-size: clamp(1.7rem, 5vw, 2.6rem); line-height: 1.15; letter-spacing: -0.5px; margin: 0 0 12px; }
+.sport-lead { margin: 0 0 20px; font-size: 1rem; line-height: 1.7; color: var(--text-gray); }
+.sport-hero .btn { display: inline-block; text-decoration: none; }
+.sport-note { margin: 10px 0 0; font-size: 0.8rem; color: var(--text-gray); }
+.sport-block h2 { font-family: 'Orbitron', sans-serif; font-size: 1.15rem; margin: 0 0 12px; color: var(--primary-blue); }
+.sport-sub { margin: -4px 0 14px; font-size: 0.85rem; color: var(--text-gray); line-height: 1.55; }
+.sport-focus { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 10px; }
+.sport-focus li, .sport-plan li { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 14px; background: var(--medium-gray, #edf3fb); }
+.sport-focus b, .sport-plan b { color: var(--text-white, #172033); font-size: 0.95rem; }
+.sport-focus span, .sport-plan li span:not(.sp-time) { font-size: 0.86rem; line-height: 1.5; color: var(--text-gray); }
+.sport-plan { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sport-plan li { flex-direction: row; align-items: flex-start; gap: 14px; }
+.sport-plan li > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sp-time { flex: none; min-width: 64px; padding: 4px 8px; border-radius: 999px; background: #fff; border: 1px solid var(--line, #dbe7f3); text-align: center; font-size: 0.78rem; font-weight: 700; color: var(--primary-blue); }
+.sport-faq { display: grid; gap: 8px; }
+.sport-faq details { border: 1px solid var(--line, #dbe7f3); border-radius: 14px; background: #fff; }
+.sport-faq summary { cursor: pointer; padding: 13px 16px; font-weight: 700; font-size: 0.92rem; color: var(--text-white, #172033); }
+.sport-faq details p { margin: 0; padding: 0 16px 14px; font-size: 0.88rem; line-height: 1.6; color: var(--text-gray); }
+.sport-more ul { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.sport-more a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line, #dbe7f3); background: #fff; color: var(--primary-blue); font-weight: 700; font-size: 0.85rem; text-decoration: none; }
+.sport-more a:hover { border-color: var(--primary-blue); }
+.sport-more .sport-sub a { display: inline; min-height: 0; padding: 0; border: 0; background: none; text-decoration: underline; }
+@media (max-width: 480px) {
+    .sport-plan li { flex-direction: column; gap: 6px; }
+    .sp-time { align-self: flex-start; }
+}

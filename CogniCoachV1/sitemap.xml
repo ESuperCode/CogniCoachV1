@@ -1,87 +1,56 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://cognicoachai.com/CogniCoachV1/</loc>
-    <lastmod>2026-07-12</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>https://cognicoachai.com/CogniCoachV1/arena.html</loc>
     <lastmod>2026-11-25</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
+    <image:image><image:loc>https://cognicoachai.com/CogniCoachV1/og-image.jpg</image:loc></image:image>
   </url>
   <url>
     <loc>https://cognicoachai.com/CogniCoachV1/about.html</loc>
-    <lastmod>2026-07-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <lastmod>2026-11-25</lastmod>
   </url>
   <url>
     <loc>https://cognicoachai.com/CogniCoachV1/contact.html</loc>
-    <lastmod>2026-07-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <lastmod>2026-11-25</lastmod>
   </url>
   <url>
     <loc>https://cognicoachai.com/CogniCoachV1/basketball-drills.html</loc>
-    <lastmod>2026-07-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <lastmod>2026-11-25</lastmod>
   </url>
   <url>
     <loc>https://cognicoachai.com/CogniCoachV1/soccer-training.html</loc>
-    <lastmod>2026-07-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <lastmod>2026-11-25</lastmod>
   </url>
   <url>
     <loc>https://cognicoachai.com/CogniCoachV1/tennis-workout.html</loc>
-    <lastmod>2026-07-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <lastmod>2026-11-25</lastmod>
   </url>
   <url>
     <loc>https://cognicoachai.com/CogniCoachV1/football-drills.html</loc>
-    <lastmod>2026-07-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <lastmod>2026-11-25</lastmod>
   </url>
   <url>
     <loc>https://cognicoachai.com/CogniCoachV1/baseball-practice.html</loc>
-    <lastmod>2026-07-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <lastmod>2026-11-25</lastmod>
   </url>
   <url>
     <loc>https://cognicoachai.com/CogniCoachV1/volleyball-training.html</loc>
-    <lastmod>2026-07-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <lastmod>2026-11-25</lastmod>
   </url>
   <url>
     <loc>https://cognicoachai.com/CogniCoachV1/swimming-training.html</loc>
-    <lastmod>2026-07-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <lastmod>2026-11-25</lastmod>
   </url>
   <url>
     <loc>https://cognicoachai.com/CogniCoachV1/cricket-practice.html</loc>
-    <lastmod>2026-07-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <lastmod>2026-11-25</lastmod>
   </url>
   <url>
     <loc>https://cognicoachai.com/CogniCoachV1/rugby-training.html</loc>
-    <lastmod>2026-07-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <lastmod>2026-11-25</lastmod>
   </url>
   <url>
     <loc>https://cognicoachai.com/CogniCoachV1/golf-training.html</loc>
-    <lastmod>2026-07-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
+    <lastmod>2026-11-25</lastmod>
   </url>
 </urlset>
