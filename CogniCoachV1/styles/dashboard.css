@@ -504,3 +504,66 @@ table.sessions .num { text-align: right; font-variant-numeric: tabular-nums; }
 .dw-steps { margin: 14px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
 .dw-steps li { display: flex; gap: 10px; align-items: center; font-size: 0.9rem; opacity: 0.92; }
 .dw-steps .dw-n { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,0.16); font-weight: 700; font-size: 0.8rem; }
+
+/* ---- simpler Home --------------------------------------------------------------------- */
+.recommend-grid { grid-template-columns: 1fr; gap: 8px; }
+.recommend-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; padding: 10px 14px; }
+.recommend-card .recommend-sport { font-size: 0.95rem; margin-bottom: 2px; }
+.recommend-card .recommend-reason { margin: 0; min-height: 0; }
+.recommend-card .btn { padding: 10px 18px; font-size: 0.8rem; flex: none; width: auto !important; min-width: 0; margin: 0 !important; }
+.recommend-card .recommend-text { min-width: 0; }
+.level-card { text-align: left; }
+.lvl-row { display: flex; align-items: center; gap: 14px; }
+.lvl-badge {
+    flex: none; width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--primary-blue), var(--secondary-orange)); color: #fff;
+    font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 1.5rem;
+}
+.lvl-main { flex: 1 1 auto; min-width: 0; }
+.lvl-name { font-family: 'Orbitron', sans-serif; font-size: 0.9rem; font-weight: 700; color: var(--text-white); }
+.lvl-bar { height: 10px; border-radius: 999px; background: #dfe7f1; overflow: hidden; margin: 8px 0 6px; }
+.lvl-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-orange)); }
+.dash-link-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    padding: 16px 20px; text-decoration: none; color: inherit;
+}
+.dash-link-row:hover { border-color: var(--primary-blue); }
+.dash-link-text { display: flex; flex-direction: column; gap: 3px; }
+.dash-link-text b { font-family: 'Orbitron', sans-serif; font-size: 0.95rem; color: var(--text-white); }
+.dash-link-text small { font-size: 0.8rem; color: var(--text-gray); }
+.dash-link-go { flex: none; font-weight: 700; color: var(--primary-blue); font-size: 0.85rem; }
+#dashOverview[hidden] { display: none !important; }
+
+/* ---- History: sessions as a readable list on phones ------------------------------------ */
+@media (max-width: 640px) {
+    table.sessions, table.sessions tbody { display: block; width: 100%; }
+    table.sessions thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    table.sessions tr {
+        display: grid; grid-template-columns: 1fr auto; gap: 2px 10px;
+        padding: 10px 2px; border-bottom: 1px solid var(--line, #dbe7f3);
+    }
+    table.sessions td { display: block; padding: 0; border: 0; text-align: left; }
+    table.sessions .s-sport { grid-column: 1; grid-row: 1; font-weight: 700; color: var(--text-white); }
+    table.sessions .s-date { grid-column: 2; grid-row: 1; text-align: right; font-size: 0.8rem; color: var(--text-gray); }
+    table.sessions .s-status { grid-column: 2; grid-row: 2; text-align: right; }
+    table.sessions .s-focus, table.sessions .s-min, table.sessions .s-drills { grid-column: 1; display: inline; font-size: 0.8rem; color: var(--text-gray); }
+    table.sessions .s-focus::before, table.sessions .s-min::before, table.sessions .s-drills::before { content: attr(data-label) ": "; }
+    table.sessions .s-focus { grid-row: 2; }
+    table.sessions .s-min { grid-row: 3; text-align: left; justify-self: start; }
+    table.sessions .s-drills { grid-row: 3; justify-self: end; grid-column: 2; }
+    .sessions-scroll { overflow: visible; }
+    /* badges: three to a row, smaller */
+    .badge-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; }
+    .badge-grid .badge { padding: 10px 6px !important; }
+    .badge-grid .badge-desc, .badge-grid .badge small { font-size: 0.62rem !important; }
+}
+/* the folded Stats extras */
+.dash-more { margin-top: 4px; }
+.dash-more > summary {
+    cursor: pointer; display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 10px 18px;
+    border-radius: 16px; background: rgba(255, 255, 255, 0.9); border: 1px solid var(--line, #dbe7f3);
+    font-weight: 700; font-size: 0.88rem; color: var(--primary-blue);
+}
+.dash-more > summary::before { content: '+'; font-size: 1.2rem; line-height: 1; }
+.dash-more[open] > summary::before { content: '\2212'; }
+.dash-more > .dash-grid { margin-top: 14px; }

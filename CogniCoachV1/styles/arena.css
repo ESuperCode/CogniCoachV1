@@ -235,3 +235,43 @@
 }
 
 .qs-ring .econ-ring { width: 132px; height: 132px; }
+
+/* ---- simpler shop: grouped, compact rows ------------------------------------------ */
+.sh-group { margin: 18px 0 8px; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-gray); }
+.sh-grid { grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr)); gap: 8px; margin-top: 0; }
+.sh-item {
+    flex-direction: row; align-items: center; text-align: left; gap: 12px;
+    padding: 10px 12px; border-radius: 16px; box-shadow: none;
+}
+.sh-item:hover { transform: none; box-shadow: 0 8px 18px rgba(30, 50, 80, 0.08); }
+.sh-icon { flex: none; display: grid; place-items: center; width: 44px; height: 44px; }
+.sh-swatch { flex: none; width: 34px; height: 46px; border-radius: 8px; box-shadow: inset 0 0 0 4px rgba(13, 42, 82, 0.85); margin: 0 5px; }
+.sh-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sh-text b { font-family: 'Orbitron', sans-serif; font-size: 0.88rem; color: var(--text-white); }
+.sh-text small { font-size: 0.76rem; color: var(--text-gray); line-height: 1.4; }
+.sh-item .econ-btn { width: auto; flex: none; min-width: 84px; white-space: nowrap; }
+.ar-h2 { margin-top: 22px; }
+
+/* ---- quests: goal and streak side by side, smaller ------------------------------- */
+@media (max-width: 720px) {
+    .qs-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .qs-goal, .qs-streak { padding: 14px 8px; gap: 6px; border-radius: 16px; }
+    .qs-ring, .qs-ring .econ-ring { width: 92px; height: 92px; }
+    .qs-ring-text b { font-size: 1.35rem; }
+    .qs-ring-text span { font-size: 0.66rem; }
+    .qs-goal h2 { font-size: 0.85rem; }
+    .qs-streak > .ci, .qs-streak > svg { width: 48px; height: 48px; }
+    .qs-streak-num b { font-size: 1.6rem; }
+    .qs-streak-num { font-size: 0.78rem; }
+    .qs-slot .ci, .qs-slot svg { width: 24px; height: 24px; }
+    .qs-goals { grid-template-columns: 1fr 1fr; }
+    .qs-goal .ar-small, .qs-streak .ar-small { font-size: 0.72rem; }
+    .qs-change summary { font-size: 0.74rem; flex-wrap: wrap; justify-content: center; }
+}
+@media (max-width: 360px) {
+    .sh-item { flex-wrap: wrap; }
+    .sh-item .sh-text { flex-basis: calc(100% - 60px); }
+    .sh-item .econ-btn { margin-left: 56px; }
+}
+
+@media (max-width: 720px) { .qs-goal .econ-btn { font-size: 0.72rem; padding: 6px 8px; min-height: 40px; } }

@@ -278,7 +278,7 @@
     function quests(p) {
         var q = E.quests(), w = E.load(), st = E.streakInfo(w);
         var next = E.MILESTONES.filter(function (m) { return m > st.current; })[0];
-        var html = intro('Train to fill your daily XP goal and finish today\u2019s three quests. Rewards are Grit and chests; new quests every day.') +
+        var html = intro('Fill your daily XP goal and finish today\u2019s quests for Grit and chests.') +
             '<div class="qs-grid">' +
             '<div class="qs-goal"><div class="qs-ring">' + UI.ring(q.goal ? q.todayXp / q.goal : 0).replace('width="34" height="34"', 'width="132" height="132"') +
             '<div class="qs-ring-text"><b>' + q.todayXp + '</b><span>of ' + q.goal + ' XP</span></div></div>' +
@@ -325,7 +325,7 @@
     var FRAME_SWATCH = { neon: 'linear-gradient(135deg,#00e0ff,#ff2bd6)', carbon: 'repeating-linear-gradient(45deg,#1b1f27 0 4px,#2b313c 4px 8px)', aurora: 'linear-gradient(135deg,#34c38f,#4ea8ff,#8a3ffc)', prism: 'conic-gradient(#ff3d6e,#ffcf4d,#34c38f,#4ea8ff,#8a3ffc,#ff3d6e)' };
     function shop(p) {
         var w = E.load(), rep = E.repairable(w), boost = E.boostActive(w), chests = w.inventory.chests;
-        var html = intro('Spend the Grit you earn from training on things that help you keep going. What you own is in your bag at the top.') +
+        var html = intro('Spend Grit from training. What you own is in your bag.') +
             '<div class="sh-head"><h2>Your bag</h2><span class="sh-bal">' + ic('coin', 30) + '<b>' + w.coins + '</b> Grit</span></div>';
         // ---- bag: only what you actually have
         var bagItems = '';
@@ -349,21 +349,33 @@
         }
         html += '<div class="bg-list">' + bagItems + '</div>';
         // ---- buy
-        html += '<h2 class="ar-h2">Buy</h2><div class="sh-grid">';
-        E.SHOP.forEach(function (it) {
-            if (it.id === 'repair' && !rep) { return; }
-            var owned = it.frame && w.owned.frames.indexOf(it.frame) >= 0;
-            var full = it.id === 'freeze' && w.inventory.freeze >= E.MAX_FREEZES;
-            var short = w.coins < it.price;
-            var status = owned ? 'Owned' : full ? 'Equipped 2/2' : '';
-            html += '<div class="sh-item' + (it.frame ? ' frame' : '') + (it.id === 'repair' ? ' special' : '') + '">' +
-                (it.frame ? '<span class="sh-swatch" style="background:' + FRAME_SWATCH[it.frame] + '" aria-hidden="true"></span>' : ic(it.icon, 56)) +
-                '<b>' + esc(it.name) + (it.id === 'boost3' ? ' <span class="sh-tag">3x</span>' : it.id === 'boost2' ? ' <span class="sh-tag">2x</span>' : '') + '</b>' +
-                '<small>' + esc(it.id === 'repair' ? 'Bring back your ' + rep.lost + '-day streak.' : it.desc) + '</small>' +
-                '<button type="button" class="econ-btn ' + (status || short ? '' : 'econ-btn-primary') + '" data-buy="' + it.id + '"' + (status || short ? ' disabled' : '') + '>' +
-                (status ? ic('check', 16) + ' ' + status : ic('coin', 20) + ' ' + it.price + (short ? '<span class="a11y-sr-only"> - not enough Grit</span>' : '')) + '</button></div>';
+        // Grouped so it reads as four short lists instead of ten big cards.
+        var GROUPS = [
+            ['Protect your streak', ['freeze', 'repair']],
+            ['XP boosts', ['boost2', 'boost3']],
+            ['Chests', ['chest-silver', 'chest-gold']],
+            ['Card frames', ['frame-neon', 'frame-carbon', 'frame-aurora', 'frame-prism']]
+        ];
+        html += '<h2 class="ar-h2">Buy</h2>';
+        GROUPS.forEach(function (g) {
+            var items = E.SHOP.filter(function (it) { return g[1].indexOf(it.id) >= 0 && !(it.id === 'repair' && !rep); });
+            if (!items.length) { return; }
+            html += '<h3 class="sh-group">' + esc(g[0]) + '</h3><div class="sh-grid' + (g[0] === 'Card frames' ? ' sh-frames' : '') + '">';
+            items.forEach(function (it) {
+                var owned = it.frame && w.owned.frames.indexOf(it.frame) >= 0;
+                var full = it.id === 'freeze' && w.inventory.freeze >= E.MAX_FREEZES;
+                var short = w.coins < it.price;
+                var status = owned ? 'Owned' : full ? 'Full 2/2' : '';
+                html += '<div class="sh-item' + (it.frame ? ' frame' : '') + (it.id === 'repair' ? ' special' : '') + '">' +
+                    (it.frame ? '<span class="sh-swatch" style="background:' + FRAME_SWATCH[it.frame] + '" aria-hidden="true"></span>' : '<span class="sh-icon">' + ic(it.icon, 40) + '</span>') +
+                    '<div class="sh-text"><b>' + esc(it.name) + (it.id === 'boost3' ? ' <span class="sh-tag">3x</span>' : it.id === 'boost2' ? ' <span class="sh-tag">2x</span>' : '') + '</b>' +
+                    '<small>' + esc(it.id === 'repair' ? 'Bring back your ' + rep.lost + '-day streak.' : it.desc) + '</small></div>' +
+                    '<button type="button" class="econ-btn ' + (status || short ? '' : 'econ-btn-primary') + '" data-buy="' + it.id + '"' + (status || short ? ' disabled' : '') +
+                    ' aria-label="' + esc(status ? it.name + ': ' + status : 'Buy ' + it.name + ' for ' + it.price + ' Grit' + (short ? ', not enough Grit' : '')) + '">' +
+                    (status ? ic('check', 16) + ' ' + status : ic('coin', 18) + ' ' + it.price) + '</button></div>';
+            });
+            html += '</div>';
         });
-        html += '</div>';
         // ---- history, folded away
         var LEDGER_ICON = { coins: 'coin', xp: 'xp', freeze: 'freeze', boost: 'boost' };
         var led = (w.ledger || []).slice(-15).reverse();

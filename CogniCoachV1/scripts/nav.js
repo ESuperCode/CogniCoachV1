@@ -126,7 +126,7 @@ function loadSiteExtras() {
         { css: 'styles/tour.css', js: 'scripts/tour.js' },
         { css: 'styles/depth.css', js: 'scripts/depth.js' }
     ];
-    const v = 'v=20261125d';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
+    const v = 'v=20261125e';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
     extras.forEach(({ css: cssPath, js: jsPath }) => {
         const css = cssPath + '?' + v, js = jsPath + '?' + v;
         if (!document.querySelector(`link[href="${css}"]`)) {

@@ -168,7 +168,8 @@ html.a11y-reduce-motion .chest-reward, html.a11y-reduce-motion .econ-toast { ani
 
 /* ---- shared page tabs (dashboard.html, arena.html) -------------------------------------- */
 .page-tabs {
-    position: relative; z-index: 5;
+    position: sticky; top: 10px; z-index: 50;
+    transition: top 0.35s ease;
     display: flex; gap: 4px; justify-content: center;
     margin: 0 auto 10px; padding: 5px; max-width: 680px;
     border-radius: 20px; background: rgba(255, 255, 255, 0.92);
@@ -193,7 +194,7 @@ html.a11y-reduce-motion .chest-reward, html.a11y-reduce-motion .econ-toast { ani
     color: var(--primary-blue); font-family: 'Space Mono', monospace; font-size: 0.8rem; font-weight: 700; cursor: pointer;
 }
 .page-tour-btn:hover { background: rgba(26, 109, 204, 0.08); }
-.dash-intro, .panel-intro { max-width: 680px; margin: 0 auto 18px; text-align: center; color: #4d5a6e; font-size: 0.9rem; line-height: 1.55; }
+.dash-intro, .panel-intro { max-width: 680px; margin: 0 auto 14px; text-align: center; color: #4d5a6e; font-size: 0.85rem; line-height: 1.5; }
 .panel-intro { margin-bottom: 20px; }
 .dash-panel:focus-visible { outline: 3px solid var(--primary-blue); outline-offset: 4px; border-radius: 16px; }
 @media (max-width: 640px) {
@@ -214,3 +215,24 @@ html.a11y-reduce-motion .chest-reward, html.a11y-reduce-motion .econ-toast { ani
 @media (max-width: 640px) { .dw-actions, .dw-actions .btn { width: 100%; justify-content: center; } .dash-welcome h2 { font-size: 1.25rem; } }
 
 .dash-welcome a.btn, #smartActions a.btn, .competition-cta a.btn { text-decoration: none; }
+
+/* ---- slim page header (dashboard.html, arena.html) ---------------------------------- */
+header.page-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    max-width: none; margin: 0 0 16px; text-align: left; animation: none;
+}
+.page-head .page-h1 { font-size: 2rem; letter-spacing: -1px; line-height: 1.1; margin: 0; }
+.page-head .page-sub { margin: 4px 0 0; font-size: 0.85rem; color: var(--text-gray); }
+.page-head .page-tour-btn { margin: 0; border: 1px solid var(--line, #dbe7f3); background: rgba(255, 255, 255, 0.8); }
+.page-head + .econ-hud, .page-head + #econHud .econ-hud, .page-head + #arenaHud .econ-hud { margin-bottom: 14px; }
+#econHud .econ-hud, #arenaHud .econ-hud { margin-bottom: 14px; }
+/* tabs stay on screen while scrolling; they drop below the site nav while it is showing */
+body:has(.site-nav:not(.nav-hidden)) .page-tabs { top: 82px; }
+.dash-panel, .arena-panel { scroll-margin-top: 160px; }
+@media (max-width: 640px) {
+    .page-head .page-h1 { font-size: 1.5rem; }
+    .page-head .page-sub { font-size: 0.78rem; }
+    .page-head .page-tour-btn { min-height: 34px; padding: 0 10px; font-size: 0.72rem; }
+    .page-tabs [role="tab"] { min-height: 46px; }
+    body:has(.site-nav:not(.nav-hidden)) .page-tabs { top: 76px; }
+}

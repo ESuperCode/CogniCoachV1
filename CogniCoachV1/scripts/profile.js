@@ -703,7 +703,7 @@ function renderProfileSummaryCard() {
             </div>
         </div>
         <div class="text-center mt-4">
-            <button type="button" class="btn btn-secondary" id="openSettingsFromDash">Advanced Settings</button>
+            <button type="button" class="btn btn-secondary" id="openSettingsFromDash">Edit preferences</button>
         </div>
     `;
 

@@ -12,11 +12,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <link href="styles/style.css?v=20261125d" rel="stylesheet">
-    <link href="styles/nav.css?v=20261125d" rel="stylesheet">
-    <link href="styles/economy.css?v=20261125d" rel="stylesheet">
-    <link href="styles/athlete-card.css?v=20261125d" rel="stylesheet">
-    <link href="styles/arena.css?v=20261125d" rel="stylesheet">
+    <link href="styles/style.css?v=20261125e" rel="stylesheet">
+    <link href="styles/nav.css?v=20261125e" rel="stylesheet">
+    <link href="styles/economy.css?v=20261125e" rel="stylesheet">
+    <link href="styles/athlete-card.css?v=20261125e" rel="stylesheet">
+    <link href="styles/arena.css?v=20261125e" rel="stylesheet">
 </head>
 <body>
     <site-nav></site-nav>
@@ -30,9 +30,12 @@
     </div>
 
     <main class="container arena" id="main" tabindex="-1">
-        <header class="arena-head">
-            <h1 class="arena-title">Arena</h1>
-            <p class="tagline">TRAIN &middot; EARN &middot; COMPETE</p>
+        <header class="page-head arena-head">
+            <div>
+                <h1 class="page-h1 arena-title">Arena</h1>
+                <p class="page-sub">Daily quests, leagues, friends and the shop</p>
+            </div>
+            <button type="button" class="page-tour-btn" data-page-tour><i data-icon="info" data-size="16"></i> Tour this page</button>
         </header>
 
         <div id="arenaHud"></div>
@@ -43,7 +46,6 @@
             <button type="button" role="tab" id="tab-friends" aria-controls="panel-friends" data-tab="friends"><i data-icon="users"></i><span>Friends</span></button>
             <button type="button" role="tab" id="tab-shop" aria-controls="panel-shop" data-tab="shop"><i data-icon="bag"></i><span>Shop</span><b class="tab-dot" hidden></b></button>
         </div>
-        <button type="button" class="page-tour-btn" data-page-tour><i data-icon="info" data-size="16"></i> Tour this page</button>
 
         <section class="arena-panel card" role="tabpanel" id="panel-league" aria-labelledby="tab-league" tabindex="0" hidden></section>
         <section class="arena-panel card" role="tabpanel" id="panel-friends" aria-labelledby="tab-friends" tabindex="0" hidden></section>
@@ -51,12 +53,12 @@
         <section class="arena-panel card" role="tabpanel" id="panel-shop" aria-labelledby="tab-shop" tabindex="0" hidden></section>
     </main>
 
-    <script src="scripts/icons.js?v=20261125d"></script>
-    <script src="scripts/nav.js?v=20261125d"></script>
-    <script src="scripts/athlete-stats.js?v=20261125d"></script>
-    <script src="scripts/economy.js?v=20261125d"></script>
-    <script src="scripts/economy-ui.js?v=20261125d"></script>
-    <script src="scripts/social.js?v=20261125d"></script>
-    <script src="scripts/arena.js?v=20261125d"></script>
+    <script src="scripts/icons.js?v=20261125e"></script>
+    <script src="scripts/nav.js?v=20261125e"></script>
+    <script src="scripts/athlete-stats.js?v=20261125e"></script>
+    <script src="scripts/economy.js?v=20261125e"></script>
+    <script src="scripts/economy-ui.js?v=20261125e"></script>
+    <script src="scripts/social.js?v=20261125e"></script>
+    <script src="scripts/arena.js?v=20261125e"></script>
 </body>
 </html>

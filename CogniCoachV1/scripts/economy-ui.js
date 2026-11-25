@@ -64,6 +64,25 @@
     window.addEventListener('cognicoach:synced', repaint);
     setInterval(function () { if (huds.some(function (h) { return h.querySelector('[data-boost-left]'); })) { repaint(); } }, 30000);
 
+    // Pinned page tabs (dashboard / Arena): switching tab while scrolled down shows the new tab from its top.
+    function tabKey(e) {
+        var b = e.target.closest && e.target.closest('.page-tabs [role="tab"]');
+        if (!b) { return; }
+        setTimeout(function () {
+            var a = document.activeElement;
+            if (a && a.closest && a.closest('.page-tabs') && a.getAttribute('role') === 'tab') { b = a; }
+            var tabs = b.closest('.page-tabs'), panel = document.getElementById(b.getAttribute('aria-controls'));
+            if (!tabs || !panel) { return; }
+            // Scrolling up brings the site nav back, and the tabs sit under it: leave room for both.
+            var nav = document.querySelector('.site-nav');
+            var want = (nav ? nav.offsetHeight + 8 : 10) + tabs.offsetHeight + 12;
+            var top = panel.getBoundingClientRect().top;
+            if (top < want) { window.scrollTo({ top: Math.max(0, window.scrollY + top - want), behavior: reduce() ? 'auto' : 'smooth' }); }
+        }, 0);
+    }
+    document.addEventListener('click', tabKey);
+    document.addEventListener('keydown', function (e) { if (/^Arrow|^Home$|^End$/.test(e.key)) { tabKey(e); } });
+
     // ------------------------------------------------------------------ toasts
     var toastHost;
     function toast(html, icon) {

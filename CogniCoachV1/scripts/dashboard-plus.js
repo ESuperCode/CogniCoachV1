@@ -45,24 +45,14 @@
         while (i + 1 < LEVELS.length && xp >= LEVELS[i + 1].xp) { i++; }
         var cur = LEVELS[i], next = LEVELS[i + 1];
         var pct = next ? (xp - cur.xp) / (next.xp - cur.xp) : 1;
-        var R = 52, C = 2 * Math.PI * R;
         el.innerHTML =
-            '<h2 class="card-title">Athlete Level</h2>' +
-            '<div class="level-wrap">' +
-            '  <svg class="level-ring" viewBox="0 0 128 128" role="img" aria-label="Level ' + (i + 1) + ', ' + Math.round(pct * 100) + '% to the next level">' +
-            '    <defs><linearGradient id="lvlGrad" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="var(--primary-blue)"/><stop offset="1" stop-color="var(--secondary-orange)"/></linearGradient></defs>' +
-            '    <circle cx="64" cy="64" r="' + R + '" class="ring-track"/>' +
-            '    <circle cx="64" cy="64" r="' + R + '" class="ring-fill" stroke="url(#lvlGrad)" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + C.toFixed(1) + '" data-target="' + (C * (1 - pct)).toFixed(1) + '"/>' +
-            '  </svg>' +
-            '  <div class="level-center"><div class="level-num">' + (i + 1) + '</div><div class="level-name">' + cur.name + '</div></div>' +
-            '</div>' +
+            '<h2 class="card-title">Athlete level</h2>' +
+            '<div class="lvl-row"><div class="lvl-badge" aria-hidden="true">' + (i + 1) + '</div>' +
+            '<div class="lvl-main"><div class="lvl-name">Level ' + (i + 1) + ' \u00b7 ' + cur.name + '</div>' +
+            '<div class="lvl-bar" role="progressbar" aria-label="Progress to the next level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(pct * 100) + '"><i style="width:' + Math.round(pct * 100) + '%"></i></div>' +
             '<div class="level-xp"><b>' + xp.toLocaleString() + ' XP</b>' +
-            (next ? ' · ' + (next.xp - xp).toLocaleString() + ' to <b>' + next.name + '</b>' : ' · max level') + '</div>' +
-            '<div class="level-hint">Earn XP for every minute trained, plus a bonus for each finished session.</div>';
-        requestAnimationFrame(function () {
-            var f = el.querySelector('.ring-fill');
-            if (f) { f.style.strokeDashoffset = f.getAttribute('data-target'); }
-        });
+            (next ? ' \u00b7 ' + (next.xp - xp).toLocaleString() + ' to <b>' + next.name + '</b>' : ' \u00b7 max level') + '</div></div></div>' +
+            '<div class="level-hint">XP comes from every minute you train, plus a bonus for finishing.</div>';
     }
 
     // ---------------------------------------------------------------- records
@@ -175,9 +165,9 @@
             '<table class="sessions"><thead><tr><th>Date</th><th>Sport</th><th>Focus</th><th class="num">Minutes</th><th class="num">Drills</th><th>Status</th></tr></thead><tbody>' +
             rows.map(function (r) {
                 var d = new Date(r.date);
-                return '<tr><td>' + esc(d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined })) +
-                    '</td><td>' + esc(r.sport || '—') + '</td><td>' + esc(r.focus || '—') + '</td><td class="num">' + minutesOf(r) +
-                    '</td><td class="num">' + (r.drillsCompleted || 0) + '/' + (r.drillsTotal || 0) + '</td><td>' +
+                return '<tr><td class="s-date">' + esc(d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined })) +
+                    '</td><td class="s-sport">' + esc(r.sport || '—') + '</td><td class="s-focus" data-label="Focus">' + esc(r.focus || '—') + '</td><td class="num s-min" data-label="Minutes">' + minutesOf(r) +
+                    '</td><td class="num s-drills" data-label="Drills">' + (r.drillsCompleted || 0) + '/' + (r.drillsTotal || 0) + '</td><td class="s-status">' +
                     (r.completed ? '<span class="pill done">' + pic('check', 12) + ' Finished</span>' : '<span class="pill partial">' + pic('half-circle', 12) + ' Partial</span>') + '</td></tr>';
             }).join('') + '</tbody></table>' : '<p class="dash-muted">No sessions yet.</p>';
     }

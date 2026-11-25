@@ -198,10 +198,12 @@ function renderGoal(history, settings) {
     const pct = Math.min(100, Math.round((done / goal) * 100));
 
     document.getElementById('goalProgressFill').style.width = pct + '%';
+    const weekStart = startOfWeek(new Date());
+    const mins = history.filter(r => new Date(r.date) >= weekStart).reduce((t, r) => t + (Number(r.workoutLength) || 0), 0);
     document.getElementById('goalProgressText').textContent =
-        done >= goal
-            ? `Goal reached — ${done} of ${goal} sessions this week. Nice work.`
-            : `${done} of ${goal} sessions this week.`;
+        (done >= goal
+            ? `Goal reached: ${done} of ${goal} sessions.`
+            : `${done} of ${goal} sessions done.`) + ` ${mins} minutes trained this week.`;
 }
 
 // -- Badges -----------------------------------------------------------------------
@@ -241,7 +243,8 @@ function renderBadges(history) {
     const grid = document.getElementById('badgeGrid');
     grid.innerHTML = '';
 
-    badges.forEach(b => {
+    // Earned badges first, then the ones still to get.
+    badges.filter(b => b.unlocked).concat(badges.filter(b => !b.unlocked)).forEach(b => {
         const el = document.createElement('div');
         el.className = 'badge ' + (b.unlocked ? 'unlocked' : 'locked');
         el.innerHTML = `
@@ -313,8 +316,8 @@ function renderRecommendations(history) {
         const el = document.createElement('div');
         el.className = 'recommend-card';
         el.innerHTML = `
-            <div class="recommend-sport">${sport}</div>
-            <div class="recommend-reason">${reason}</div>
+            <div class="recommend-text"><div class="recommend-sport">${sport}</div>
+            <div class="recommend-reason">${reason}</div></div>
             <a class="btn btn-secondary" href="${buildQuickStartUrl(sport)}" aria-label="Start a ${sport} workout">Start</a>
         `;
         grid.appendChild(el);

@@ -11,13 +11,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <link href="styles/style.css?v=20261125d" rel="stylesheet">
-    <link href="styles/nav.css?v=20261125d" rel="stylesheet">
-    <link href="styles/dashboard.css?v=20261125d" rel="stylesheet">
-    <link href="styles/profile.css?v=20261125d" rel="stylesheet">
-    <link href="styles/athlete-card.css?v=20261125d" rel="stylesheet">
-    <link href="styles/my-stats.css?v=20261125d" rel="stylesheet">
-    <link href="styles/economy.css?v=20261125d" rel="stylesheet">
+    <link href="styles/style.css?v=20261125e" rel="stylesheet">
+    <link href="styles/nav.css?v=20261125e" rel="stylesheet">
+    <link href="styles/dashboard.css?v=20261125e" rel="stylesheet">
+    <link href="styles/profile.css?v=20261125e" rel="stylesheet">
+    <link href="styles/athlete-card.css?v=20261125e" rel="stylesheet">
+    <link href="styles/my-stats.css?v=20261125e" rel="stylesheet">
+    <link href="styles/economy.css?v=20261125e" rel="stylesheet">
 </head>
 <body>
     <site-nav></site-nav>
@@ -32,15 +32,13 @@
     </div>
 
     <main class="container" id="main" tabindex="-1">
-        <header>
-            <div class="logo-container">
-                <div class="logo-placeholder">
-                    <img src="logo.png" alt="CogniCoachAI logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: 20px;" onerror="this.style.display='none'; this.parentElement.textContent='CC';">
-                </div>
-                <h1>CogniCoachAI</h1>
+        <header class="page-head">
+            <div>
+                <h1 class="page-h1">Dashboard</h1>
+                <p class="page-sub">Your progress, Athlete Card and history</p>
             </div>
-            <p class="tagline">YOUR DASHBOARD</p>
-        </header>
+            <button type="button" class="page-tour-btn" data-page-tour><i data-icon="info" data-size="16"></i> Tour this page</button>
+            </header>
 
         <div id="econHud" data-hide-new></div>
 
@@ -53,7 +51,6 @@
             <button type="button" role="tab" id="tab-history" aria-controls="panel-history" data-tab="history"><i data-icon="calendar"></i><span>History</span></button>
             <button type="button" role="tab" id="tab-settings" aria-controls="panel-settings" data-tab="settings"><i data-icon="sliders"></i><span>Settings</span></button>
         </div>
-        <button type="button" class="page-tour-btn" data-page-tour><i data-icon="info" data-size="16"></i> Tour this page</button>
 
         <!-- HOME: today at a glance -->
         <section class="dash-panel" role="tabpanel" id="panel-home" aria-labelledby="tab-home" tabindex="-1">
@@ -63,7 +60,7 @@
                 <div class="card dash-card dash-span-12 dash-empty" id="dashEmptyState" style="display:none;">
                     No sessions logged yet. Complete a workout in the app and it'll show up here &mdash; streak, stats, and all.
                 </div>
-                <div class="card dash-card dash-span-12" id="dashOverview">
+                <div class="card dash-card dash-span-12" id="dashOverview" hidden>
                     <h2 class="card-title">At a glance</h2>
                     <div class="stat-row">
                         <div class="stat-pill"><div class="stat-value" id="statCurrentStreak">0</div><div class="stat-label">Day Streak</div></div>
@@ -76,7 +73,7 @@
                 </div>
                 <div class="card dash-card dash-span-6 level-card" id="levelCard"></div>
                 <div class="card dash-card dash-span-6" id="dashGoal">
-                    <h2 class="card-title">Weekly Goal</h2>
+                    <h2 class="card-title">This week</h2>
                     <p class="goal-now">Goal: <b id="weeklyGoalNow">3 sessions a week</b> <button type="button" class="btn-chip goal-change" id="weeklyGoalChange" aria-expanded="false" aria-controls="weeklyGoalRow">Change</button></p>
                     <div class="goal-row" id="weeklyGoalRow" hidden>
                         <label for="weeklyGoalInput">Sessions per week:</label>
@@ -88,30 +85,30 @@
                     <div class="goal-progress-text" id="goalProgressText">0 of 3 sessions this week.</div>
                 </div>
                 <div class="card dash-card dash-span-12" id="dashRecommend">
-                    <h2 class="card-title">Recommended For You</h2>
+                    <h2 class="card-title">Train next</h2>
                     <div class="recommend-grid" id="recommendGrid"></div>
                 </div>
-                <div class="card dash-card dash-span-12 competition-cta" id="dashCompetition">
-                    <div class="competition-cta-text">
-                        <h2 class="card-title">Competition Mode</h2>
-                        <p>Focus notes CogniCoach builds from your training, sport by sport, plus a sport-specific assistant for game day.</p>
-                    </div>
-                    <a class="btn btn-primary" href="competition.html">Open Competition Mode</a>
-                </div>
+                <a class="card dash-card dash-span-12 dash-link-row" id="dashCompetition" href="competition.html">
+                    <span class="dash-link-text"><b>Competition Mode</b><small>Game-day notes built from your training, plus a sport assistant.</small></span>
+                    <span class="dash-link-go" aria-hidden="true">Open</span>
+                </a>
             </div>
         </section>
 
         <!-- CARD: Athlete Card, rank, frames, titles (scripts/athlete-card.js) -->
         <section class="dash-panel" role="tabpanel" id="panel-card" aria-labelledby="tab-card" tabindex="-1" hidden>
-            <p class="dash-intro">Your Athlete Card: rating, rank and the frame and title you show to friends. Train to rank up and unlock frames.</p>
+            <p class="dash-intro">Your rating and rank. Pick the frame and title friends see.</p>
             <div class="dash-grid"><div class="dash-span-12" id="athleteCardMount"></div></div>
         </section>
 
         <!-- STATS: charts and analysis -->
         <section class="dash-panel" role="tabpanel" id="panel-stats" aria-labelledby="tab-stats" tabindex="-1" hidden>
-            <p class="dash-intro">Charts and analysis of every session. Pick a time range, drag the 3D charts, or use Table to see the numbers.</p>
+            <p class="dash-intro">Charts and a written analysis of your training. Pick a time range at the top.</p>
             <div class="dash-grid">
                 <div class="dash-span-12" id="myStatsMount"></div>
+                <details class="dash-span-12 dash-more" id="statsMore">
+                    <summary>More: personal records, minutes per week, training mix</summary>
+                    <div class="dash-grid">
                 <div class="card dash-card dash-span-12">
                     <h2 class="card-title">Personal Records</h2>
                     <div class="records-grid" id="recordsGrid"></div>
@@ -133,12 +130,14 @@
                     </div>
                     <div class="mix-list" id="mixChart"></div>
                 </div>
+                    </div>
+                </details>
             </div>
         </section>
 
         <!-- HISTORY: sessions, calendar, badges -->
         <section class="dash-panel" role="tabpanel" id="panel-history" aria-labelledby="tab-history" tabindex="-1" hidden>
-            <p class="dash-intro">Every session you have finished, the days you trained, and the badges you have earned.</p>
+            <p class="dash-intro">Your past sessions, the days you trained and your badges.</p>
             <div class="dash-grid">
                 <div class="card dash-card dash-span-12" id="dashSessions">
                     <div class="dash-card-header">
@@ -196,18 +195,18 @@
         </section>
     </main>
 
-    <script src="scripts/icons.js?v=20261125d"></script>
+    <script src="scripts/icons.js?v=20261125e"></script>
 
-    <script src="scripts/nav.js?v=20261125d"></script>
-    <script src="scripts/dash-tabs.js?v=20261125d"></script>
-    <script src="scripts/profile.js?v=20261125d"></script>
-    <script src="scripts/dashboard.js?v=20261125d"></script>
-    <script src="scripts/dashboard-plus.js?v=20261125d"></script>
-    <script src="scripts/athlete-stats.js?v=20261125d"></script>
-    <script src="scripts/economy.js?v=20261125d"></script>
-    <script src="scripts/economy-ui.js?v=20261125d"></script>
-    <script src="scripts/social.js?v=20261125d"></script>
-    <script src="scripts/athlete-card.js?v=20261125d"></script>
-    <script src="scripts/my-stats.js?v=20261125d"></script>
+    <script src="scripts/nav.js?v=20261125e"></script>
+    <script src="scripts/dash-tabs.js?v=20261125e"></script>
+    <script src="scripts/profile.js?v=20261125e"></script>
+    <script src="scripts/dashboard.js?v=20261125e"></script>
+    <script src="scripts/dashboard-plus.js?v=20261125e"></script>
+    <script src="scripts/athlete-stats.js?v=20261125e"></script>
+    <script src="scripts/economy.js?v=20261125e"></script>
+    <script src="scripts/economy-ui.js?v=20261125e"></script>
+    <script src="scripts/social.js?v=20261125e"></script>
+    <script src="scripts/athlete-card.js?v=20261125e"></script>
+    <script src="scripts/my-stats.js?v=20261125e"></script>
 </body>
 </html>
