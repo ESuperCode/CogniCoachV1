@@ -22,6 +22,15 @@
         const osReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (p.motion === 'reduce' || ((!p.motion || p.motion === 'auto') && osReduce)) h.classList.add('a11y-reduce-motion');
     } catch (e) {}
+    // The clean look (styles/clean.css, scripts/clean.js) is the default; ?classic=1 switches back to the
+    // old look for comparison (remembered on this device), ?classic=0 returns to the clean one.
+    try {
+        const q = new URLSearchParams(location.search).get('classic');
+        if (q === '1') localStorage.setItem('cognicoach-classic', '1');
+        if (q === '0') localStorage.removeItem('cognicoach-classic');
+        if (localStorage.getItem('cognicoach-classic') === '1') document.documentElement.classList.remove('clean');
+        else document.documentElement.classList.add('clean');
+    } catch (e) { document.documentElement.classList.add('clean'); }
 })();
 
 const NAV_LINKS = [
@@ -52,6 +61,7 @@ class SiteNav extends HTMLElement {
             '<div class="nav-account" id="navAccount"></div>';
 
         this.highlightCurrentPage();
+        this.addBottomTabs();
         loadSiteExtras();
         this.wireScrollBehavior();
         this.wireMenu();
@@ -74,6 +84,26 @@ class SiteNav extends HTMLElement {
         });
         links.addEventListener('click', e => { if (e.target.closest('a')) { setOpen(false); } });
         window.addEventListener('scroll', () => { if (this.classList.contains('menu-open') && window.scrollY > 200) { setOpen(false); } }, { passive: true });
+    }
+
+    // Phones: the three places an athlete goes, always one tap away at the bottom of the screen
+    // (styles/clean.css; hidden while training, in Coach Mode and with the form check open).
+    addBottomTabs() {
+        if (document.querySelector('.bottom-tabs')) return;
+        let path = window.location.pathname.split('/').pop() || 'index.html';
+        const tabs = [['index.html', 'Train'], ['dashboard.html', 'Dashboard'], ['arena.html', 'Arena']];
+        const navEl = document.createElement('nav');
+        navEl.className = 'bottom-tabs';
+        navEl.setAttribute('aria-label', 'Sections');
+        navEl.innerHTML = tabs.map(([href, label]) => `<a href="${href}"${href === path ? ' aria-current="page"' : ''}>${label}</a>`).join('');
+        document.body.appendChild(navEl);
+        // while a session runs on the app page the tabs step aside
+        const sv = document.getElementById('sessionView');
+        if (sv) {
+            const sync = () => document.documentElement.classList.toggle('in-session', sv.classList.contains('active'));
+            new MutationObserver(sync).observe(sv, { attributes: true, attributeFilter: ['class'] });
+            sync();
+        }
     }
 
     highlightCurrentPage() {
@@ -126,7 +156,7 @@ function loadSiteExtras() {
         { css: 'styles/tour.css', js: 'scripts/tour.js' },
         { css: 'styles/depth.css', js: 'scripts/depth.js' }
     ];
-    const v = 'v=20261126c';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
+    const v = 'v=20261126d';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
     extras.forEach(({ css: cssPath, js: jsPath }) => {
         const css = cssPath + '?' + v, js = jsPath + '?' + v;
         if (!document.querySelector(`link[href="${css}"]`)) {
