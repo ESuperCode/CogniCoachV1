@@ -394,8 +394,9 @@ html.a11y-reduce-motion .recap-coin { animation: none; }
 }
 
 /* ---- 3D preview inside Coach Mode (the page's #motionViewer is moved in while shown) ---- */
-.cm-3d { align-self: center; margin-top: 4px; }
-.cm-3d[aria-expanded="true"] { background: rgba(78, 168, 255, 0.22); border-color: #4ea8ff; }
+.cm-3d, .cm-form { align-self: center; margin-top: 4px; }
+.cm-3d[aria-expanded="true"], .cm-form[aria-expanded="true"] { background: rgba(78, 168, 255, 0.22); border-color: #4ea8ff; }
+.cm-form[hidden] { display: none; }
 .cm-slot-3d { margin: 14px 0 6px; }
 .cm-slot-3d[hidden] { display: none; }
 .cm-slot-3d .motion-viewer { margin: 0; }

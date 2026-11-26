@@ -111,10 +111,31 @@
         els.start.addEventListener('click', start);
         els.finish.addEventListener('click', finish);
         els.stage.addEventListener('click', function () { if (stream && video.paused) { video.play().catch(function () {}); } });
-        root.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); close(); } });
+        root.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); return; }
+            e.stopPropagation();   // Coach Mode's own shortcut keys (space, N, R) stay out of the panel
+        });
     }
-    function open() {
+    // The panel lives in the page, or inside Coach Mode while that is open: Coach Mode is a modal,
+    // full-screen layer (real fullscreen on phones), so anything outside it would be hidden or unreachable.
+    function coachModeRoot() { var cm = document.getElementById('coachMode'); return cm && !cm.hidden ? cm : null; }
+    function mount() {
+        if (!root) { return; }
+        var host = coachModeRoot() || document.body;
+        if (root.parentNode === host) { return; }
+        var kept = typeof host.moveBefore === 'function';
+        if (kept) { try { host.moveBefore(root, null); } catch (e) { kept = false; } }
+        if (!kept) { host.appendChild(root); }
+        // a moved video element pauses: keep the camera picture running
+        if (stream && video.paused) { video.play().catch(function () {}); }
+        document.documentElement.classList.toggle('fc-in-coach', host !== document.body);
+    }
+    function announce() {
+        document.dispatchEvent(new CustomEvent('cognicoach:form-check', { detail: { open: !!(root && !root.hidden) } }));
+    }
+    function open(o) {
         build();
+        mount();
         lastFocus = document.activeElement;
         drill = currentDrill();
         els.drill.textContent = drill.name ? 'Drill: ' + drill.name : '';
@@ -123,18 +144,21 @@
         document.documentElement.classList.add('fc-open');
         var b = document.getElementById('formCheckBtn');
         if (b) { b.setAttribute('aria-expanded', 'true'); }
+        announce();
         els.start.focus();
         checkPermission();
         loadModel().catch(function () {});   // start downloading while the athlete gets in place
+        if (o && o.start === true) { start(); }   // hands-free (Coach Mode voice): turn the camera on straight away
     }
     function close() {
         if (!root || root.hidden) { return; }
         stopCamera();
         reqId++;
         root.hidden = true;
-        document.documentElement.classList.remove('fc-open');
+        document.documentElement.classList.remove('fc-open', 'fc-in-coach');
         var b = document.getElementById('formCheckBtn');
         if (b) { b.setAttribute('aria-expanded', 'false'); }
+        announce();
         if (lastFocus && lastFocus.focus && document.contains(lastFocus)) { lastFocus.focus(); } else if (b) { b.focus(); }
     }
     function toggle() { if (root && !root.hidden) { close(); } else { open(); } }
@@ -242,8 +266,12 @@
     function cue(c) {
         els.cue.textContent = c.text;
         els.cue.classList.toggle('good', c.id === 'good');
-        if (els.voice.checked && window.speechSynthesis && c.text !== lastCueText) {
-            try { window.speechSynthesis.cancel(); var u = new SpeechSynthesisUtterance(c.text); u.rate = 1.05; window.speechSynthesis.speak(u); } catch (e) {}
+        if (els.voice.checked && c.text !== lastCueText) {
+            // through read-aloud when it is there: the athlete's voice settings, and Coach Mode's voice
+            // control ignores it (it does not mistake the cue for a command); it never cuts off a drill read-out
+            var ra = window.CogniReadAloud && window.CogniReadAloud.supported ? window.CogniReadAloud : null;
+            if (ra) { ra.say(c.text, false); }
+            else if (window.speechSynthesis) { try { window.speechSynthesis.cancel(); var u = new SpeechSynthesisUtterance(c.text); u.rate = 1.05; window.speechSynthesis.speak(u); } catch (e) {} }
         }
         lastCueText = c.text;
         setTimeout(function () { lastCueText = ''; }, 12000);
@@ -358,12 +386,30 @@
         b.setAttribute('aria-controls', 'formCheckPanel');
         b.setAttribute('aria-expanded', 'false');
         b.innerHTML = ic('camera', 18) + '<span>Check my form</span><small>camera, stays on your device</small>';
-        b.addEventListener('click', toggle);
+        b.addEventListener('click', function () { toggle(); });
         display.insertAdjacentElement('afterend', b);
     }
     document.addEventListener('cognicoach:drill-rendered', addLaunch);
+    // A new drill while the camera is watching (Coach Mode moves on by itself): finish the set that was
+    // done, or start over for the new drill if nothing was counted yet.
+    document.addEventListener('cognicoach:drill-rendered', function () {
+        if (!root || root.hidden) { return; }
+        var name = currentDrill().name;
+        if (running && engine) {
+            if (engine.reps() > 0) { finish(); }
+            else { begin(); }
+        }
+        if (!running) { drill = currentDrill(); }
+        els.drill.textContent = name ? 'Drill: ' + name : '';
+    });
+    // the drill timer ran out: that set is done
+    document.addEventListener('cognicoach:timer', function (e) {
+        if (e.detail && e.detail.state === 'complete' && running && engine && engine.reps() > 0) { finish(); }
+    });
+    document.addEventListener('cognicoach:coach-mode', mount);
     document.addEventListener('cognicoach:session-end', close);
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', addLaunch); } else { addLaunch(); }
 
-    window.CogniFormCheck = { open: open, close: close, preload: loadModel, lastReport: function () { return report; } };
+    window.CogniFormCheck = { open: open, close: close, toggle: toggle, isOpen: function () { return !!(root && !root.hidden); },
+        finish: function () { if (running) { finish(); } }, preload: loadModel, lastReport: function () { return report; } };
 })();

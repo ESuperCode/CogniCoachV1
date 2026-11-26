@@ -107,3 +107,17 @@ html.fc-open .site-nav { right: var(--fc-w); }
     .fc-live { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 4px 8px; }
 }
 html.a11y-reduce-motion .form-launch { transition: none; }
+
+/* inside Coach Mode: the panel is part of the Coach Mode layer and Coach Mode makes room for it */
+.coach-mode .fc-panel { z-index: 20; }
+html.fc-in-coach .coach-mode { padding-right: var(--fc-w); }
+@media (max-width: 1320px) {
+    html.fc-in-coach .cm-body { grid-template-columns: minmax(0, 1fr); }
+    html.fc-in-coach .cm-card { max-height: none; overflow: visible; }
+    html.fc-in-coach .cm-ring-wrap { width: min(44vmin, 340px); }
+}
+@media (max-width: 900px) {
+    html.fc-in-coach .coach-mode { padding-right: 0; padding-bottom: var(--fc-sheet); }
+    html.fc-in-coach .cm-ring-wrap { width: min(26vh, 60vw); }
+    html.fc-in-coach .cm-stage { gap: 10px; }
+}

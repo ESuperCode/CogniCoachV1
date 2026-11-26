@@ -5,7 +5,7 @@
 //   - hands-free flow: reads the drill, counts you in (3-2-1 beeps), runs it,
 //     calls halfway / 10 seconds / time, rests, then moves to the next drill
 //   - voice control (where the browser supports it): "pause", "go", "next",
-//     "skip", "read", "too easy", "too hard", "just right", "exit"
+//     "skip", "read", "too easy", "too hard", "just right", "exit", "check my form", "finish set"
 //   - keeps the screen awake (Wake Lock) while it is open
 // The drill card itself (title, focus, description, read-aloud bar) and the
 // feedback chips are moved into the overlay while it is open, so everything
@@ -107,6 +107,7 @@
             '      <button type="button" class="cm-btn cm-skip">' + ic('skip', 20) + ' Skip</button>' +
             '    </div>' +
             '    <button type="button" class="cm-btn cm-3d" aria-expanded="false" aria-controls="cmSlot3d">' + ic('cube', 20) + ' <span class="cm-3d-label">Watch in 3D</span></button>' +
+            '    <button type="button" class="cm-btn cm-form" aria-expanded="false" aria-controls="formCheckPanel">' + ic('camera', 20) + ' Check my form</button>' +
             '    <button type="button" class="cm-btn cm-next" hidden>Next drill →</button>' +
             '    <p class="cm-mic-text" aria-live="polite"></p>' +
             '  </div>' +
@@ -134,6 +135,11 @@
         slot3d = root.querySelector('.cm-slot-3d');
         btn3d = root.querySelector('.cm-3d');
         btn3d.addEventListener('click', function () { show3d(slot3d.hidden); });
+        // camera form check (scripts/form-check.js): its side panel opens inside Coach Mode
+        var formBtn = root.querySelector('.cm-form');
+        if (window.CogniFormCheck) { formBtn.addEventListener('click', function () { window.CogniFormCheck.toggle(); }); }
+        else { formBtn.hidden = true; }
+        document.addEventListener('cognicoach:form-check', function (e) { formBtn.setAttribute('aria-expanded', e.detail && e.detail.open ? 'true' : 'false'); });
 
         var hf = root.querySelector('.cm-hf');
         hf.checked = opts.handsFree;
@@ -263,6 +269,7 @@
         mainBtn.focus();
         if (opts.auto3d && !($('loadingContainer') && $('loadingContainer').classList.contains('active'))) { demo3d(); }
         if (opts.voice) { setVoice(true); }
+        document.dispatchEvent(new CustomEvent('cognicoach:coach-mode', { detail: { open: true } }));
     }
 
     function close() {
@@ -280,6 +287,7 @@
         document.documentElement.classList.remove('coach-on');
         if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
         if (document.fullscreenElement === root && document.exitFullscreen) { document.exitFullscreen().catch(function () {}); }
+        document.dispatchEvent(new CustomEvent('cognicoach:coach-mode', { detail: { open: false } }));
         if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
     }
 
@@ -452,6 +460,8 @@
         else if (has(/too (hard|tough|much)/)) { said('noted, easier next'); if (window.CogniCoachAdapt) { window.CogniCoachAdapt.feedback('hard'); } }
         else if (has(/just right|perfect|good one/)) { said('noted'); if (window.CogniCoachAdapt) { window.CogniCoachAdapt.feedback('right'); } }
         else if (has(/\b(hide|no) (the )?(3 ?-?d|three d|demo|animation)\b/)) { said('hiding 3D'); show3d(false); }
+        else if (window.CogniFormCheck && has(/\b(check|watch) (my )?form\b|\bform check\b|\bcamera on\b/)) { said('form check'); if (!window.CogniFormCheck.isOpen()) { window.CogniFormCheck.open({ start: true }); } }
+        else if (window.CogniFormCheck && window.CogniFormCheck.isOpen() && has(/\bfinish (the )?set\b|\bcamera off\b|\bstop (the )?camera\b/)) { said('finishing the set'); window.CogniFormCheck.finish(); }
         else if (has(/\b3 ?-?d\b|three d|\bdemo\b|show me|\banimat|\bwatch\b/)) { said('showing the 3D demo'); demo3d(); }
         else if (has(/\b(pause|stop|hold|wait)\b/)) { said('pause'); if (s && s.timerStarted && !s.isPaused) { togglePause(); } else if (phase === 'rest') { restPaused = true; setPhase('rest'); } else { cancelCountdown(); } }
         else if (has(/\b(go|start|resume|continue)\b/)) { said('go'); if (phase === 'rest') { restPaused = false; setPhase('rest'); } else if (s && s.timerStarted && s.isPaused) { togglePause(); } else if (!s.timerStarted && phase !== 'done') { mainAction(); } }
