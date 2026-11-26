@@ -10,7 +10,8 @@
 //      If that is unavailable, the measured feedback from the rules is shown on its own.
 //   4. repeated faults are remembered by Your coach (CogniCoachProfile.recordForm) so later drills
 //      are planned around them.
-// Button: "Check my form" under the drill card. Dialog closes with Escape and returns focus.
+// Button: "Check my form" under the drill card opens a side panel (a bottom sheet on phones) so the drill,
+// muscle map and 3D preview stay visible. Escape closes it and returns focus.
 // ==========================================================================
 (function () {
     'use strict';
@@ -27,7 +28,7 @@
 
     var root, video, canvas, ctx2d, els = {}, lastFocus = null;
     var landmarkerP = null, landmarker = null, stream = null, engine = null, running = false, raf = 0, lastT = 0, lastCueText = '';
-    var drill = null, report = null, reqId = 0;
+    var drill = null, report = null, reqId = 0, camId = 0;
 
     // ------------------------------------------------------------------ the drill being trained
     function currentDrill() {
@@ -41,9 +42,15 @@
     }
 
     // ------------------------------------------------------------------ the pose model (loaded once, on demand)
+    function timeout(p, ms, what) {
+        return new Promise(function (res, rej) {
+            var t = setTimeout(function () { rej(new Error(what + ' timed out')); }, ms);
+            p.then(function (v) { clearTimeout(t); res(v); }, function (e) { clearTimeout(t); rej(e); });
+        });
+    }
     function loadModel() {
         if (landmarkerP) { return landmarkerP; }
-        landmarkerP = import(BASE + 'vision_bundle.mjs').then(function (mp) {
+        landmarkerP = timeout(import(BASE + 'vision_bundle.mjs').then(function (mp) {
             return mp.FilesetResolver.forVisionTasks(BASE + 'wasm').then(function (files) {
                 function make(delegate) {
                     return mp.PoseLandmarker.createFromOptions(files, {
@@ -52,42 +59,49 @@
                         minPoseDetectionConfidence: 0.5, minPosePresenceConfidence: 0.5, minTrackingConfidence: 0.5
                     });
                 }
-                return make('GPU').catch(function () { return make('CPU'); });
+                // the graphics card is fastest, but on some devices it fails or hangs: fall back to the processor
+                return timeout(make('GPU'), 15000, 'GPU tracker').catch(function () { return make('CPU'); });
             });
-        }).then(function (lm) { landmarker = lm; return lm; }, function (err) { landmarkerP = null; throw err; });
+        }), 120000, 'Loading the tracker').then(function (lm) { landmarker = lm; return lm; }, function (err) {
+            landmarkerP = null;
+            if (window.console) { console.warn('Form check: movement tracker failed to load', err); }
+            throw err;
+        });
         return landmarkerP;
     }
 
-    // ------------------------------------------------------------------ dialog
+    // ------------------------------------------------------------------ side panel (not modal: the drill card,
+    // muscle map and 3D preview stay usable next to it; at phone width it is a sheet along the bottom)
     function build() {
         if (root) { return; }
-        root = document.createElement('div');
-        root.className = 'fc-overlay';
+        root = document.createElement('aside');
+        root.className = 'fc-panel';
+        root.id = 'formCheckPanel';
         root.hidden = true;
+        root.setAttribute('aria-labelledby', 'fcTitle');
         root.innerHTML =
-            '<div class="fc-dialog" role="dialog" aria-modal="true" aria-labelledby="fcTitle" aria-describedby="fcPrivacy">' +
             '<div class="fc-head"><h2 id="fcTitle">' + ic('camera', 20) + ' Form check</h2>' +
             '<button type="button" class="fc-x" aria-label="Close form check">' + ic('close', 20) + '</button></div>' +
             '<p class="fc-drill"></p>' +
             '<div class="fc-live">' +
-            '<div class="fc-stage"><video playsinline muted aria-hidden="true"></video><canvas aria-hidden="true"></canvas>' +
-            '<div class="fc-empty">' + ic('pose', 56) + '<span>Your camera picture shows here.</span></div>' +
+            '<div class="fc-stage"><video playsinline muted autoplay aria-hidden="true"></video><canvas aria-hidden="true"></canvas>' +
+            '<div class="fc-empty">' + ic('pose', 48) + '<span>Your camera shows here.</span></div>' +
             '<div class="fc-reps" hidden><b>0</b><small>reps</small></div></div>' +
-            '<p class="fc-msg" role="status" aria-live="polite">Set your phone or laptop 2-3 m away at hip height.</p>' +
+            '<p class="fc-msg" role="status" aria-live="polite"></p>' +
             '<p class="fc-cue" aria-live="assertive"></p>' +
-            '<div class="fc-actions"><button type="button" class="btn btn-primary fc-start">Start camera</button>' +
+            '<div class="fc-actions"><button type="button" class="btn btn-primary fc-start">Turn on camera</button>' +
             '<button type="button" class="btn btn-primary fc-finish" hidden>Finish set</button>' +
             '<label class="fc-voice"><input type="checkbox"> Speak cues</label></div>' +
-            '<p class="fc-tip">Side-on shows depth and back angle best. Facing the camera shows your knees.</p>' +
+            '<p class="fc-tip">Camera 2-3 m away at hip height. Side-on shows depth best; facing it shows your knees.</p>' +
             '</div>' +
             '<div class="fc-result" hidden></div>' +
-            '<p class="fc-privacy" id="fcPrivacy">' + ic('lock', 14) + ' Video stays on your device. Only measurements (angles, reps) are sent to write your coach\'s note.</p>' +
-            '</div>';
+            '<p class="fc-privacy">' + ic('lock', 14) + ' Video stays on your device. Only measurements are sent.</p>';
         document.body.appendChild(root);
         video = root.querySelector('video');
+        video.muted = true;   // a muted video may play without another tap (Safari, Chrome autoplay rules)
         canvas = root.querySelector('canvas');
         ctx2d = canvas.getContext('2d');
-        ['drill', 'msg', 'cue', 'start', 'finish', 'reps', 'result', 'live', 'empty', 'x'].forEach(function (k) { els[k] = root.querySelector('.fc-' + k); });
+        ['drill', 'msg', 'cue', 'start', 'finish', 'reps', 'result', 'live', 'empty', 'x', 'stage'].forEach(function (k) { els[k] = root.querySelector('.fc-' + k); });
         els.voice = root.querySelector('.fc-voice input');
         var v = null;
         try { v = localStorage.getItem(VOICE_KEY); } catch (e) {}
@@ -96,17 +110,8 @@
         els.x.addEventListener('click', close);
         els.start.addEventListener('click', start);
         els.finish.addEventListener('click', finish);
-        root.addEventListener('click', function (e) { if (e.target === root) { close(); } });
-        root.addEventListener('keydown', onKey);
-    }
-    function onKey(e) {
-        if (e.key === 'Escape') { e.preventDefault(); close(); return; }
-        if (e.key !== 'Tab') { return; }
-        var f = [].slice.call(root.querySelectorAll('button, [href], input, summary, [tabindex]:not([tabindex="-1"])')).filter(function (el) { return !el.disabled && el.offsetParent !== null; });
-        if (!f.length) { return; }
-        var first = f[0], last = f[f.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        els.stage.addEventListener('click', function () { if (stream && video.paused) { video.play().catch(function () {}); } });
+        root.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.preventDefault(); close(); } });
     }
     function open() {
         build();
@@ -116,7 +121,10 @@
         showLive();
         root.hidden = false;
         document.documentElement.classList.add('fc-open');
+        var b = document.getElementById('formCheckBtn');
+        if (b) { b.setAttribute('aria-expanded', 'true'); }
         els.start.focus();
+        checkPermission();
         loadModel().catch(function () {});   // start downloading while the athlete gets in place
     }
     function close() {
@@ -125,60 +133,91 @@
         reqId++;
         root.hidden = true;
         document.documentElement.classList.remove('fc-open');
-        if (lastFocus && lastFocus.focus) { lastFocus.focus(); }
+        var b = document.getElementById('formCheckBtn');
+        if (b) { b.setAttribute('aria-expanded', 'false'); }
+        if (lastFocus && lastFocus.focus && document.contains(lastFocus)) { lastFocus.focus(); } else if (b) { b.focus(); }
     }
+    function toggle() { if (root && !root.hidden) { close(); } else { open(); } }
     function showLive() {
         els.live.hidden = false;
         els.result.hidden = true;
         els.result.innerHTML = '';
-        els.start.hidden = false; els.start.disabled = false; els.start.textContent = 'Start camera';
+        els.start.hidden = false; els.start.disabled = false; els.start.textContent = 'Turn on camera';
         els.finish.hidden = true;
         els.reps.hidden = true;
         els.empty.hidden = false;
         els.cue.textContent = '';
-        msg('Set your phone or laptop 2-3 m away at hip height.');
+        msg('Press Turn on camera, then allow the camera when your browser asks.');
         if (ctx2d) { ctx2d.clearRect(0, 0, canvas.width, canvas.height); }
     }
     function msg(t) { if (els.msg.textContent !== t) { els.msg.textContent = t; } }
+    var BLOCKED = 'Your browser is blocking the camera for this site. Click the camera or lock icon in the address bar, set Camera to Allow, then press Try again.';
+    function checkPermission() {
+        try {
+            if (navigator.permissions && navigator.permissions.query) {
+                navigator.permissions.query({ name: 'camera' }).then(function (p) { if (p.state === 'denied' && !stream) { msg(BLOCKED); } }, function () {});
+            }
+        } catch (e) {}
+    }
 
-    // ------------------------------------------------------------------ camera + live loop
+    // ------------------------------------------------------------------ camera first, tracker second
+    // The camera is asked for straight away on the button press (so the browser shows its permission
+    // question) and the picture shows as soon as it is allowed; the movement tracker loads alongside and
+    // analysis starts when it is ready. A slow or failed tracker never hides the camera.
     function start() {
+        if (!window.isSecureContext) { msg('The camera only works on a secure (https) page.'); return; }
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { msg('This browser cannot use a camera here. Try Chrome, Edge or Safari.'); return; }
+        var id = ++camId;
         els.start.disabled = true;
-        els.start.textContent = 'Starting...';
-        msg('Loading the movement tracker (first time only, about 20 MB)...');
-        var cam = navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }, audio: false });
-        Promise.all([cam, loadModel()]).then(function (res) {
-            stream = res[0];
-            video.srcObject = stream;
-            return video.play();
-        }).then(function () {
-            drill = currentDrill();
-            engine = window.CogniFormEngine.create({ drill: drill.name, text: drill.text });
-            running = true;
-            lastT = 0;
-            lastCueText = '';
+        els.start.textContent = 'Waiting for camera...';
+        msg('Allow the camera when your browser asks.');
+        loadModel().catch(function () {});
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false }).then(function (s) {
+            if (id !== camId || root.hidden) { s.getTracks().forEach(function (t) { t.stop(); }); return; }
+            stream = s;
+            video.srcObject = s;
+            els.empty.hidden = true;
             els.start.hidden = true;
             els.finish.hidden = false;
-            els.empty.hidden = true;
-            els.reps.hidden = false;
-            els.reps.querySelector('b').textContent = '0';
-            els.reps.querySelector('small').textContent = engine.pattern() === 'plank' || engine.pattern() === 'wallsit' ? 'seconds' : 'reps';
-            msg('Step into view.');
+            els.finish.textContent = 'Stop camera';
             els.finish.focus();
-            loop();
-        }).catch(function (err) {
-            stopCamera();
+            var p = video.play();
+            if (p && p.catch) { p.catch(function () { msg('Tap the camera picture to start it.'); }); }
+            if (landmarker) { begin(); return; }
+            msg('Camera on. Loading the movement tracker (first time only, about 20 MB)...');
+            loadModel().then(function () { if (id === camId && stream) { begin(); } }, function () {
+                if (id !== camId || !stream) { return; }
+                msg('The movement tracker did not load. Check your connection, then stop the camera and try again.');
+            });
+        }, function (err) {
+            if (id !== camId) { return; }
             els.start.disabled = false;
             els.start.textContent = 'Try again';
             var name = err && err.name;
-            msg(name === 'NotAllowedError' || name === 'SecurityError' ? 'Camera blocked. Allow camera access for this site in your browser, then try again.'
-                : name === 'NotFoundError' || name === 'OverconstrainedError' ? 'No camera found on this device.'
-                : 'Could not start the movement tracker. Check your connection and try again.');
+            if (window.console) { console.warn('Form check: camera error', err); }
+            msg(name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError' ? BLOCKED
+                : name === 'NotFoundError' || name === 'DevicesNotFoundError' ? 'No camera found on this device.'
+                : name === 'NotReadableError' || name === 'TrackStartError' ? 'Another app is using your camera. Close it, then press Try again.'
+                : name === 'OverconstrainedError' ? 'Your camera does not support this mode. Press Try again.'
+                : 'The camera did not start (' + (name || 'unknown error') + '). Press Try again.');
         });
+    }
+    function begin() {
+        drill = currentDrill();
+        engine = window.CogniFormEngine.create({ drill: drill.name, text: drill.text });
+        running = true;
+        lastT = 0;
+        lastCueText = '';
+        els.finish.textContent = 'Finish set';
+        els.reps.hidden = false;
+        els.reps.querySelector('b').textContent = '0';
+        els.reps.querySelector('small').textContent = engine.pattern() === 'plank' || engine.pattern() === 'wallsit' ? 'seconds' : 'reps';
+        msg('Step back until your whole body is in the picture.');
+        loop();
     }
     function stopCamera() {
         running = false;
+        camId++;
         cancelAnimationFrame(raf);
         if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
         if (video) { video.srcObject = null; }
@@ -233,8 +272,9 @@
 
     // ------------------------------------------------------------------ results
     function finish() {
-        if (!engine) { return; }
+        if (!running || !engine) { stopCamera(); showLive(); return; }   // "Stop camera" before the tracker was ready
         report = engine.report();
+        engine = null;
         stopCamera();
         els.live.hidden = true;
         els.result.hidden = false;
@@ -315,8 +355,10 @@
         b.type = 'button';
         b.id = 'formCheckBtn';
         b.className = 'form-launch';
+        b.setAttribute('aria-controls', 'formCheckPanel');
+        b.setAttribute('aria-expanded', 'false');
         b.innerHTML = ic('camera', 18) + '<span>Check my form</span><small>camera, stays on your device</small>';
-        b.addEventListener('click', open);
+        b.addEventListener('click', toggle);
         display.insertAdjacentElement('afterend', b);
     }
     document.addEventListener('cognicoach:drill-rendered', addLaunch);
