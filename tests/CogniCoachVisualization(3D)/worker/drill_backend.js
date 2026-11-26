@@ -287,7 +287,12 @@ function composeDrill(output, fallback) {
     }
     const muscles = (Array.isArray(d["targeted muscles"]) ? d["targeted muscles"] : [])
         .map(m => String(m).toLowerCase().trim()).filter(m => MUSCLES.includes(m)).slice(0, 4);
-    return JSON.stringify({ name: plain(d.name).slice(0, 80) || "Drill", description, "targeted muscles": muscles, focus });
+    const cues = (Array.isArray(d.cues) ? d.cues : []).map(c => plain(c).replace(/^\d+[.)]\s*/, "").slice(0, 90)).filter(Boolean).slice(0, 3);
+    const out = { name: plain(d.name).slice(0, 80) || "Drill", description, "targeted muscles": muscles, focus };
+    if (cues.length) out.cues = cues;
+    if (plain(d.easier)) out.easier = plain(d.easier).slice(0, 200);
+    if (plain(d.harder)) out.harder = plain(d.harder).slice(0, 200);
+    return JSON.stringify(out);
 }
 
 async function handleDrill(request, env) {
@@ -332,10 +337,13 @@ async function handleDrill(request, env) {
             messages: [
                 {
                     role: "system",
-                    content: `Finalize this drill for an athlete. Return only JSON: {"name": string, "steps": string, "reasons": [string, string, string], "targeted muscles": [string], "focus": string}.
+                    content: `Finalize this drill for an athlete. Return only JSON: {"name": string, "steps": string, "reasons": [string, string, string], "cues": [string, string, string], "easier": string, "harder": string, "targeted muscles": [string], "focus": string}.
 
 steps: one paragraph, 40-70 words, plain text (no HTML, no lists). Concrete actions the athlete does, in order, specific enough to follow without asking (positions, movements, distances or targets). Say to repeat until the timer ends and to rest when needed. Never give a total number of reps, sets or minutes.
 reasons: exactly 3 short sentences, each a different way this drill helps with the focus. No numbering, no "because".
+cues: 2-3 coaching cues a coach would shout during this drill, each 3-10 words, about form or the most common mistake (e.g. "Stay low, chest over your toes"). Not repeats of the steps.
+easier: one sentence (max 25 words) on how to make this same drill easier right now (regression).
+harder: one sentence (max 25 words) on how to make this same drill harder right now (progression).
 focus: 2-6 plain words, the skill this drill trains.
 targeted muscles: 1-4, only ones truly worked, only from: biceps, deltoids, forearms, triceps, trapezius, lats, abs, obliques, pectorals, adductors, calves, hamstrings, glutes, quads.
 name: keep it unless it does not fit the drill.

@@ -26,6 +26,8 @@
         c.forget = Array.isArray(c.forget) ? c.forget : [];
         c.drills = Array.isArray(c.drills) ? c.drills : [];
         c.seen = Array.isArray(c.seen) ? c.seen : [];
+        c.efforts = Array.isArray(c.efforts) ? c.efforts : [];   // [{ at: session date, sport, rpe 1-10 }]
+        c.notes = Array.isArray(c.notes) ? c.notes : [];         // [{ t, sport, text }] the athlete's own post-session notes
         return c;
     }
     function save(c) {
@@ -83,6 +85,17 @@
             }
         });
 
+        // how hard the last sessions felt (post-session check-in)
+        var DAY = 864e5, recentE = c.efforts.filter(function (e) { return Date.now() - new Date(e.at).getTime() < 14 * DAY; }).slice(-3);
+        if (recentE.length >= 2) {
+            var avgE = Math.round(recentE.reduce(function (a, e) { return a + e.rpe; }, 0) / recentE.length * 10) / 10;
+            if (avgE >= 8) { out.push({ id: 'effort:high', sport: '', text: 'Your last sessions felt very hard (' + avgE + '/10 effort).', ctx: 'last sessions felt very hard (' + avgE + '/10 effort), keep the load moderate' }); }
+            else if (avgE <= 4) { out.push({ id: 'effort:low', sport: '', text: 'Your last sessions felt easy (' + avgE + '/10 effort), so you are ready to push.', ctx: 'last sessions felt easy (' + avgE + '/10 effort), can push harder' }); }
+        }
+        // what the athlete told the coach after recent sessions (three weeks)
+        c.notes.filter(function (n) { return Date.now() - n.t < 21 * DAY; }).slice(-2).forEach(function (n) {
+            out.push({ id: 'note:' + n.t, sport: n.sport || '', text: 'You said after a ' + (n.sport || '') + ' session: \u201c' + n.text + '\u201d', ctx: 'said after a recent session: "' + n.text + '"' });
+        });
         out = out.filter(function (i) {
             var m = /^(easy|hard):part:/.exec(i.id);
             return !m || !out.some(function (o) { return o.sport === i.sport && o.id.indexOf(m[1] + ':focus:') === 0; });
@@ -164,7 +177,50 @@
         save(c);
         return fresh;
     }
+    // After a session: how hard it felt (1-10) and an optional note for the coach.
+    function checkoutHtml() {
+        var nums = [];
+        for (var i = 1; i <= 10; i++) { nums.push('<button type="button" class="co-n" data-rpe="' + i + '" aria-pressed="false">' + i + '</button>'); }
+        return '<form class="coach-checkout" data-coach-checkout>' +
+            '<div class="co-q" id="coRpeLabel">How hard was that session?</div>' +
+            '<div class="co-scale" role="group" aria-labelledby="coRpeLabel">' + nums.join('') + '</div>' +
+            '<div class="co-ends" aria-hidden="true"><span>Very easy</span><span>All-out</span></div>' +
+            '<label class="co-q" for="coNote">Anything your coach should know? <span>(optional)</span></label>' +
+            '<textarea id="coNote" rows="2" maxlength="200" placeholder="e.g. Left calf felt tight. Loved the passing drills."></textarea>' +
+            '<div class="co-row"><button type="submit" class="btn-chip">Tell your coach</button><span class="co-done" aria-live="polite"></span></div>' +
+            '</form>';
+    }
+    function saveCheckout(form) {
+        var c = load();
+        var h = history(), rec = h[h.length - 1];
+        if (!rec) { return; }
+        var pressed = form.querySelector('[data-rpe][aria-pressed="true"]');
+        var note = form.querySelector('textarea').value.replace(/\s+/g, ' ').trim().slice(0, 200);
+        if (!pressed && !note) { form.querySelector('.co-done').textContent = 'Pick a number or write a note first.'; return; }
+        if (pressed) {
+            c.efforts = c.efforts.filter(function (e) { return e.at !== rec.date; });
+            c.efforts.push({ at: rec.date, sport: rec.sport || '', rpe: Number(pressed.getAttribute('data-rpe')) });
+            c.efforts = c.efforts.slice(-30);
+        }
+        if (note) { c.notes.push({ t: Date.now(), sport: rec.sport || '', text: note }); c.notes = c.notes.slice(-10); }
+        save(c);
+        form.querySelector('.co-done').textContent = 'Thanks. Your coach will use this to plan your next sessions.';
+        form.querySelector('button[type="submit"]').textContent = 'Update';
+    }
+    document.addEventListener('click', function (e) {
+        var n = e.target.closest && e.target.closest('[data-coach-checkout] [data-rpe]');
+        if (!n) { return; }
+        n.parentNode.querySelectorAll('[data-rpe]').forEach(function (b) { b.setAttribute('aria-pressed', b === n ? 'true' : 'false'); });
+    });
+    document.addEventListener('submit', function (e) {
+        var f = e.target.closest && e.target.closest('[data-coach-checkout]');
+        if (f) { e.preventDefault(); saveCheckout(f); }
+    });
+
     function recapHtml() {
+        return checkoutHtml() + learnedRecapHtml();
+    }
+    function learnedRecapHtml() {
         var c = load();
         var fresh = takeNew();
         if (!c.about.trim()) {
@@ -177,6 +233,100 @@
             fresh.slice(0, 3).map(function (i) { return '<li>' + esc(i.text) + '</li>'; }).join('') + '</ul>' +
             '<button type="button" class="btn-chip" data-coach-edit>See everything</button></div>';
     }
+
+    // ------------------------------------------------------------------ coach's plan for today
+    // A suggestion for today's session from history, effort ratings, rest days, weak spots and the
+    // athlete's own goals. One tap fills Quick Start's focus and length.
+    var AREAS = {
+        basketball: ['Shooting', 'Ball handling', 'Footwork and defense', 'Conditioning'],
+        soccer: ['Ball control', 'Passing and finishing', 'Speed and agility', 'Endurance'],
+        tennis: ['Footwork', 'Groundstrokes', 'Serve and power', 'Recovery and mobility'],
+        football: ['Speed and starts', 'Agility', 'Position skills', 'Conditioning'],
+        baseball: ['Hitting', 'Throwing', 'Fielding', 'Speed'],
+        volleyball: ['Passing', 'Setting', 'Serving', 'Jumping'],
+        swimming: ['Technique', 'Endurance', 'Speed', 'Dryland strength'],
+        cricket: ['Batting', 'Bowling', 'Fielding', 'Fitness'],
+        rugby: ['Handling', 'Tackle technique', 'Speed and agility', 'Conditioning'],
+        golf: ['Full swing', 'Short game', 'Putting', 'Mobility and power']
+    };
+    var GENERIC = ['Skill technique', 'Speed and agility', 'Strength and power', 'Endurance'];
+    function words(t) { return String(t || '').toLowerCase().split(/[^a-z]+/).filter(function (w) { return w.length > 3 && w !== 'and'; }); }
+    function matches(area, text) { var t = String(text || '').toLowerCase(); return words(area).some(function (w) { return t.indexOf(w.slice(0, 5)) >= 0; }); }
+
+    function planToday(sport) {
+        if (!sport) { return null; }
+        var c = load(), h = history(), DAY = 864e5;
+        var areas = AREAS[String(sport).toLowerCase()] || GENERIC;
+        var hs = h.filter(function (r) { return same(r.sport, sport); });
+        var last = h[h.length - 1];
+        var days = last ? Math.floor((Date.now() - new Date(last.date).getTime()) / DAY) : null;
+        var usual = hs.length ? Math.round(hs.slice(-6).reduce(function (a, r) { return a + (Number(r.workoutLength) || 45); }, 0) / Math.min(6, hs.length) / 5) * 5 : 45;
+        var lastE = c.efforts.length ? c.efforts[c.efforts.length - 1] : null;
+        var lastHard = lastE && lastE.rpe >= 8 && Date.now() - new Date(lastE.at).getTime() < 2 * DAY;
+        var weekStart = new Date(); weekStart.setHours(0, 0, 0, 0); weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+        var thisWeek = h.filter(function (r) { return new Date(r.date) >= weekStart; }).length;
+
+        if (!hs.length) {
+            return { focus: areas[0], minutes: 30, tone: 'First session', why: 'A shorter all-round ' + sport + ' session to see where you are. Your coach plans from here.' };
+        }
+        if (lastHard && days !== null && days <= 1) {
+            return { focus: 'Recovery and mobility', minutes: Math.min(30, usual), tone: 'Recovery day', why: 'Your last session felt very hard (' + lastE.rpe + '/10). A lighter one today helps you come back stronger.' };
+        }
+        // weak spots, goals and variety
+        var recentFoci = hs.slice(-2).map(function (r) { return r.focus || ''; });
+        var about = c.about;
+        var weak = insights(c).filter(function (i) { return /^hard:focus:/.test(i.id) && same(i.sport, sport); }).map(function (i) { return i.id.split(':')[2]; });
+        var scored = areas.map(function (a, idx) {
+            var score = 0, why = [];
+            if (!recentFoci.some(function (f) { return matches(a, f); })) { score += 2; } else { why.push('repeat'); }
+            if (matches(a, about)) { score += 3; why.push('goal'); }
+            if (weak.some(function (w) { return matches(a, w); })) { score += 2; why.push('weak'); }
+            var lastAt = hs.map(function (r, i) { return matches(a, r.focus) ? i : -1; }).filter(function (i) { return i >= 0; }).pop();
+            if (lastAt === undefined) { score += 1; why.push('new'); }
+            return { a: a, score: score - idx * 0.01, why: why };
+        }).sort(function (x, y) { return y.score - x.score; });
+        var pick = scored[0];
+        var reasons = [];
+        if (pick.why.indexOf('goal') >= 0) { reasons.push('it is one of your goals'); }
+        if (pick.why.indexOf('weak') >= 0) { reasons.push('those drills have felt hard, so it needs work'); }
+        if (recentFoci.filter(Boolean).length && pick.why.indexOf('repeat') < 0) { var uf = recentFoci.filter(function (f, i, a) { return f && a.indexOf(f) === i; }); reasons.push(uf.length === 1 && recentFoci.length > 1 ? 'your last ' + recentFoci.length + ' sessions were all ' + uf[0] : 'your last sessions were ' + uf.join(' and ')); }
+        if (!reasons.length && pick.why.indexOf('new') >= 0) { reasons.push('you have not trained it yet'); }
+        var minutes = usual, tone = 'Build';
+        if (days !== null && days >= 4) { minutes = Math.max(20, usual - 15); tone = 'Ease back in'; reasons.push('it has been ' + days + ' days, so a bit shorter'); }
+        else if (thisWeek >= 5) { minutes = Math.max(20, usual - 10); tone = 'Steady'; reasons.push('you have trained ' + thisWeek + ' times this week, so keep it shorter'); }
+        var why = reasons.length ? 'Because ' + reasons.join(', ') + '.' : 'A balanced session for today.';
+        return { focus: pick.a, minutes: minutes, tone: tone, why: why.charAt(0).toUpperCase() + why.slice(1) };
+    }
+
+    function paintPlan() {
+        document.querySelectorAll('[data-coach-plan]').forEach(function (hostEl) {
+            var sport = '';
+            try { sport = window.__quickStartSportOverride || (typeof loadProfile === 'function' && loadProfile().defaultSport) || ''; } catch (e) {}
+            var p = planToday(sport);
+            if (!p) { hostEl.hidden = true; return; }
+            hostEl.hidden = false;
+            var f = document.getElementById('focus'), l = document.getElementById('workoutLength');
+            var using = f && l && f.value === p.focus && Number(l.value) === p.minutes;
+            hostEl.innerHTML = '<div class="qp-text"><span class="qp-k">Coach’s plan for today · ' + esc(p.tone) + '</span>' +
+                '<b>' + esc(p.focus) + ' · ' + p.minutes + ' min</b><span class="qp-why">' + esc(p.why) + '</span></div>' +
+                '<button type="button" class="btn-chip" data-plan-use aria-pressed="' + (using ? 'true' : 'false') + '">' + (using ? 'Using this plan' : 'Use this plan') + '</button>';
+            hostEl._plan = p;
+        });
+    }
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest && e.target.closest('[data-plan-use]');
+        if (!b) { return; }
+        var p = b.closest('[data-coach-plan]')._plan;
+        var f = document.getElementById('focus'), l = document.getElementById('workoutLength');
+        if (!p || !f || !l) { return; }
+        f.value = p.focus; f.dispatchEvent(new Event('input', { bubbles: true }));
+        l.value = String(Math.max(15, Math.min(180, p.minutes))); l.dispatchEvent(new Event('input', { bubbles: true }));
+        paintPlan();
+        var nb = document.querySelector('[data-plan-use]'); if (nb) { nb.focus(); }
+    });
+    document.addEventListener('click', function (e) {   // sport changed on Quick Start
+        if (e.target.closest && e.target.closest('[data-sport-pick], #sportSwitcherUse')) { setTimeout(paintPlan, 50); }
+    });
 
     // ------------------------------------------------------------------ summary line + card
     function summary() {
@@ -303,11 +453,14 @@
         open({ start: true, onContinue: function () { passThrough = true; try { b.click(); } finally { passThrough = false; } } });
     }, true);
 
-    document.addEventListener('cognicoach:coach', paintHosts);
+    document.addEventListener('cognicoach:coach', function () { paintHosts(); paintPlan(); });
+    ['focus', 'workoutLength'].forEach(function (id) { document.addEventListener('input', function (e) { if (e.target && e.target.id === id) { paintPlan(); } }); });
+    window.addEventListener('cognicoach:synced', paintPlan);
+    if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', function () { setTimeout(paintPlan, 300); }); } else { setTimeout(paintPlan, 300); }
     window.addEventListener('cognicoach:synced', paintHosts);
     document.addEventListener('cognicoach:session-end', function () { setTimeout(paintHosts, 100); });
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', paintHosts); } else { paintHosts(); }
 
     window.CogniCoachProfile = { context: context, apply: apply, strip: strip, forChat: forChat, insights: insights,
-        recapHtml: recapHtml, open: open, load: load, MARK: MARK };
+        recapHtml: recapHtml, open: open, planToday: planToday, load: load, MARK: MARK };
 })();

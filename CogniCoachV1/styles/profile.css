@@ -491,3 +491,24 @@ h3.coach-label { margin-top: 18px; }
 .qs-coach { flex-wrap: wrap; }
 .qs-coach .coach-sum { flex: 1 1 200px; min-width: 0; }
 .coach-ask { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; background: #fff4e8; color: #7a3d00; font-weight: 700; font-size: 0.88rem; }
+/* coach's plan for today */
+.qs-plan { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: -8px 0 18px; padding: 12px 14px; border-radius: 14px; background: linear-gradient(135deg, rgba(31, 122, 224, 0.08), rgba(255, 138, 52, 0.08)); border: 1px solid rgba(31, 122, 224, 0.25); }
+.qs-plan[hidden] { display: none; }
+.qp-text { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.qp-k { font-size: 0.74rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #a8520f; }
+.qp-text b { font-size: 1rem; color: var(--text-white, #172033); }
+.qp-why { font-size: 0.82rem; color: var(--text-gray); line-height: 1.45; }
+.qs-plan .btn-chip { flex: none; box-shadow: none; }
+.qs-plan .btn-chip[aria-pressed="true"] { background: var(--primary-blue); color: #fff; }
+/* post-session check-in */
+.coach-checkout { margin: 16px 0 0; padding: 14px 16px; border-radius: 16px; background: #f1f6fc; text-align: left; }
+.co-q { display: block; margin: 0 0 8px; font-size: 0.85rem; font-weight: 700; color: #172033; text-transform: none; letter-spacing: 0; }
+.co-q span { font-weight: 400; color: #56657b; }
+.co-scale { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
+.co-n { min-height: 40px; border-radius: 10px; border: 1.5px solid #c9d8ea; background: #fff; font: inherit; font-weight: 700; color: #172033; cursor: pointer; padding: 0; }
+.co-n[aria-pressed="true"] { background: var(--primary-blue, #1a6dcc); border-color: var(--primary-blue, #1a6dcc); color: #fff; }
+.co-n:focus-visible { outline: 3px solid var(--primary-blue, #1a6dcc); outline-offset: 2px; }
+.co-ends { display: flex; justify-content: space-between; margin: 4px 0 12px; font-size: 0.72rem; color: #56657b; }
+.coach-checkout textarea { width: 100%; font: inherit; font-size: 0.9rem; }
+.co-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.co-done { font-size: 0.82rem; color: #17693a; }

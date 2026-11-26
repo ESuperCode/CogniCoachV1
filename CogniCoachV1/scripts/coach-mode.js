@@ -497,7 +497,11 @@
             if (phase !== 'work') { setPhase('work'); }
             if (d.remaining > 0 && d.remaining <= 3) { beep(880, 150); }
             if (!cuesByReadAloud()) {
-                if (d.total >= 60 && !cue.half && d.remaining === Math.floor(d.total / 2)) { cue.half = true; speak('Halfway.', true); }
+                if (d.total >= 60 && !cue.half && d.remaining === Math.floor(d.total / 2)) {
+                    cue.half = true;
+                    var cc = window.CogniCoachCues ? window.CogniCoachCues.cues() : [];
+                    speak('Halfway.' + (cc.length ? ' ' + cc[Math.floor(Math.random() * cc.length)] + '.' : ''), true);
+                }
                 if (d.total > 20 && !cue.ten && d.remaining === 10) { cue.ten = true; speak('10 seconds.', true); }
             }
         } else if (d.state === 'complete') {

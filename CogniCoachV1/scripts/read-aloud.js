@@ -124,6 +124,12 @@
             if (secs) { q.push({ text: 'Time: ' + minutesText(secs) + '.' }); }
         }
         q = q.concat(descriptionChunks(desc));
+        // coach cues (scripts/coach-cues.js)
+        var cues = document.querySelectorAll('#coachCues .cc-list li');
+        if (cues.length) {
+            q.push({ text: 'Coach cues.', el: document.querySelector('#coachCues .cc-label') });
+            Array.prototype.forEach.call(cues, function (li) { if (clean(li.textContent)) { q.push({ text: clean(li.textContent) + '.', el: li }); } });
+        }
         return q;
     }
 

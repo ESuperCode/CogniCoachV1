@@ -1046,7 +1046,18 @@ function normalizeDrillData(drillData) {
         drillData?.targeted_muscles ||
         [];
 
+    // Coaching extras from the drill backend (cues, easier / harder versions): plain text only.
+    const textOnly = (t) => String(t || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const extras = {};
+    if (Array.isArray(drillData?.cues)) {
+        const cues = drillData.cues.map(textOnly).filter(Boolean).slice(0, 3);
+        if (cues.length) extras.cues = cues;
+    }
+    if (textOnly(drillData?.easier)) extras.easier = textOnly(drillData.easier).slice(0, 200);
+    if (textOnly(drillData?.harder)) extras.harder = textOnly(drillData.harder).slice(0, 200);
+
     return {
+        ...extras,
         name: drillData?.name || drillData?.Name || 'Drill',
         description: drillData?.description || drillData?.Description || 'No description provided.',
         focus: drillData?.focus || drillData?.Focus || appState.setup.focus || 'General',
