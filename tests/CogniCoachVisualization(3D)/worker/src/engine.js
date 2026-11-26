@@ -265,7 +265,7 @@ export function localScript(movement) {
 // ---------------------------------------------------------------------------
 // The model call (OpenAI Responses API, structured output)
 // ---------------------------------------------------------------------------
-export async function callModel(env, instructions, input, { effort, schema, name, maxTokens, timeoutMs }) {
+export async function callModel(env, instructions, input, { effort, schema, name, maxTokens, timeoutMs, model }) {
   if (!env.OPENAI_API_KEY) {
     const e = new Error("OPENAI_API_KEY is not configured for the motion service.");
     e.status = 503;
@@ -280,7 +280,7 @@ export async function callModel(env, instructions, input, { effort, schema, name
       signal: ctrl.signal,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.OPENAI_API_KEY}` },
       body: JSON.stringify({
-        model: MODEL,
+        model: model || MODEL,
         instructions,
         input,
         reasoning: { effort },

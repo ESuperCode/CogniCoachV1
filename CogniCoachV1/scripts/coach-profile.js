@@ -28,6 +28,7 @@
         c.seen = Array.isArray(c.seen) ? c.seen : [];
         c.efforts = Array.isArray(c.efforts) ? c.efforts : [];   // [{ at: session date, sport, rpe 1-10 }]
         c.notes = Array.isArray(c.notes) ? c.notes : [];         // [{ t, sport, text }] the athlete's own post-session notes
+        c.form = Array.isArray(c.form) ? c.form : [];           // [{ t, sport, drill, pattern, view, score, reps, faults: [rule ids] }] camera form checks
         return c;
     }
     function save(c) {
@@ -100,6 +101,24 @@
             var m = /^(easy|hard):part:/.exec(i.id);
             return !m || !out.some(function (o) { return o.sport === i.sport && o.id.indexOf(m[1] + ':focus:') === 0; });
         });
+        // camera form checks: a fault seen in 2 or more of the last checks of the same movement
+        var FORM_WHAT = { shallow: 'not squatting to depth', knees_in: 'knees caving inward', chest_drop: 'chest dropping forward', uneven: 'shifting weight to one side',
+            rushed: 'rushing the way down', lunge_shallow: 'shallow lunges', lean: 'leaning forward in lunges', knee_dominant: 'bending the knees instead of hinging',
+            hinge_short: 'a small hip hinge', pushup_shallow: 'not lowering far enough', hips_sag: 'hips sagging', hips_pike: 'hips piking up',
+            stiff_landing: 'landing with stiff knees', no_lockout: 'not reaching full extension overhead', arch: 'arching the back overhead',
+            wallsit_high: 'holding wall sits too high', small_reps: 'reps shrinking' };
+        var PAT = { squat: 'squats', lunge: 'lunges', hinge: 'hip hinges', jump: 'jumps', pushup: 'push-ups', overhead: 'overhead work', plank: 'planks', wallsit: 'wall sits', general: 'drills' };
+        var since = Date.now() - 45 * 864e5, byPat = {};
+        c.form.filter(function (f) { return f.t > since; }).forEach(function (f) { var k = (f.sport || '') + '|' + f.pattern; (byPat[k] = byPat[k] || []).push(f); });
+        Object.keys(byPat).forEach(function (k) {
+            var checks = byPat[k].slice(-4), sport = k.split('|')[0], pat = k.split('|')[1], counts = {};
+            checks.forEach(function (f) { (f.faults || []).forEach(function (id) { counts[id] = (counts[id] || 0) + 1; }); });
+            Object.keys(counts).filter(function (id) { return counts[id] >= 2 && FORM_WHAT[id]; }).slice(0, 2).forEach(function (id) {
+                out.push({ id: 'form:' + pat + ':' + id, sport: sport,
+                    text: 'Form check: ' + FORM_WHAT[id] + ' on ' + (PAT[pat] || 'drills') + ' (' + counts[id] + ' of your last ' + checks.length + ' checks).',
+                    ctx: 'camera form check shows ' + FORM_WHAT[id] + ' on ' + (PAT[pat] || 'drills') + ', build in work and cues to fix it' });
+            });
+        });
         // across sports: energy and finishing
         var ready = h.slice(-8).map(function (r) { return r.readiness; }).filter(Boolean);
         if (ready.length >= 4) {
@@ -168,6 +187,17 @@
             save(c);
         } catch (err) {}
     });
+
+    // A camera form check finished (scripts/form-check.js): keep the fault names, not any video.
+    function recordForm(entry) {
+        var c = load();
+        if (!c.learn || !entry || !entry.pattern) { return; }
+        c.form.push({ t: Date.now(), sport: String(entry.sport || ''), drill: String(entry.drill || '').slice(0, 80), pattern: String(entry.pattern),
+            view: entry.view || '', score: typeof entry.score === 'number' ? entry.score : null, reps: entry.reps || 0,
+            faults: Array.isArray(entry.faults) ? entry.faults.slice(0, 6).map(String) : [] });
+        c.form = c.form.slice(-40);
+        save(c);
+    }
 
     // New things learned since last time (for the session recap).
     function takeNew() {
@@ -462,5 +492,5 @@
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', paintHosts); } else { paintHosts(); }
 
     window.CogniCoachProfile = { context: context, apply: apply, strip: strip, forChat: forChat, insights: insights,
-        recapHtml: recapHtml, open: open, planToday: planToday, load: load, MARK: MARK };
+        recapHtml: recapHtml, open: open, planToday: planToday, load: load, recordForm: recordForm, MARK: MARK };
 })();

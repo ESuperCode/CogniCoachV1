@@ -12,9 +12,12 @@
 //   POST /generate   {movement, dominant_side?, extra_instructions?, use_cache?} -> plan (script, title, cues ...)
 //   POST /validate   {script} -> {ok, warnings} or 400 with the compile error (no model call)
 //   GET  /motions    the database catalog
+//   POST /form-feedback {drill, summary, ...} -> coach feedback for a camera form check (src/form.js, gpt-5-nano;
+//                    the browser sends measurements as text, never video)
 import { ENGINE_VERSION, MODEL, VIEWS, localScript, planScript, warmUp } from "./engine.js";
 import { MOTIONS, MOTION_NAMES } from "./db.js";
 import { ScriptError, compileScript } from "./script.js";
+import { FORM_MODEL, formFeedback } from "./form.js";
 
 warmUp(); // start-up time (not request CPU): indexes + JIT
 
@@ -118,10 +121,10 @@ async function cachePut(env, key, plan) {
 }
 
 // Daily cap on model calls (protects the OpenAI bill). KV is eventually consistent: approximate.
-async function underDailyCap(env) {
-  const limit = Number(env.DAILY_MODEL_LIMIT || 300);
+async function underDailyCap(env, kind = "calls", fallbackLimit = 300) {
+  const limit = Number((kind === "calls" ? env.DAILY_MODEL_LIMIT : env.FORM_DAILY_LIMIT) || fallbackLimit);
   if (!env.MOTION_CACHE || !(limit > 0)) return true;
-  const key = "calls:" + new Date().toISOString().slice(0, 10);
+  const key = kind + ":" + new Date().toISOString().slice(0, 10);
   try {
     const n = Number((await env.MOTION_CACHE.get(key)) || 0);
     if (n >= limit) return false;
@@ -219,14 +222,14 @@ export default {
     try {
       if (path === "/" || path === "/health") {
         return withCors(json({
-          ok: true, engine_version: ENGINE_VERSION, model: MODEL, compile: "client",
+          ok: true, engine_version: ENGINE_VERSION, model: MODEL, form_model: FORM_MODEL, compile: "client",
           api_key_configured: !!env.OPENAI_API_KEY, motions: MOTION_NAMES.length,
           protections: { origins: allowedOrigins(env), dev_code: !!env.DEV_CODE, turnstile: !!env.TURNSTILE_SECRET,
             rate_limit_per_minute: Number(env.RATE_LIMIT_PER_MINUTE || 10), daily_model_limit: Number(env.DAILY_MODEL_LIMIT || 300),
             shared_cache: !!env.MOTION_CACHE },
         }));
       }
-      const known = { "/generate": "POST", "/validate": "POST", "/motions": "GET" };
+      const known = { "/generate": "POST", "/validate": "POST", "/motions": "GET", "/form-feedback": "POST" };
       if (!known[path]) return withCors(json({ detail: "not found" }, 404));
       if (request.method !== known[path]) return withCors(json({ detail: "method not allowed" }, 405));
 
@@ -245,6 +248,16 @@ export default {
           return withCors(json({ detail: "Bot check failed - refresh the page and try again.", code: "turnstile_failed" }, 403));
         }
         return withCors(await generate(request, env, ctx, who));
+      }
+      if (path === "/form-feedback") {
+        if (await rateLimited({ ...env, RATE_LIMITER: null }, "form:" + ip, perMinute)) {
+          return withCors(json({ detail: "Too many form checks - wait a minute and try again." }, 429, { "Retry-After": "60" }));
+        }
+        if (!(await underDailyCap(env, "form-calls", 1000))) {
+          return withCors(json({ detail: "The coach reached today's limit of AI feedback. Your measured feedback is still shown.", code: "daily_limit" }, 429));
+        }
+        const r = await formFeedback(await readBody(request), env);
+        return withCors(json(r.data, r.status));
       }
       if (await rateLimited({ ...env, RATE_LIMITER: null }, "light:" + ip, perMinute * 6)) {
         return withCors(json({ detail: "Too many requests - wait a minute and try again." }, 429, { "Retry-After": "60" }));

@@ -73,5 +73,6 @@ Optional KV namespace bound as `MOTION_CACHE` shares the plan cache and the dail
 - `POST /generate` `{movement, dominant_side?, extra_instructions?, use_cache?}` -> `{script, title, coaching_cues, camera_view, steps, llm_calls, timing, compile: "client"}`
 - `POST /validate` `{script}` -> `{ok, warnings}` or 400 with the error
 - `GET /motions` the catalog
+- `POST /form-feedback` `{drill, summary, sport?, athlete?, cues?}` -> `{headline, praise, fix, cue, next, model, seconds, tokens}`: the coach note for a camera Form Check. The site sends a text summary of measured movement (never video); one gpt-5-nano call (src/form.js). Own per-IP limit and daily cap (`FORM_DAILY_LIMIT`, default 1000).
 
 The model is fixed to `gpt-5-mini` in `src/engine.js` (not configurable on purpose).

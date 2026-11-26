@@ -90,7 +90,9 @@
         'eye': '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
         'plus': '<path d="M12 5v14"/><path d="M5 12h14"/>',
         'minus': '<path d="M5 12h14"/>',
-        'whistle': '<circle cx="8.5" cy="14.5" r="5"/><path d="M12 11l9-4v4l-6 2.5"/><circle cx="8.5" cy="14.5" r="1.5"/>'
+        'whistle': '<circle cx="8.5" cy="14.5" r="5"/><path d="M12 11l9-4v4l-6 2.5"/><circle cx="8.5" cy="14.5" r="1.5"/>',
+        'camera': '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
+        'pose': '<circle cx="12" cy="4.5" r="2"/><path d="M12 7v6"/><path d="M7 9l5 1.5L17 9"/><path d="M12 13l-3.5 7"/><path d="M12 13l3.5 7"/><circle cx="7" cy="9" r="0.6" fill="currentColor"/><circle cx="17" cy="9" r="0.6" fill="currentColor"/>'
     };
 
     // ---------------------------------------------------------------- game icons (colour)
