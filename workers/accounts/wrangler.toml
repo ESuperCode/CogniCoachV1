@@ -1,0 +1,33 @@
+# CogniCoach accounts Worker (free plan: SQLite-backed Durable Objects, no paid features).
+# Secret (optional): DEV_CODE - lets other origins / tools call the API with the header X-Dev-Code.
+name = "cognicoach-accounts"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+workers_dev = true
+preview_urls = false
+
+[vars]
+ALLOWED_ORIGINS = "https://cognicoachai.com,https://www.cognicoachai.com"
+# Sign in with Google: the OAuth web client ID from Google Cloud Console (public, not a secret).
+# Empty = the Google button stays hidden.
+GOOGLE_CLIENT_ID = "755545304533-589e3fhd1g6rdltlranqhg1p579a0l83.apps.googleusercontent.com"
+
+[[durable_objects.bindings]]
+name = "USERS"
+class_name = "UserAccount"
+
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "SocialHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["UserAccount"]
+
+# v2: one shared SQLite Durable Object for friends, public profiles and weekly leagues (src/social.js).
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["SocialHub"]
+
+[observability]
+enabled = true

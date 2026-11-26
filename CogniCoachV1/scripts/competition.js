@@ -163,19 +163,26 @@ async function generateCompetitionNotes(setup) {
         const appPassword = getCompetitionAppPassword();
         if (appPassword) headers["X-App-Password"] = appPassword;
 
-        const response = await fetch(COMPETITION_NOTES_API_URL, {
+        // Your coach (scripts/coach-profile.js): who the athlete is and what training has shown.
+        const coachCtx = window.CogniCoachProfile ? window.CogniCoachProfile.context(sport) : '';
+        const notesBody = (focus, token) => JSON.stringify({
+            sport,
+            focus,
+            muscleGroup: setup.muscleGroup || '',
+            level: String(setup.level != null ? setup.level : ''),
+            location: setup.location || '',
+            priorNotes: prior,
+            turnstileToken: token
+        });
+        const baseFocus = setup.focus || '';
+        let response = await fetch(COMPETITION_NOTES_API_URL, {
             method: "POST",
             headers,
-            body: JSON.stringify({
-                sport,
-                focus: setup.focus || '',
-                muscleGroup: setup.muscleGroup || '',
-                level: String(setup.level != null ? setup.level : ''),
-                location: setup.location || '',
-                priorNotes: prior,
-                turnstileToken
-            })
+            body: notesBody(coachCtx ? (baseFocus || 'General') + window.CogniCoachProfile.MARK + coachCtx : baseFocus, turnstileToken)
         });
+        if (coachCtx && [400, 413, 422].includes(response.status)) {   // backend refused the longer text: plain request
+            response = await fetch(COMPETITION_NOTES_API_URL, { method: "POST", headers, body: notesBody(baseFocus, await getCompetitionTurnstileToken()) });
+        }
 
         if (response.status === 401) {
             sessionStorage.removeItem("cognicoach_dev_password");
@@ -372,17 +379,19 @@ async function handleCompetitionChatSubmit(event) {
         const appPassword = getCompetitionAppPassword();
         if (appPassword) headers["X-App-Password"] = appPassword;
 
-        const response = await fetch(COMPETITION_CHAT_API_URL, {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
-                sport,
-                notes,
-                history: competitionChatHistory.slice(-16, -1), // recent context, excludes the message just sent (sent separately)
-                message,
-                turnstileToken
-            })
+        const chatBody = (msg, token) => JSON.stringify({
+            sport,
+            notes,
+            history: competitionChatHistory.slice(-16, -1), // recent context, excludes the message just sent (sent separately)
+            message: msg,
+            turnstileToken: token
         });
+        // Your coach (scripts/coach-profile.js): answers know who is asking.
+        const withCoach = window.CogniCoachProfile ? window.CogniCoachProfile.forChat(message, sport) : message;
+        let response = await fetch(COMPETITION_CHAT_API_URL, { method: "POST", headers, body: chatBody(withCoach, turnstileToken) });
+        if (withCoach !== message && [400, 413, 422].includes(response.status)) {
+            response = await fetch(COMPETITION_CHAT_API_URL, { method: "POST", headers, body: chatBody(message, await getCompetitionTurnstileToken()) });
+        }
 
         if (response.status === 401) {
             sessionStorage.removeItem("cognicoach_dev_password");

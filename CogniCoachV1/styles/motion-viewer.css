@@ -1,0 +1,706 @@
+/* 3D Motion Preview (scripts/motion-viewer.js) - sits between the muscle diagram and the timer. */
+.motion-viewer {
+    position: relative;
+    margin: 40px 0 10px;
+    padding: 22px;
+    border-radius: 18px;
+    background:
+        radial-gradient(120% 80% at 0% 0%, rgba(31, 122, 224, 0.07), transparent 60%),
+        radial-gradient(120% 80% at 100% 100%, rgba(255, 138, 52, 0.08), transparent 60%),
+        var(--surface-strong, #fff);
+    border: 1px solid var(--line, rgba(118, 140, 168, 0.24));
+    box-shadow: var(--soft-shadow, 0 22px 55px rgba(30, 50, 80, 0.13));
+    text-align: left;
+}
+
+.motion-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.motion-heading {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    background: linear-gradient(90deg, var(--primary-blue), var(--secondary-orange));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.motion-sub {
+    margin-top: 4px;
+    font-size: 0.85rem;
+    color: var(--text-gray);
+}
+
+.motion-side-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.motion-side-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.68rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-gray);
+}
+
+.motion-side {
+    display: inline-flex;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--medium-gray, #edf3fb);
+    border: 1px solid var(--line, rgba(118, 140, 168, 0.24));
+    flex-shrink: 0;
+}
+
+.motion-side button {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-gray);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.motion-side button.active {
+    background: linear-gradient(135deg, var(--primary-blue), var(--secondary-orange));
+    color: var(--text-white);
+    box-shadow: 0 4px 14px var(--glow-blue);
+}
+
+/* Stage: the Unity iframe and the overlays share one rounded box. */
+.motion-stage {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    max-height: 68vh;
+    border-radius: 16px;
+    overflow: hidden;
+    background:
+        radial-gradient(55% 60% at 50% 42%, rgba(31, 122, 224, 0.12), transparent 70%),
+        linear-gradient(90deg, rgba(31, 122, 224, 0.07) 1px, transparent 1px),
+        linear-gradient(rgba(31, 122, 224, 0.07) 1px, transparent 1px),
+        linear-gradient(180deg, #f9fbff, #eaf1fb);
+    background-size: auto, 34px 34px, 34px 34px, auto;
+    border: 1px solid var(--line-strong, rgba(31, 122, 224, 0.34));
+    box-shadow: 0 14px 40px rgba(30, 50, 80, 0.12);
+    outline: none;
+    isolation: isolate;
+}
+
+.motion-viewer[data-mode="idle"] .motion-stage,
+.motion-viewer[data-mode="error"] .motion-stage {
+    aspect-ratio: auto;
+    height: 300px;
+}
+
+.motion-stage:focus-visible {
+    box-shadow: 0 0 0 3px var(--glow-blue), 0 14px 40px rgba(30, 50, 80, 0.12);
+}
+
+.motion-frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+    opacity: 0;
+    transition: opacity 0.6s ease;
+    background: transparent;
+}
+
+.motion-viewer[data-mode="ready"] .motion-frame { opacity: 1; }
+
+.motion-idle, .motion-loader, .motion-error {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 24px;
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+    z-index: 2;
+}
+
+.motion-viewer[data-mode="idle"] .motion-idle,
+.motion-viewer[data-mode="loading"] .motion-loader,
+.motion-viewer[data-mode="error"] .motion-error {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Idle: faint grid floor + the button */
+.motion-idle::before {
+    content: "";
+    position: absolute;
+    left: -10%;
+    right: -10%;
+    bottom: -30%;
+    height: 70%;
+    background-image:
+        linear-gradient(rgba(31, 122, 224, 0.22) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(31, 122, 224, 0.22) 1px, transparent 1px);
+    background-size: 40px 40px;
+    transform: perspective(300px) rotateX(60deg);
+    mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+    -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+    z-index: -1;
+}
+
+.motion-idle .motion-generate { padding: 16px 34px; font-size: 1rem; }
+
+.motion-idle-note { font-size: 0.85rem; color: var(--text-gray); }
+
+/* ===========================================================================
+   Loader: a jointed 3D-style mannequin sprinting on a moving motion-capture floor
+   (thigh -> shin -> foot and upper arm -> forearm are nested, so each joint swings
+   from its parent), with mocap joint markers, a ghost motion trail, speed streaks,
+   a scanning laser and HUD brackets.
+   =========================================================================== */
+.mc-scene {
+    --cycle: 0.72s;
+    --limb: linear-gradient(90deg, #2a8cf0, #6cc4ff 45%, #1f7ae0);
+    --limb-back: linear-gradient(90deg, #17589f, #3b8fe0 45%, #17589f);
+    position: relative;
+    width: 300px;
+    height: 230px;
+    border-radius: 14px;
+    overflow: hidden;
+    background:
+        radial-gradient(70% 60% at 50% 45%, rgba(31, 122, 224, 0.16), transparent 70%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(234, 241, 251, 0.6));
+    border: 1px solid rgba(31, 122, 224, 0.18);
+    box-shadow: 0 18px 40px rgba(30, 50, 80, 0.12), inset 0 0 30px rgba(31, 122, 224, 0.08);
+}
+
+/* HUD corner brackets */
+.mc-hud { position: absolute; width: 18px; height: 18px; border: 2px solid var(--primary-blue); opacity: 0.75; z-index: 6; animation: mcHud 1.6s ease-in-out infinite; }
+.mc-hud-tl { left: 10px; top: 10px; border-right: 0; border-bottom: 0; border-top-left-radius: 6px; }
+.mc-hud-tr { right: 10px; top: 10px; border-left: 0; border-bottom: 0; border-top-right-radius: 6px; }
+.mc-hud-bl { left: 10px; bottom: 10px; border-right: 0; border-top: 0; border-bottom-left-radius: 6px; border-color: var(--secondary-orange); }
+.mc-hud-br { right: 10px; bottom: 10px; border-left: 0; border-top: 0; border-bottom-right-radius: 6px; border-color: var(--secondary-orange); }
+
+.mc-rec, .mc-frame {
+    position: absolute;
+    top: 13px;
+    z-index: 6;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.62rem;
+    letter-spacing: 1px;
+    color: var(--text-gray);
+}
+.mc-rec { left: 36px; display: flex; align-items: center; gap: 5px; font-weight: 700; color: #e0493a; }
+.mc-rec i { width: 7px; height: 7px; border-radius: 50%; background: #ff4b3a; box-shadow: 0 0 8px #ff4b3a; animation: mcBlink 1s steps(2, start) infinite; }
+.mc-frame { right: 36px; }
+.mc-frame b { color: var(--primary-blue); font-weight: 700; }
+
+/* Perspective grid floor rushing toward the back (the runner moves right) */
+.mc-floor {
+    position: absolute;
+    left: -50%;
+    right: -50%;
+    bottom: -40px;
+    height: 120px;
+    background-image:
+        linear-gradient(rgba(31, 122, 224, 0.45) 1.5px, transparent 1.5px),
+        linear-gradient(90deg, rgba(31, 122, 224, 0.45) 1.5px, transparent 1.5px);
+    background-size: 32px 32px;
+    transform: perspective(220px) rotateX(62deg);
+    transform-origin: 50% 0;
+    animation: mcFloor calc(var(--cycle) * 1) linear infinite;
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent);
+    mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent);
+}
+
+/* Speed streaks */
+.mc-streaks i {
+    position: absolute;
+    right: -80px;
+    height: 2px;
+    width: 70px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, rgba(31, 122, 224, 0.55));
+    animation: mcStreak 0.9s linear infinite;
+}
+.mc-streaks i:nth-child(1) { top: 62px; animation-delay: -0.1s; }
+.mc-streaks i:nth-child(2) { top: 96px; width: 110px; animation-delay: -0.45s; background: linear-gradient(90deg, transparent, rgba(255, 138, 52, 0.55)); }
+.mc-streaks i:nth-child(3) { top: 128px; animation-delay: -0.7s; }
+.mc-streaks i:nth-child(4) { top: 150px; width: 50px; animation-delay: -0.25s; }
+.mc-streaks i:nth-child(5) { top: 80px; width: 40px; animation-delay: -0.6s; background: linear-gradient(90deg, transparent, rgba(255, 138, 52, 0.45)); }
+
+.mc-shadow {
+    position: absolute;
+    left: 50%;
+    top: 186px;
+    width: 70px;
+    height: 12px;
+    margin-left: -35px;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(23, 32, 51, 0.35), transparent);
+    animation: mcShadow calc(var(--cycle) / 2) ease-in-out infinite;
+}
+
+/* The mannequin. Body origin = hip joint. */
+.mc-runner { position: absolute; left: 50%; top: 104px; width: 0; height: 0; z-index: 3; }
+.mc-body { position: absolute; left: 0; top: 0; animation: mcBob calc(var(--cycle) / 2) ease-in-out infinite; }
+.mc-runner > .mc-body { transform-origin: 0 0; }
+
+.mc-torso { position: absolute; left: -12px; top: -54px; width: 24px; height: 56px; transform-origin: 12px 54px; transform: rotate(14deg); z-index: 2; }
+.mc-chest {
+    position: absolute;
+    inset: 0;
+    border-radius: 12px 12px 10px 10px;
+    background: var(--limb);
+    box-shadow: inset -4px -6px 10px rgba(10, 50, 110, 0.35), 0 4px 10px rgba(31, 122, 224, 0.25);
+    z-index: 1;
+}
+.mc-head {
+    position: absolute;
+    left: 0;
+    top: -27px;
+    width: 24px;
+    height: 25px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 65% 35%, #8fd4ff, #2a8cf0 55%, #1b67c2);
+    box-shadow: inset -3px -4px 8px rgba(10, 50, 110, 0.35);
+    z-index: 3;
+    animation: mcHead calc(var(--cycle) / 2) ease-in-out infinite;
+}
+
+.mc-limb, .mc-lower { position: absolute; border-radius: 999px; }
+.mc-limb::before {   /* mocap joint marker */
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 0;
+    width: 7px;
+    height: 7px;
+    margin: -1px 0 0 -3.5px;
+    border-radius: 50%;
+    background: var(--secondary-orange);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 0 10px var(--secondary-orange);
+    z-index: 5;
+}
+.mc-lower::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 1px;
+    width: 6px;
+    height: 6px;
+    margin-left: -3px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 2px var(--secondary-orange), 0 0 8px var(--secondary-orange);
+    z-index: 5;
+}
+
+.mc-leg { left: -7px; top: -7px; width: 14px; height: 36px; transform-origin: 7px 7px; background: var(--limb); animation: mcThigh var(--cycle) linear infinite; }
+.mc-leg .mc-lower { left: 0; top: 29px; width: 14px; height: 36px; transform-origin: 7px 7px; background: var(--limb); animation: mcShin var(--cycle) linear infinite; }
+.mc-foot { position: absolute; left: 3px; bottom: -2px; width: 20px; height: 9px; border-radius: 6px 9px 5px 5px; background: var(--limb); }
+.mc-leg.mc-back { z-index: 0; }
+.mc-leg.mc-front { z-index: 4; }
+
+.mc-arm { left: 6px; top: 4px; width: 12px; height: 28px; transform-origin: 6px 6px; background: var(--limb); animation: mcArm var(--cycle) linear infinite; }
+.mc-arm .mc-lower { left: 0; top: 22px; width: 12px; height: 26px; transform-origin: 6px 6px; background: var(--limb); animation: mcForearm var(--cycle) linear infinite; }
+.mc-arm.mc-back { z-index: 0; }
+.mc-arm.mc-front { z-index: 4; }
+
+/* Back-side limbs are darker and half a stride out of phase */
+.mc-back, .mc-back .mc-lower, .mc-back .mc-foot { background: var(--limb-back); }
+.mc-back, .mc-back .mc-lower { animation-delay: calc(var(--cycle) / -2); }
+
+/* Ghost trail (motion blur) */
+.mc-ghost { z-index: 2; pointer-events: none; }
+.mc-ghost .mc-limb::before, .mc-ghost .mc-lower::before { display: none; }
+.mc-ghost-1 { margin-left: -16px; opacity: 0.28; filter: saturate(0.6) blur(0.5px); }
+.mc-ghost-2 { margin-left: -32px; opacity: 0.12; filter: saturate(0.4) blur(1px); }
+.mc-ghost-1 * { animation-delay: -0.06s !important; }
+.mc-ghost-2 * { animation-delay: -0.12s !important; }
+.mc-ghost-1 .mc-back, .mc-ghost-1 .mc-back .mc-lower { animation-delay: calc(var(--cycle) / -2 - 0.06s) !important; }
+.mc-ghost-2 .mc-back, .mc-ghost-2 .mc-back .mc-lower { animation-delay: calc(var(--cycle) / -2 - 0.12s) !important; }
+
+/* Scanning laser */
+.mc-scan {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 2px;
+    z-index: 5;
+    background: linear-gradient(90deg, transparent, var(--primary-blue) 20%, #7fd0ff 50%, var(--secondary-orange) 80%, transparent);
+    box-shadow: 0 0 12px var(--primary-blue), 0 0 24px rgba(31, 122, 224, 0.5);
+    animation: mcScan 2.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+.mc-scan::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 2px;
+    height: 46px;
+    background: linear-gradient(to top, rgba(31, 122, 224, 0.16), transparent);
+}
+
+/* Run cycle (facing right): negative = swing forward. 0% = front foot strike. */
+@keyframes mcThigh {
+    0%   { transform: rotate(-42deg); }
+    25%  { transform: rotate(-8deg); }
+    50%  { transform: rotate(34deg); }
+    70%  { transform: rotate(18deg); }
+    85%  { transform: rotate(-30deg); }
+    100% { transform: rotate(-42deg); }
+}
+@keyframes mcShin {
+    0%   { transform: rotate(14deg); }
+    25%  { transform: rotate(30deg); }
+    50%  { transform: rotate(48deg); }
+    68%  { transform: rotate(118deg); }
+    85%  { transform: rotate(70deg); }
+    100% { transform: rotate(14deg); }
+}
+@keyframes mcArm {
+    0%   { transform: rotate(42deg); }
+    50%  { transform: rotate(-52deg); }
+    100% { transform: rotate(42deg); }
+}
+@keyframes mcForearm {
+    0%   { transform: rotate(-58deg); }
+    50%  { transform: rotate(-104deg); }
+    100% { transform: rotate(-58deg); }
+}
+@keyframes mcBob { 0%, 100% { transform: translateY(2px); } 50% { transform: translateY(-7px); } }
+@keyframes mcHead { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+@keyframes mcShadow { 0%, 100% { transform: scaleX(1); opacity: 1; } 50% { transform: scaleX(0.72); opacity: 0.6; } }
+@keyframes mcFloor { from { background-position: 0 0; } to { background-position: -32px 0; } }
+@keyframes mcStreak { from { transform: translateX(0); opacity: 0; } 15% { opacity: 1; } to { transform: translateX(-460px); opacity: 0; } }
+@keyframes mcScan { 0% { top: 0; opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { top: 228px; opacity: 0; } }
+@keyframes mcBlink { to { visibility: hidden; } }
+@keyframes mcHud { 0%, 100% { transform: scale(1); opacity: 0.75; } 50% { transform: scale(1.12); opacity: 1; } }
+
+.motion-loader-text {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.95rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-white);
+}
+
+.motion-loader-text .dots i {
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background: var(--secondary-orange);
+    animation: motionDot 1.2s ease-in-out infinite;
+}
+.motion-loader-text .dots i:nth-child(2) { animation-delay: 0.15s; }
+.motion-loader-text .dots i:nth-child(3) { animation-delay: 0.3s; }
+
+.motion-loader-bar {
+    width: min(320px, 70%);
+    height: 6px;
+    border-radius: 999px;
+    background: var(--light-gray, #dbe7f3);
+    overflow: hidden;
+}
+
+.motion-loader-bar span {
+    display: block;
+    height: 100%;
+    width: 15%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--primary-blue), var(--secondary-orange));
+    box-shadow: 0 0 12px var(--glow-blue);
+    transition: width 0.6s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.motion-loader-bar span::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+    animation: motionShimmer 1.2s linear infinite;
+}
+
+.motion-error-text { color: #c0392b; max-width: 460px; line-height: 1.6; }
+
+/* Caption over the animation */
+.motion-caption {
+    position: absolute;
+    left: 14px;
+    top: 14px;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+
+.motion-viewer[data-mode="ready"] .motion-caption { opacity: 1; }
+
+.motion-title {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(6px);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #fff;
+}
+
+/* Controls: play/pause, smooth scrubber, time, regenerate */
+.motion-controls {
+    display: none;
+    align-items: center;
+    gap: 14px;
+    margin-top: 14px;
+    animation: motionFadeUp 0.45s ease-out;
+}
+
+.motion-viewer[data-mode="ready"] .motion-controls { display: flex; }
+
+@keyframes motionFadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.motion-play, .motion-regen {
+    flex-shrink: 0;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 0;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.motion-play {
+    background: linear-gradient(135deg, var(--primary-blue), var(--secondary-orange));
+    box-shadow: 0 6px 18px var(--glow-blue);
+}
+
+.motion-play:hover, .motion-regen:hover { transform: scale(1.07); }
+
+.motion-play .icon-play {
+    width: 0;
+    height: 0;
+    margin-left: 4px;
+    border-style: solid;
+    border-width: 9px 0 9px 15px;
+    border-color: transparent transparent transparent #fff;
+}
+
+.motion-play .icon-pause {
+    display: none;
+    width: 14px;
+    height: 16px;
+    border-left: 5px solid #fff;
+    border-right: 5px solid #fff;
+}
+
+.motion-play.is-playing .icon-play { display: none; }
+.motion-play.is-playing .icon-pause { display: block; }
+
+.motion-regen {
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 109, 5, 0.15);
+    border: 2px solid var(--secondary-orange);
+    color: var(--secondary-orange);
+    font-size: 1.2rem;
+    line-height: 1;
+}
+
+.motion-regen:hover { background: var(--secondary-orange); color: #fff; box-shadow: 0 0 20px var(--glow-orange); }
+
+.motion-scrubber {
+    --fill: 0%;
+    flex: 1;
+    width: auto;
+    height: 8px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 999px;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    background:
+        linear-gradient(90deg, var(--primary-blue), var(--secondary-orange)) 0 0 / var(--fill) 100% no-repeat,
+        var(--light-gray, #dbe7f3);
+}
+
+.motion-scrubber::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(31, 122, 224, 0.25), 0 2px 8px rgba(30, 50, 80, 0.25);
+    transition: transform 0.15s ease;
+}
+
+.motion-scrubber::-webkit-slider-thumb:hover { transform: scale(1.15); }
+
+.motion-scrubber::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border: 0;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(31, 122, 224, 0.25), 0 2px 8px rgba(30, 50, 80, 0.25);
+}
+
+.motion-scrubber:focus { outline: none; }
+
+.motion-time {
+    flex-shrink: 0;
+    min-width: 96px;
+    text-align: right;
+    font-size: 0.85rem;
+    color: var(--text-gray);
+    font-variant-numeric: tabular-nums;
+}
+
+.motion-help {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 18px;
+    margin-top: 14px;
+    font-size: 0.8rem;
+    color: var(--text-gray);
+}
+
+.motion-viewer:not([data-mode="ready"]) .motion-help { display: none; }
+
+.motion-help kbd {
+    display: inline-grid;
+    place-items: center;
+    min-width: 24px;
+    height: 24px;
+    margin-right: 4px;
+    padding: 0 5px;
+    border-radius: 6px;
+    background: var(--surface-strong, #fff);
+    border: 1px solid var(--line-strong, rgba(31, 122, 224, 0.34));
+    border-bottom-width: 3px;
+    color: var(--text-white);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+}
+
+.motion-help-note { margin-left: auto; font-style: italic; opacity: 0.8; }
+
+.motion-cues {
+    margin: 14px 0 0;
+    padding: 12px 14px 12px 32px;
+    border-radius: 12px;
+    background: rgba(255, 138, 52, 0.07);
+    border: 1px solid rgba(255, 138, 52, 0.22);
+    color: var(--text-gray);
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+.motion-viewer:not([data-mode="ready"]) .motion-cues { display: none; }
+.motion-cues::before {
+    content: "In this animation";
+    display: block;
+    margin: 0 0 6px -18px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.68rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--secondary-orange);
+}
+.motion-cues li::marker { color: var(--secondary-orange); }
+
+@keyframes motionSpin { to { transform: rotate(360deg); } }
+@keyframes motionBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+@keyframes motionSwing { from { transform: rotate(-50deg); } to { transform: rotate(50deg); } }
+@keyframes motionStride { from { transform: rotate(-38deg); } to { transform: rotate(38deg); } }
+@keyframes motionFloor { to { stroke-dashoffset: -12; } }
+@keyframes motionDot { 0%, 100% { opacity: 0.2; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+@keyframes motionShimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+@media (max-width: 768px) {
+    .motion-viewer { padding: 14px; margin-top: 28px; }
+    .motion-head { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .motion-stage { aspect-ratio: 4 / 3.4; }
+    .motion-viewer[data-mode="idle"] .motion-stage,
+    .motion-viewer[data-mode="error"] .motion-stage { height: 250px; }
+    .motion-help-note { margin-left: 0; width: 100%; }
+    .motion-viewer[data-mode="ready"] .motion-controls { flex-wrap: wrap; row-gap: 12px; }
+    .motion-scrubber { order: -1; flex: 1 1 100%; height: 10px; }
+    .motion-time { min-width: 0; flex: 1; text-align: center; font-size: 0.8rem; }
+    .motion-idle .motion-generate { padding: 14px 24px; font-size: 0.85rem; }
+    .mc-scene { transform: scale(0.78); margin: -26px 0; }
+}
+
+/* Touch screens have no arrow keys */
+@media (hover: none) and (pointer: coarse) {
+    .motion-help { display: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mc-scene *, .motion-loader-bar span::after { animation: none !important; }
+}
+
+/* ------------------------------------------------------------------------------------------
+   Performance mode while the 3D viewer is on screen (html.motion-live, set by motion-viewer.js).
+   The page keeps its look, but nothing behind the 3D canvas changes every frame: the animated
+   background is frozen, frosted-glass blurs (which re-blur whatever moves underneath them) become
+   solid surfaces, and the drill card no longer lifts on hover.
+   ------------------------------------------------------------------------------------------ */
+html.motion-live .animated-bg,
+html.motion-live .animated-bg *,
+html.motion-live .animated-bg::before,
+html.motion-live .animated-bg::after {
+    animation-play-state: paused !important;
+    transition: none !important;
+}
+html.motion-live .card,
+html.motion-live .site-nav {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+html.motion-live .card { background: var(--surface-strong, #fff); }
+html.motion-live .site-nav { background: rgba(20, 26, 38, 0.94); }
+html.motion-live #drillContent .card,
+html.motion-live #drillContent .card:hover { transform: none !important; transition: none !important; }
+#drillContent .card:hover { transform: none; }   /* the drill card holds the 3D view: never lift it */
+.motion-stage { contain: layout paint; }
+.motion-title { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(0, 0, 0, 0.6); }
+
+/* the loader's animations only run while it is showing */
+.motion-viewer:not([data-mode="loading"]) .motion-loader,
+.motion-viewer:not([data-mode="loading"]) .motion-loader * { animation-play-state: paused !important; }
+.motion-viewer[data-mode="ready"] .motion-loader { visibility: hidden; }

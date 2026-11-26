@@ -1,0 +1,16 @@
+{
+  "name": "cognicoach-accounts-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CogniCoach accounts: sign-in, profile sync, friends and weekly leagues (Cloudflare Workers + SQLite Durable Objects, free plan)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node test/accounts_test.mjs",
+    "test:social": "node test/social_test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

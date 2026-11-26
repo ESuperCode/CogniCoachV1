@@ -81,6 +81,9 @@ function getSessionDaySet(history) {
 function computeStreaks(history) {
     const days = getSessionDaySet(history);
     if (days.size === 0) return { current: 0, longest: 0 };
+    // Days covered by a Streak Freeze (scripts/economy.js) keep a streak alive without adding to it.
+    let frozen = new Set();
+    try { frozen = new Set((JSON.parse(localStorage.getItem('cognicoach-wallet') || '{}').frozenDays) || []); } catch (e) {}
 
     const sorted = Array.from(days).sort();
     let longest = 1;
@@ -89,7 +92,16 @@ function computeStreaks(history) {
         const diffDays = Math.round(
             (new Date(sorted[i]) - new Date(sorted[i - 1])) / 86400000
         );
-        run = diffDays === 1 ? run + 1 : 1;
+        let bridged = diffDays === 1;
+        if (!bridged && diffDays > 1) {
+            bridged = true;
+            for (let g = 1; g < diffDays; g++) {
+                const mid = new Date(sorted[i - 1] + 'T12:00:00');
+                mid.setDate(mid.getDate() + g);
+                if (!frozen.has(toLocalDateStr(mid))) { bridged = false; break; }
+            }
+        }
+        run = bridged ? run + 1 : 1;
         longest = Math.max(longest, run);
     }
 
@@ -102,8 +114,8 @@ function computeStreaks(history) {
         cursor.setDate(cursor.getDate() - 1);
         cursorStr = toLocalDateStr(cursor);
     }
-    while (days.has(cursorStr)) {
-        current++;
+    while (days.has(cursorStr) || frozen.has(cursorStr)) {
+        if (days.has(cursorStr)) current++;
         cursor.setDate(cursor.getDate() - 1);
         cursorStr = toLocalDateStr(cursor);
     }
@@ -178,16 +190,20 @@ function sessionsThisWeek(history) {
 function renderGoal(history, settings) {
     const input = document.getElementById('weeklyGoalInput');
     input.value = settings.weeklyGoal;
+    const goalNow = document.getElementById('weeklyGoalNow');
+    if (goalNow) goalNow.textContent = `${settings.weeklyGoal} session${settings.weeklyGoal == 1 ? '' : 's'} a week`;
 
     const done = sessionsThisWeek(history);
     const goal = Math.max(1, parseInt(settings.weeklyGoal, 10) || 1);
     const pct = Math.min(100, Math.round((done / goal) * 100));
 
     document.getElementById('goalProgressFill').style.width = pct + '%';
+    const weekStart = startOfWeek(new Date());
+    const mins = history.filter(r => new Date(r.date) >= weekStart).reduce((t, r) => t + (Number(r.workoutLength) || 0), 0);
     document.getElementById('goalProgressText').textContent =
-        done >= goal
-            ? `Goal reached — ${done} of ${goal} sessions this week. Nice work.`
-            : `${done} of ${goal} sessions this week.`;
+        (done >= goal
+            ? `Goal reached: ${done} of ${goal} sessions.`
+            : `${done} of ${goal} sessions done.`) + ` ${mins} minutes trained this week.`;
 }
 
 // -- Badges -----------------------------------------------------------------------
@@ -207,18 +223,18 @@ function computeBadges(history) {
     });
 
     return [
-        { icon: '🏁', name: 'First Step', desc: 'Complete your first session', unlocked: totalSessions >= 1 },
-        { icon: '🔥', name: 'Consistent', desc: '3-day streak', unlocked: longest >= 3 },
-        { icon: '⚡', name: 'On Fire', desc: '7-day streak', unlocked: longest >= 7 },
-        { icon: '💎', name: 'Iron Will', desc: '30-day streak', unlocked: longest >= 30 },
-        { icon: '🎯', name: 'Committed', desc: '10 total sessions', unlocked: totalSessions >= 10 },
-        { icon: '🏆', name: 'Century Club', desc: '50 total sessions', unlocked: totalSessions >= 50 },
-        { icon: '🧭', name: 'Explorer', desc: 'Train in 3 different sports', unlocked: sportsSet.size >= 3 },
-        { icon: '🌐', name: 'All-Rounder', desc: 'Train in 5 different sports', unlocked: sportsSet.size >= 5 },
-        { icon: '🏃', name: 'Marathoner', desc: 'Complete a 90+ min session', unlocked: longestSession >= 90 },
-        { icon: '🌅', name: 'Early Bird', desc: 'Train before 7am', unlocked: hasEarly },
-        { icon: '🌙', name: 'Night Owl', desc: 'Train after 9pm', unlocked: hasNight },
-        { icon: '🎉', name: 'Weekend Warrior', desc: 'Train on a weekend', unlocked: hasWeekend }
+        { icon: 'flag', name: 'First Step', desc: 'Complete your first session', unlocked: totalSessions >= 1 },
+        { icon: 'flame', name: 'Consistent', desc: '3-day streak', unlocked: longest >= 3 },
+        { icon: 'bolt', name: 'On Fire', desc: '7-day streak', unlocked: longest >= 7 },
+        { icon: 'gem', name: 'Iron Will', desc: '30-day streak', unlocked: longest >= 30 },
+        { icon: 'target', name: 'Committed', desc: '10 total sessions', unlocked: totalSessions >= 10 },
+        { icon: 'trophy-gold', name: 'Century Club', desc: '50 total sessions', unlocked: totalSessions >= 50 },
+        { icon: 'compass', name: 'Explorer', desc: 'Train in 3 different sports', unlocked: sportsSet.size >= 3 },
+        { icon: 'globe', name: 'All-Rounder', desc: 'Train in 5 different sports', unlocked: sportsSet.size >= 5 },
+        { icon: 'runner', name: 'Marathoner', desc: 'Complete a 90+ min session', unlocked: longestSession >= 90 },
+        { icon: 'sunrise', name: 'Early Bird', desc: 'Train before 7am', unlocked: hasEarly },
+        { icon: 'moon', name: 'Night Owl', desc: 'Train after 9pm', unlocked: hasNight },
+        { icon: 'party', name: 'Weekend Warrior', desc: 'Train on a weekend', unlocked: hasWeekend }
     ];
 }
 
@@ -227,11 +243,12 @@ function renderBadges(history) {
     const grid = document.getElementById('badgeGrid');
     grid.innerHTML = '';
 
-    badges.forEach(b => {
+    // Earned badges first, then the ones still to get.
+    badges.filter(b => b.unlocked).concat(badges.filter(b => !b.unlocked)).forEach(b => {
         const el = document.createElement('div');
         el.className = 'badge ' + (b.unlocked ? 'unlocked' : 'locked');
         el.innerHTML = `
-            <span class="badge-icon">${b.icon}</span>
+            <span class="badge-icon" aria-hidden="true">${window.CogniIcons ? window.CogniIcons.svg(b.icon, { size: 34 }) : ''}</span>
             <div class="badge-name">${b.name}</div>
             <div class="badge-desc">${b.desc}</div>
         `;
@@ -256,34 +273,36 @@ function getRecommendedSports(history) {
         if (!lastPracticed[sport] || d > lastPracticed[sport]) lastPracticed[sport] = d;
     });
 
-    const neverTried = ALL_SPORTS.filter(
-        s => !Object.keys(countBySport).some(t => t.toLowerCase() === s.toLowerCase())
-    );
-    const triedSorted = Object.keys(lastPracticed).sort(
-        (a, b) => lastPracticed[a] - lastPracticed[b]
-    );
-
-    const ranked = [...neverTried, ...triedSorted];
+    // Your own sports first: your main sport, then the ones you have not trained for a while,
+    // then one new sport to try.
+    let main = '';
+    try { main = (typeof loadProfile === 'function' && loadProfile().defaultSport) || ''; } catch (e) {}
+    const tried = Object.keys(lastPracticed).sort((a, b) => lastPracticed[a] - lastPracticed[b]);
+    const has = (list, s) => list.some(t => t.toLowerCase() === String(s).toLowerCase());
     const result = [];
-    ranked.forEach(sport => {
-        if (result.length < 3 && !result.includes(sport)) result.push(sport);
-    });
-    if (result.length === 0) return ALL_SPORTS.slice(0, 3).map(s => ({ sport: s, reason: 'A fresh sport to try' }));
+    if (main) result.push(main);
+    tried.forEach(s => { if (result.length < 3 && !has(result, s)) result.push(s); });
+    const fresh = ALL_SPORTS.find(s => !has(result, s) && !has(Object.keys(countBySport), s));
+    if (result.length < 3 && fresh) result.push(fresh);
 
     return result.map(sport => {
-        const isNew = !Object.keys(countBySport).some(t => t.toLowerCase() === sport.toLowerCase());
-        if (isNew) return { sport, reason: "You haven't trained this yet" };
-        const days = Math.round((new Date() - lastPracticed[sport]) / 86400000);
-        return { sport, reason: days <= 0 ? 'Trained today' : `Last trained ${days} day${days > 1 ? 's' : ''} ago` };
+        const key = Object.keys(lastPracticed).find(t => t.toLowerCase() === sport.toLowerCase());
+        if (!key) return { sport, reason: sport === main ? 'Your main sport' : 'Something new to try' };
+        const days = Math.floor((new Date() - lastPracticed[key]) / 86400000);
+        const when = days <= 0 ? 'Trained today' : `Last trained ${days} day${days > 1 ? 's' : ''} ago`;
+        return { sport, reason: sport === main ? `Your main sport · ${when.toLowerCase()}` : when };
     });
 }
 
 function buildQuickStartUrl(sport, opts) {
+    // Use what this athlete usually picks for the sport (scripts/profile.js), when it knows.
+    let learned = {};
+    try { if (typeof getSmartDefaults === 'function') learned = getSmartDefaults(sport) || {}; } catch (e) {}
     const params = new URLSearchParams({
         sport,
-        location: (opts && opts.location) || 'Gym',
-        focus: (opts && opts.focus) || '',
-        workoutLength: (opts && opts.workoutLength) || 45
+        location: (opts && opts.location) || learned.location || 'Gym',
+        focus: (opts && opts.focus) || learned.focus || '',
+        workoutLength: (opts && opts.workoutLength) || learned.workoutLength || 45
     });
     return `index.html?${params.toString()}`;
 }
@@ -297,9 +316,9 @@ function renderRecommendations(history) {
         const el = document.createElement('div');
         el.className = 'recommend-card';
         el.innerHTML = `
-            <div class="recommend-sport">${sport}</div>
-            <div class="recommend-reason">${reason}</div>
-            <a class="btn btn-secondary" href="${buildQuickStartUrl(sport)}">Quick Start</a>
+            <div class="recommend-text"><div class="recommend-sport">${sport}</div>
+            <div class="recommend-reason">${reason}</div></div>
+            <a class="btn btn-secondary" href="${buildQuickStartUrl(sport)}" aria-label="Start a ${sport} workout">Start</a>
         `;
         grid.appendChild(el);
     });
@@ -381,8 +400,9 @@ function renderAll() {
     renderRecommendations(history);
     renderSmartActions(history);
 
-    const emptyState = document.getElementById('dashEmptyState');
-    emptyState.style.display = history.length === 0 ? 'block' : 'none';
+    // Before the first session there is nothing to show yet: Home keeps just the welcome card.
+    const home = document.getElementById('panel-home');
+    if (home) home.classList.toggle('dash-new', history.length === 0);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -398,10 +418,29 @@ document.addEventListener('DOMContentLoaded', () => {
         renderGoal(loadHistory(), settings);
     });
 
+    // The goal number sits behind a small Change toggle.
+    const goalBtn = document.getElementById('weeklyGoalChange');
+    const goalRow = document.getElementById('weeklyGoalRow');
+    if (goalBtn && goalRow) {
+        goalBtn.addEventListener('click', () => {
+            const open = goalRow.hidden;
+            goalRow.hidden = !open;
+            goalBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            goalBtn.textContent = open ? 'Done' : 'Change';
+            if (open) document.getElementById('weeklyGoalInput').focus();
+        });
+    }
+
     document.getElementById('exportDataBtn').addEventListener('click', () => {
+        let profile = null;
+        try { profile = JSON.parse(localStorage.getItem('cognicoach-profile') || 'null'); } catch (e) { profile = null; }
+        let coach = null;
+        try { coach = JSON.parse(localStorage.getItem('cognicoach-coach') || 'null'); } catch (e) { coach = null; }
         const data = {
             history: loadHistory(),
-            settings: loadDashboardSettings()
+            settings: loadDashboardSettings(),
+            profile,
+            coach
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);

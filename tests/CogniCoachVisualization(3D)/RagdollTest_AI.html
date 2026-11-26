@@ -1,6 +1,12 @@
 <!DOCTYPE html>
 <html lang="en-us">
   <head>
+    <script>
+      // ?embed=1: headless viewer for the CogniCoach site (no control panel / footer, fills its iframe,
+      // driven by postMessage - see EMBED API below).
+      window.COGNICOACH_EMBED = new URLSearchParams(location.search).get("embed") === "1";
+      if (window.COGNICOACH_EMBED) { document.documentElement.className += " embed"; }
+    </script>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <title>CogniCoachVisualization(3D)</title>    
@@ -122,6 +128,16 @@
         width: auto;
       }
     }
+    /* The canvas takes keyboard focus for the arrow keys; its focus ring was drawn around the canvas
+       only (which slides for vertical motion), showing as a black box. */
+    #unity-canvas:focus, #unity-canvas:focus-visible { outline: none; }
+
+    html.embed, html.embed body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+    html.embed #motion-controls, html.embed #unity-footer, html.embed #unity-loading-bar,
+    html.embed #unity-warning { display: none !important; }
+    html.embed #unity-container { position: fixed; inset: 0; left: 0; top: 0; transform: none; width: 100%; height: 100%; }
+    html.embed #unity-canvas-frame { width: 100% !important; height: 100% !important; }
+    html.embed #unity-canvas { width: 100% !important; height: 100% !important; cursor: grab; }
   </style>
   </head>
   <body>
@@ -183,7 +199,11 @@
       </div>
       <div id="motion-status">Unity is loading. Then type a movement and press Generate AI Motion.</div>
     </div>
-    <script src="worker/dist/motion-compiler.js"></script>
+    <script>
+      // The standalone test page compiles on the main thread; the embedded viewer uses a Web Worker
+      // (worker/dist/compile-worker.js) so compiling never stalls the 3D frame.
+      if (!window.COGNICOACH_EMBED) { document.write('<script src="worker/dist/motion-compiler.js"><\/script>'); }
+    </script>
     <script>
       
       // Motion service location. Override with ?api=https://your-server or window.COGNICOACH_MOTION_API.
@@ -257,6 +277,49 @@
       }
 
       // Frames are compiled in this browser by the same compiler the Worker uses (worker/dist/motion-compiler.js).
+      var compileWorker = null, compileSeq = 0, compileWaiting = {};
+      function compileInWorker(plan, side) {
+        return new Promise(function(resolve, reject) {
+          try {
+            if (!compileWorker) {
+              compileWorker = new Worker("worker/dist/compile-worker.js");
+              compileWorker.onmessage = function(e) {
+                var d = e.data || {}, w = compileWaiting[d.id];
+                if (!w) { return; }
+                delete compileWaiting[d.id];
+                if (d.ok) { w.resolve(d.payload); } else { w.reject(new Error(d.error)); }
+              };
+              compileWorker.onerror = function(e) {
+                Object.keys(compileWaiting).forEach(function(k) { compileWaiting[k].reject(new Error("compile worker failed")); });
+                compileWaiting = {};
+                compileWorker = null;
+                e.preventDefault && e.preventDefault();
+              };
+            }
+            var id = ++compileSeq;
+            compileWaiting[id] = { resolve: resolve, reject: reject };
+            compileWorker.postMessage({ id: id, plan: plan, side: side });
+          } catch (error) { reject(error); }
+        });
+      }
+      function loadCompilerScript() {
+        return new Promise(function(resolve, reject) {
+          if (window.CogniCoachMotion) { resolve(); return; }
+          var tag = document.createElement("script");
+          tag.src = "worker/dist/motion-compiler.js";
+          tag.onload = resolve;
+          tag.onerror = function() { reject(new Error("The motion compiler did not load.")); };
+          document.head.appendChild(tag);
+        });
+      }
+      async function compileMotionPlanAsync(plan, side) {
+        if (window.Worker) {
+          try { return await compileInWorker(plan, side); } catch (error) { console.warn("Worker compile failed, compiling here:", error); }
+        }
+        await loadCompilerScript();
+        return compileMotionPlan(plan, side);
+      }
+
       function compileMotionPlan(plan, side) {
         if (!window.CogniCoachMotion) {
           throw new Error("The motion compiler (worker/dist/motion-compiler.js) did not load.");
@@ -363,6 +426,11 @@
         var originalAddEventListener = EventTarget.prototype.addEventListener;
 
         EventTarget.prototype.addEventListener = function(type, listener, options) {
+          // Embedded: Unity pauses rendering when its window blurs (the host page's own buttons take focus),
+          // so the iframe window never reports blur/focusout to it.
+          if (window.COGNICOACH_EMBED && this === window && (type === "blur" || type === "focusout")) {
+            return;
+          }
           var isKeyboardEvent =
             type === "keydown" ||
             type === "keypress" ||
@@ -611,6 +679,7 @@
       }
 
       function setMotionStatus(message, isError) {
+        embedPost("status", { message: message, error: !!isError });
         var controls = getFrameInputElements();
         controls.status.textContent = message;
         controls.status.style.color = isError ? "#a40000" : "#444";
@@ -618,6 +687,7 @@
       }
 
       function updateFrameControls() {
+        if (window.COGNICOACH_EMBED) { return; }   // panel is hidden in the embed: skip the DOM work
         var controls = getFrameInputElements();
         var totalFrames = motionFrames.length;
         controls.slider.max = Math.max(0, totalFrames - 1);
@@ -636,6 +706,7 @@
         applyRootOffset(Number(motionFrames[currentFrameIndex].rooty) || 0);
         sendUnityMessage("WebBridge", "UpdateMotion", relativityCalculation(frame));
         updateFrameControls();
+        embedProgress(currentFrameIndex, true);
       }
 
       function sendInterpolatedFrame(amount) {
@@ -654,6 +725,7 @@
         applyRootOffset(rootA + (rootB - rootA) * amount);
         sendUnityMessage("WebBridge", "UpdateMotion", relativityCalculation(frame));
         updateFrameControls();
+        embedProgress(currentFrameIndex + amount, false);
       }
 
       function getPlaybackBlendAmount(now, fps) {
@@ -937,6 +1009,125 @@
       }
       window.playGeneratedMotion = playGeneratedMotion;
 
+      // ---------------------------------------------------------------------------------------------
+      // EMBED API (?embed=1). The host page (same origin) sends {target: "cognicoach-motion", type, ...}:
+      //   generate {description, side}  ask the Worker for a plan, compile it here and play it
+      //   play / pause / seek {position: fractional frame} / rotate {dx, dy} / view {name} / side {side}
+      // and receives {source: "cognicoach-motion", type, ...}: unity-progress, unity-ready, status,
+      // generating, ready {title, cues, frames, fps, duration, script, timing}, error {message}, progress.
+      // ---------------------------------------------------------------------------------------------
+      function embedPost(type, data) {
+        if (!window.COGNICOACH_EMBED || window.parent === window) { return; }
+        var msg = { source: "cognicoach-motion", type: type };
+        for (var k in (data || {})) { msg[k] = data[k]; }
+        try { window.parent.postMessage(msg, window.location.origin); } catch (error) {}
+      }
+      var lastProgressPost = 0;
+      function embedProgress(position, force) {
+        if (!window.COGNICOACH_EMBED) { return; }
+        var now = performance.now();
+        if (!force && now - lastProgressPost < 100) { return; }
+        lastProgressPost = now;
+        embedPost("progress", { position: position, total: motionFrames.length, playing: !!motionAnimationId });
+      }
+
+      // Off screen / tab hidden: stop Unity's render loop entirely (no GPU work), resume when visible.
+      var embedVisible = true, wasPlayingBeforeHide = false;
+      function setEmbedVisible(visible) {
+        if (visible === embedVisible) { return; }
+        embedVisible = visible;
+        var mod = unityMotionInstance && unityMotionInstance.Module;
+        if (!visible) {
+          wasPlayingBeforeHide = !!motionAnimationId;
+          if (motionAnimationId) { stopMotionLoop(); }
+          try { if (mod && mod.pauseMainLoop) { mod.pauseMainLoop(); } } catch (e) {}
+        } else {
+          try { if (mod && mod.resumeMainLoop) { mod.resumeMainLoop(); } } catch (e) {}
+          if (wasPlayingBeforeHide && motionFrames.length) { startMotionLoop(); }
+        }
+      }
+
+      var embedLastPlan = null;
+      var embedRequestId = 0;
+
+      async function embedPlay(plan, side) {
+        var id = embedRequestId;
+        var payload = await compileMotionPlanAsync(plan, side);
+        if (id !== embedRequestId) { return; }   // a newer request arrived while compiling
+        var controls = getFrameInputElements();
+        if (controls.sideInput) { controls.sideInput.value = side; }
+        playGeneratedMotion(payload);
+        embedPost("ready", {
+          title: payload.title, cues: payload.coaching_cues || [], frames: payload.frames.length,
+          fps: payload.playback_fps, duration: payload.duration_seconds, script: payload.script,
+          timing: payload.timing || {}, side: side, loop: payload.loop, plan: plan
+        });
+      }
+
+      async function embedGenerate(description, side) {
+        var id = ++embedRequestId;
+        embedPost("generating", {});
+        try {
+          var response = await fetch(MOTION_API_URL.replace(/\/$/, "") + "/generate", {
+            method: "POST",
+            headers: motionApiHeaders({}),
+            body: JSON.stringify({ movement: String(description || "").slice(0, 2000), dominant_side: side })
+          });
+          var text = await response.text();
+          var plan = {};
+          try { plan = text ? JSON.parse(text) : {}; } catch (e) { throw new Error("The motion service returned an invalid answer."); }
+          if (!response.ok) { throw new Error(plan.detail || ("Motion service error (HTTP " + response.status + ").")); }
+          if (id !== embedRequestId) { return; }
+          embedLastPlan = plan;
+          await embedPlay(plan, side);
+        } catch (error) {
+          if (id !== embedRequestId) { return; }
+          var msg = error && error.name === "TypeError" && /fetch|network|load/i.test(error.message || "")
+            ? "Couldn't reach the animation service. Check your connection and try again."
+            : (error.message || String(error));
+          embedPost("error", { message: msg });
+        }
+      }
+
+      function embedSeek(position) {
+        if (!motionFrames.length) { return; }
+        stopMotionLoop();
+        var p = Math.max(0, Math.min(motionFrames.length - 1, Number(position) || 0));
+        currentFrameIndex = Math.floor(p);
+        if (currentFrameIndex >= motionFrames.length - 1) { sendCurrentFrame(); } else { sendInterpolatedFrame(p - currentFrameIndex); }
+      }
+
+      if (window.COGNICOACH_EMBED) {
+        window.addEventListener("message", function(event) {
+          if (event.origin !== window.location.origin) { return; }
+          var m = event.data || {};
+          if (m.target !== "cognicoach-motion") { return; }
+          if (m.type === "generate") { embedGenerate(m.description, m.side === "left" ? "left" : "right"); }
+          else if (m.type === "play-plan" && m.plan && m.plan.script) {
+            // A saved animation (the host keeps plans in localStorage): compile and play, no model call.
+            embedRequestId++;
+            embedLastPlan = m.plan;
+            embedPlay(m.plan, m.side === "left" ? "left" : "right")
+              .catch(function(error) { embedPost("error", { message: error.message || String(error) }); });
+          }
+          else if (m.type === "play") { if (motionFrames.length) { startMotionLoop(); } }
+          else if (m.type === "pause") { stopMotionLoop(); embedSeek(currentFrameIndex); }
+          else if (m.type === "seek") { embedSeek(m.position); }
+          else if (m.type === "rotate") {
+            bodyPosition.positionx += Number(m.dx) || 0;
+            bodyPosition.positiony -= Number(m.dy) || 0;
+            resendCurrentPose();
+          }
+          else if (m.type === "view") { setCameraView(m.name); }
+          else if (m.type === "visibility") { setEmbedVisible(!!m.visible); }
+          else if (m.type === "side" && embedLastPlan) {
+            embedRequestId++;
+            embedPlay(embedLastPlan, m.side === "left" ? "left" : "right").catch(function(error) { embedPost("error", { message: error.message }); });
+          }
+        });
+        embedPost("loaded", {});
+      }
+
       setupMotionControls();
 
       function keepControlsInteractive() {
@@ -960,7 +1151,7 @@
       keepControlsInteractive();
 
       function setupPositionArrowKeys() {
-        var positionStep = 1;
+        var positionStep = window.COGNICOACH_EMBED ? 3 : 1;
 
         window.addEventListener("keydown", function(event) {
           var activeTag = document.activeElement && document.activeElement.tagName;
@@ -1054,7 +1245,7 @@
       // JS_FileSystem_Sync() behavior, but in future Unity version, this will be
       // expected to change.
 
-      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) && !window.COGNICOACH_EMBED) {
         // Mobile device style: fill the whole browser client area with the game canvas:
 
         var meta = document.createElement('meta');
@@ -1069,6 +1260,10 @@
         // config.devicePixelRatio = 1;
 
 
+      } else if (window.COGNICOACH_EMBED) {
+        // Rendering at a 2-3x device pixel ratio quadruples the GPU work for little visible gain here.
+        config.devicePixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
+        // Embedded: the canvas fills the iframe (sized by the host page).
       } else {
         // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:
         canvas.style.width = "960px";
@@ -1093,6 +1288,7 @@
         createUnityInstance(canvas, config, (progress) => {
             
           document.querySelector("#unity-progress-bar-full").style.width = 100 * progress + "%";
+          embedPost("unity-progress", { progress: progress });
           if (progress === 1 || progress - lastUnityProgressLog >= 0.1) {
             lastUnityProgressLog = progress;
             appendDiagnosticLog("Unity load progress", [Math.round(progress * 100) + "%"]);
@@ -1104,6 +1300,8 @@
                   unityInstance.SetFullscreen(1);
                 };
                 unityMotionInstance = unityInstance;
+                embedPost("unity-ready", {});
+                if (motionFrames.length && !motionAnimationId) { sendCurrentFrame(); }
                 keepControlsInteractive();
                 setupMotionControls();
                 setMotionStatus("Unity loaded. Type a movement and press Generate AI Motion.");

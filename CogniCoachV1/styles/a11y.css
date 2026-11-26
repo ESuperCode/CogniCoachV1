@@ -1,0 +1,300 @@
+/* ==========================================================================
+   Accessibility layer (scripts/a11y.js). Loaded on every page by nav.js,
+   after the page's own styles.
+   ========================================================================== */
+
+/* ---- helpers ------------------------------------------------------------ */
+.a11y-sr-only {
+    position: absolute !important;
+    width: 1px; height: 1px;
+    margin: -1px; padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.a11y-skip {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    z-index: 3000;
+    padding: 12px 18px;
+    border-radius: 10px;
+    background: #172033;
+    color: #fff;
+    font-family: 'Space Mono', monospace;
+    font-weight: 700;
+    text-decoration: none;
+    transform: translateY(-160%);
+    transition: transform 0.15s ease;
+}
+.a11y-skip:focus { transform: translateY(0); outline: 3px solid #ffb35c; outline-offset: 2px; }
+
+#main:focus { outline: none; }
+
+/* ---- visible keyboard focus everywhere ---------------------------------- */
+:where(a, button, summary, [role="button"], [tabindex]:not([tabindex="-1"]), input[type="checkbox"], input[type="radio"], input[type="range"]):focus-visible {
+    outline: 3px solid var(--primary-blue, #1a6dcc) !important;
+    outline-offset: 3px !important;
+    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.85) !important;
+}
+:where(input, select, textarea):focus-visible {
+    outline: 3px solid var(--primary-blue, #1a6dcc) !important;
+    outline-offset: 1px !important;
+}
+.site-nav :focus-visible { box-shadow: none !important; outline-color: #8fd0ff !important; }
+
+/* ---- contrast fixes found by axe ----------------------------------------- */
+.muscle-groups label { opacity: 1; color: var(--text-gray); }
+.muscle-groups label.ai-selected { opacity: 1; }
+.muscle-groups label:focus-visible { opacity: 1; }
+.badge.locked { opacity: 0.75; }
+.badge.locked .badge-name { color: #4d5a6e; }
+.badge.locked .badge-desc { color: #56657b; }
+.st-toggle { color: #1559a8; }
+
+/* ---- the "Aa" nav button + panel ------------------------------------------ */
+.a11y-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    height: 40px;
+    margin-left: 6px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    font-family: 'Orbitron', sans-serif;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.a11y-btn:hover, .a11y-btn[aria-expanded="true"] { border-color: #6cc4ff; color: #8fd0ff; }
+
+.a11y-panel {
+    position: fixed;
+    top: 70px;
+    right: 16px;
+    z-index: 2500;
+    width: min(360px, calc(100vw - 32px));
+    max-height: calc(100vh - 90px);
+    max-height: calc(100dvh - 90px);
+    overflow-y: auto;
+    padding: 18px;
+    border-radius: 18px;
+    background: #ffffff;
+    color: #172033;
+    border: 1px solid rgba(118, 140, 168, 0.35);
+    box-shadow: 0 24px 60px rgba(20, 30, 50, 0.28);
+    font-family: 'Space Mono', monospace;
+    text-align: left;
+}
+.a11y-panel[hidden] { display: none; }
+.a11y-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.a11y-panel h2 { font-family: 'Orbitron', sans-serif; font-size: 1rem; margin: 0; color: #172033; letter-spacing: 0.02em; }
+.a11y-close {
+    width: 40px; height: 40px;
+    border: 0; border-radius: 50%;
+    background: #edf3fb; color: #172033;
+    font-size: 1.5rem; line-height: 1; cursor: pointer;
+}
+.a11y-group { border: 0; margin: 0; padding: 12px 0; border-top: 1px solid #e3eaf3; }
+.a11y-group legend {
+    padding: 0; margin-bottom: 8px;
+    font-family: 'Orbitron', sans-serif; font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase; color: #4d5a6e;
+}
+.a11y-panel label { text-transform: none; letter-spacing: 0; font-family: inherit; color: #172033; margin: 0; }
+
+.a11y-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.a11y-seg-opt { position: relative; display: block; cursor: pointer; }
+.a11y-seg-opt input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.a11y-seg-opt span {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    min-height: 56px; padding: 6px 4px;
+    border: 2px solid #d5dfeb; border-radius: 12px;
+    font-size: 0.72rem; text-align: center; color: #4d5a6e;
+}
+.a11y-seg-opt b { font-family: 'Orbitron', sans-serif; color: #172033; line-height: 1; }
+.a11y-size-0 b { font-size: 0.9rem; }
+.a11y-size-1 b { font-size: 1.15rem; }
+.a11y-size-2 b { font-size: 1.4rem; }
+.a11y-seg-opt input:checked + span { border-color: var(--primary-blue, #1a6dcc); background: #eaf3ff; color: #172033; }
+.a11y-seg-opt input:focus-visible + span { outline: 3px solid var(--primary-blue, #1a6dcc); outline-offset: 2px; }
+
+.a11y-switch {
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 48px;
+    padding: 6px 0;
+    cursor: pointer;
+}
+.a11y-switch-text { display: flex; flex-direction: column; }
+.a11y-switch-label { font-weight: 700; font-size: 0.9rem; }
+.a11y-hint { font-size: 0.74rem; color: #56657b; line-height: 1.35; }
+.a11y-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.a11y-switch-ui {
+    position: relative; flex: 0 0 auto;
+    width: 48px; height: 28px; border-radius: 999px;
+    background: #c9d5e3; transition: background 0.2s ease;
+}
+.a11y-switch-ui::after {
+    content: ""; position: absolute; top: 3px; left: 3px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s ease;
+}
+.a11y-switch input:checked + .a11y-switch-ui { background: var(--primary-blue, #1a6dcc); }
+.a11y-switch input:checked + .a11y-switch-ui::after { transform: translateX(20px); }
+.a11y-switch input:focus-visible + .a11y-switch-ui { outline: 3px solid var(--primary-blue, #1a6dcc); outline-offset: 3px; }
+
+.a11y-field { display: flex !important; flex-direction: column; gap: 6px; margin-top: 10px !important; font-weight: 700; font-size: 0.85rem; }
+.a11y-field select { padding: 10px 12px; font-size: 0.85rem; color: #172033; background: #f6f9ff; border-radius: 10px; }
+.a11y-field output { font-weight: 400; color: #4d5a6e; }
+.a11y-field input[type="range"] { margin: 8px 0 4px; }
+
+.a11y-test, .a11y-reset {
+    margin-top: 12px;
+    min-height: 44px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    border: 1px solid #cbd7e6;
+    background: #f6f9ff;
+    color: #172033;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.a11y-reset { width: 100%; background: transparent; color: #56657b; font-weight: 400; }
+
+/* Phones: the panel becomes a bottom sheet. */
+@media (max-width: 640px) {
+    .a11y-btn { min-width: 34px; height: 34px; padding: 0 6px; margin-left: 2px; font-size: 0.72rem; }
+    .a11y-panel {
+        top: auto; bottom: 0; left: 0; right: 0;
+        width: 100%;
+        max-height: 85vh; max-height: 85dvh;
+        border-radius: 20px 20px 0 0;
+        padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+    }
+}
+
+/* ---- text size ----------------------------------------------------------- */
+html.a11y-text-lg { font-size: 112.5%; }
+html.a11y-text-xl { font-size: 125%; }
+/* keep the nav on one line at bigger text sizes */
+html.a11y-text-lg .site-nav, html.a11y-text-xl .site-nav { font-size: 16px; }
+html.a11y-text-lg .site-nav-link, html.a11y-text-xl .site-nav-link { font-size: 13.6px; }
+@media (max-width: 640px) {
+    html.a11y-text-lg .site-nav-link, html.a11y-text-xl .site-nav-link { font-size: 11.2px; }
+}
+
+/* ---- easy-read font ------------------------------------------------------- */
+html.a11y-easy-read body,
+html.a11y-easy-read input,
+html.a11y-easy-read select,
+html.a11y-easy-read textarea,
+html.a11y-easy-read button,
+html.a11y-easy-read .drill-description,
+html.a11y-easy-read .drill-name,
+html.a11y-easy-read .drill-focus,
+html.a11y-easy-read label,
+html.a11y-easy-read p,
+html.a11y-easy-read li {
+    font-family: Verdana, 'Atkinson Hyperlegible', Tahoma, 'Segoe UI', system-ui, sans-serif !important;
+    letter-spacing: 0.01em !important;
+    word-spacing: 0.08em;
+}
+html.a11y-easy-read .drill-name { text-transform: none !important; }
+html.a11y-easy-read label { text-transform: none !important; }
+html.a11y-easy-read .drill-description { line-height: 1.7; }
+
+/* ---- high contrast --------------------------------------------------------- */
+html.a11y-contrast {
+    --text-gray: #2f3a4c;
+    --text-white: #0b1220;
+    --primary-blue: #0f56a8;
+    --line: rgba(40, 60, 90, 0.55);
+    --line-strong: #0f56a8;
+}
+html.a11y-contrast body { background: #ffffff; }
+html.a11y-contrast .animated-bg { opacity: 0.25; }
+html.a11y-contrast .card { background: #ffffff !important; border: 2px solid #3b4a60 !important; backdrop-filter: none !important; }
+html.a11y-contrast input, html.a11y-contrast select, html.a11y-contrast textarea { border-color: #3b4a60 !important; background: #fff !important; color: #0b1220 !important; }
+html.a11y-contrast .btn-secondary { color: #8a3f05 !important; border-color: #8a3f05 !important; }
+html.a11y-contrast .muscle-groups label { opacity: 1; color: #2f3a4c; }
+html.a11y-contrast .drill-description { color: #172033 !important; }
+html.a11y-contrast .drill-focus { color: #7a3500 !important; border: 2px solid #7a3500 !important; }
+html.a11y-contrast .site-nav { background: #0b1220 !important; }
+html.a11y-contrast ::placeholder { color: #4d5a6e; opacity: 1; }
+html.a11y-contrast a:not(.btn):not(.site-nav-link):not(.a11y-skip) { text-decoration: underline; }
+
+/* ---- reduced motion -------------------------------------------------------- */
+html.a11y-reduce-motion { scroll-behavior: auto !important; }
+html.a11y-reduce-motion *:not(.loading-spinner),
+html.a11y-reduce-motion *::before,
+html.a11y-reduce-motion *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+}
+html.a11y-reduce-motion .loading-spinner { animation-duration: 1.6s !important; }
+html.a11y-reduce-motion .bg-orb,
+html.a11y-reduce-motion .grid-pattern,
+html.a11y-reduce-motion .pointer-glow { animation: none !important; transform: none !important; }
+html.a11y-reduce-motion .card:hover,
+html.a11y-reduce-motion .btn:hover { transform: none !important; }
+
+/* ---- phones: bigger tap targets, easier reading ---------------------------- */
+@media (max-width: 768px) {
+    .drill-description { text-align: left; letter-spacing: 0; line-height: 1.65; font-size: 1.05rem; }
+    .timer-container .flex-center { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .timer-container .flex-center .btn { width: 100%; margin: 0 !important; min-height: 48px; padding: 12px 10px; }
+    .timer-container .flex-center #startTimerBtn { grid-column: 1 / -1; }
+    .muscle-groups label { width: auto; min-height: 32px; display: flex; align-items: center; font-size: 0.78rem; }
+    .site-nav-link { min-height: 36px; }
+}
+@media (pointer: coarse) {
+    .btn, .btn-chip { min-height: 44px; }
+    .site-nav-link { min-height: 40px; }
+    .a11y-btn { min-height: 34px; }
+}
+
+/* Muscle list: the checkboxes stay keyboard-focusable but invisible; the label shows focus. */
+.muscle-groups .muscles-helper {
+    display: block !important;
+    position: absolute !important;
+    width: 1px !important; height: 1px !important;
+    margin: 0 !important; padding: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none;
+}
+.muscle-groups .muscles-helper:focus-visible + label {
+    opacity: 1;
+    outline: 3px solid var(--primary-blue, #1a6dcc);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+/* a muscle picked only by the user keeps its blue look (its checkbox is now checked too) */
+.muscle-groups input:checked + label.manual-selected:not(.ai-selected) {
+    color: var(--primary-blue) !important;
+    border-color: rgba(31, 122, 224, 0.78) !important;
+}
+
+/* more axe contrast fixes */
+.advanced-setup summary { background: var(--surface-strong, #fff); color: #a8520f; }
+.badge.locked { opacity: 1; border-style: dashed; }
+.badge.locked .badge-icon { opacity: 0.45; }
+.muscle-groups label.ai-selected,
+.muscle-groups input:checked + label.ai-selected { color: #a8520f !important; }
+
+/* chip buttons on tinted backgrounds: darker blue keeps 4.5:1 */
+.btn-chip:not(.btn-chip-danger):not(:hover) { color: #1559a8; }
+.seo-guides .seo-intro { opacity: 1; }

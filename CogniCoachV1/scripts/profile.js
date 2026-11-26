@@ -243,9 +243,33 @@ function sportOptionsHtml(selected) {
     ).join('') + `<option value="__other__">Other / not listed</option>`;
 }
 
+// Saves the first-run answers (shared by the tour's welcome card and the fallback modal below).
+function completeOnboarding(sport, dobVal) {
+    const p = loadProfile();
+    p.onboarded = true;
+    if (sport) {
+        p.defaultSport = sport;
+        ensureSportProfile(p, sport);
+    }
+    if (dobVal) {
+        p.dob = dobVal;
+        p.age = calcAge(dobVal);
+    }
+    saveProfile(p);
+    if (typeof refreshQuickStartUI === 'function') refreshQuickStartUI();
+}
+
 function maybeShowOnboarding() {
     const profile = loadProfile();
     if (profile.onboarded) return;
+
+    // On the app page the first-run questions live in the guided tour's welcome card
+    // (scripts/tour.js, loaded by nav.js); it may still be loading, so it picks this up itself.
+    if (document.getElementById('quickStartCard')) {
+        window.cognicoachOnboardingRequested = true;
+        if (window.CogniTour) window.CogniTour.start({ welcome: true });
+        return;
+    }
 
     const overlay = openProfileModal(`
         <h2 class="card-title">Welcome to CogniCoachAI</h2>
@@ -314,64 +338,76 @@ function renderSportSwitcher() {
     if (!container) return;
 
     const profile = loadProfile();
+    const hasSport = !!(window.__quickStartSportOverride || profile.defaultSport);
     const sport = currentSport();
+    const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+    // One tap on a sport chip picks it. With no sport saved yet the chips show straight away.
     container.innerHTML = `
+        ${hasSport ? `
         <div class="sport-switcher-row">
             <span class="sport-switcher-label">Training for</span>
-            <span class="sport-switcher-current">${sport || 'Not set'}</span>
-            <button type="button" class="btn-chip" id="sportSwitcherToggle">Change</button>
-        </div>
-        <div class="sport-switcher-panel hidden" id="sportSwitcherPanel">
-            <select id="sportSwitcherSelect">${sportOptionsHtml(sport)}</select>
-            <input type="text" id="sportSwitcherCustom" placeholder="Custom sport name" class="hidden mt-2">
-            <div class="sport-switcher-actions">
-                <button type="button" class="btn btn-secondary" id="sportSwitcherOnceBtn">Just This Workout</button>
-                <button type="button" class="btn btn-primary" id="sportSwitcherDefaultBtn">Set As My Default</button>
+            <span class="sport-switcher-current">${esc(sport)}</span>
+            <button type="button" class="btn-chip" id="sportSwitcherToggle" aria-expanded="false" aria-controls="sportSwitcherPanel">Change</button>
+        </div>` : ''}
+        <div class="sport-switcher-panel ${hasSport ? 'hidden' : ''}" id="sportSwitcherPanel" role="group" aria-labelledby="sportPickLabel">
+            <div class="qs-label" id="sportPickLabel">${hasSport ? 'Pick a sport' : 'What sport do you train?'}</div>
+            <div class="sport-chips">
+                ${PROFILE_SPORTS.map(s => `<button type="button" class="adapt-chip" data-sport-pick="${s}" aria-pressed="${hasSport && s === sport ? 'true' : 'false'}">${s}</button>`).join('')}
+                <button type="button" class="adapt-chip" data-sport-pick="__other__" aria-expanded="false" aria-controls="sportSwitcherOther">Other</button>
             </div>
+            <div class="sport-other hidden" id="sportSwitcherOther">
+                <label for="sportSwitcherCustom" class="a11y-sr-only">Your sport</label>
+                <input type="text" id="sportSwitcherCustom" placeholder="Type your sport">
+                <button type="button" class="btn-chip" id="sportSwitcherUse">Use</button>
+            </div>
+            ${hasSport ? `<label class="sport-once"><input type="checkbox" id="sportSwitcherOnce"> Just for this workout (keep ${esc(profile.defaultSport || sport)} as my usual sport)</label>` : ''}
         </div>
     `;
 
-    const select = container.querySelector('#sportSwitcherSelect');
-    const custom = container.querySelector('#sportSwitcherCustom');
     const panel = container.querySelector('#sportSwitcherPanel');
+    const other = container.querySelector('#sportSwitcherOther');
+    const custom = container.querySelector('#sportSwitcherCustom');
+    const toggle = container.querySelector('#sportSwitcherToggle');
 
-    if (sport && !PROFILE_SPORTS.includes(sport)) {
-        select.value = '__other__';
-        custom.value = sport;
-        custom.classList.remove('hidden');
+    if (toggle) {
+        toggle.addEventListener('click', () => {
+            const open = panel.classList.toggle('hidden') === false;
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            toggle.textContent = open ? 'Close' : 'Change';
+        });
     }
 
-    select.addEventListener('change', () => {
-        custom.classList.toggle('hidden', select.value !== '__other__');
-    });
-
-    container.querySelector('#sportSwitcherToggle').addEventListener('click', () => {
-        panel.classList.toggle('hidden');
-    });
-
-    function pickedSport() {
-        return select.value === '__other__' ? custom.value.trim() : select.value;
+    function pick(picked) {
+        if (!picked) return;
+        const once = container.querySelector('#sportSwitcherOnce');
+        if (once && once.checked) {
+            window.__quickStartSportOverride = picked;
+        } else {
+            window.__quickStartSportOverride = null;
+            setDefaultSport(picked, !!loadProfile().pinnedDefaultSport);
+        }
+        renderSportSwitcher();
+        prefillQuickStartFields(picked);
+        const t = document.getElementById('sportSwitcherToggle');
+        if (t) t.focus();
+        if (window.CogniAppSimple) window.CogniAppSimple.repaint();
     }
 
-    container.querySelector('#sportSwitcherOnceBtn').addEventListener('click', () => {
-        const picked = pickedSport();
-        if (!picked) return;
-        window.__quickStartSportOverride = picked;
-        panel.classList.add('hidden');
-        renderSportSwitcher();
-        prefillQuickStartFields(picked);
+    container.querySelectorAll('[data-sport-pick]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const v = btn.getAttribute('data-sport-pick');
+            if (v === '__other__') {
+                const open = other.classList.toggle('hidden') === false;
+                btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                if (open) custom.focus();
+                return;
+            }
+            pick(v);
+        });
     });
-
-    container.querySelector('#sportSwitcherDefaultBtn').addEventListener('click', () => {
-        const picked = pickedSport();
-        if (!picked) return;
-        window.__quickStartSportOverride = null;
-        setDefaultSport(picked, true);
-        panel.classList.add('hidden');
-        renderSportSwitcher();
-        prefillQuickStartFields(picked);
-    });
+    container.querySelector('#sportSwitcherUse').addEventListener('click', () => pick(custom.value.trim()));
+    custom.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); pick(custom.value.trim()); } });
 }
 
 // -- Prefill the actual form fields (#sport/#location/#focus/#workoutLength
@@ -405,9 +441,10 @@ function prefillQuickStartFields(sport) {
     const hint = document.getElementById('quickStartHint');
     if (hint) {
         const sp = loadProfile().sportProfiles[sport];
-        hint.textContent = sp && sp.sessions
-            ? `Filled in from ${sp.sessions} past ${sport} session${sp.sessions > 1 ? 's' : ''} — tweak anything you like.`
-            : `First time with ${sport || 'this sport'} — using sensible starting defaults.`;
+        const chosen = window.__quickStartSportOverride || loadProfile().defaultSport;
+        hint.textContent = !chosen ? '' : sp && sp.sessions
+            ? `Set up from your last ${sp.sessions > 1 ? sp.sessions + ' ' : ''}${sport} session${sp.sessions > 1 ? 's' : ''}.`
+            : '';
     }
 }
 
@@ -433,8 +470,12 @@ function resetUserEditTracking() {
 
 function quickStartSession() {
     const sport = currentSport();
-    if (!sport) {
-        alert('Pick a sport first using the switcher above.');
+    if (!sport || !(window.__quickStartSportOverride || loadProfile().defaultSport)) {
+        // No sport picked yet: point at the sport chips instead of guessing one.
+        const first = document.querySelector('#sportSwitcher [data-sport-pick]');
+        const hint = document.getElementById('quickStartHint');
+        if (hint) hint.textContent = 'Pick your sport first - tap one above.';
+        if (first) { first.scrollIntoView({ behavior: 'smooth', block: 'center' }); first.focus({ preventScroll: true }); }
         return;
     }
     document.getElementById('sport').value = sport;
@@ -662,7 +703,7 @@ function renderProfileSummaryCard() {
             </div>
         </div>
         <div class="text-center mt-4">
-            <button type="button" class="btn btn-secondary" id="openSettingsFromDash">Advanced Settings</button>
+            <button type="button" class="btn btn-secondary" id="openSettingsFromDash">Edit preferences</button>
         </div>
     `;
 

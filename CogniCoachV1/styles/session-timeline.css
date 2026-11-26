@@ -1,0 +1,129 @@
+/* Whole-session timeline above the drill (scripts/session-timeline.js). Segment colours are the
+   section colours from the setup timeline (--c). */
+.session-timeline {
+    margin: -14px 0 30px;
+    padding: 16px 18px 14px;
+    border-radius: 16px;
+    background: var(--surface-strong, #fff);
+    border: 1px solid var(--line, rgba(118, 140, 168, 0.24));
+    box-shadow: 0 10px 28px rgba(30, 50, 80, 0.08);
+    text-align: left;
+}
+.session-timeline[hidden], .progress-indicator[hidden] { display: none; }
+.session-timeline { margin-top: 0; }
+
+.st-head { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.st-where { font-family: 'Orbitron', sans-serif; font-size: 0.85rem; color: var(--text-gray); letter-spacing: 0.5px; }
+.st-where b { color: var(--text-white); font-size: 1rem; }
+.st-dot { margin: 0 4px; }
+.st-section { display: inline-flex; align-items: center; gap: 6px; color: var(--text-white); }
+.st-section::before { content: ""; width: 10px; height: 10px; border-radius: 3px; background: var(--c); box-shadow: 0 0 8px var(--c); }
+.st-left { margin-left: auto; font-family: 'Space Mono', monospace; font-size: 0.8rem; color: var(--text-gray); font-variant-numeric: tabular-nums; }
+.st-toggle {
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--line, rgba(118, 140, 168, 0.3));
+    background: var(--medium-gray, #edf3fb);
+    color: var(--primary-blue);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.74rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.st-toggle:hover { border-color: var(--primary-blue); }
+
+/* the bar: one segment per drill, width = its length */
+.st-bar { display: flex; gap: 4px; height: 22px; }
+.st-seg {
+    position: relative;
+    min-width: 10px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--c) 20%, #fff);
+    border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+    overflow: visible;
+    cursor: default;
+}
+.st-seg .st-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 5px; background: var(--c); transition: width 0.9s linear; }
+.st-seg.done .st-fill { width: 100%; opacity: 0.85; }
+.st-seg.next { opacity: 0.75; }
+.st-seg.current {
+    border-color: var(--c);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 35%, transparent);
+}
+.st-seg.current::after {   /* pulsing glow: opacity only, so the GPU animates it without repainting */
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 8px;
+    box-shadow: 0 0 16px color-mix(in srgb, var(--c) 65%, transparent);
+    animation: stGlow 1.8s ease-in-out infinite;
+    pointer-events: none;
+    will-change: opacity;
+}
+.st-seg.current .st-fill {
+    background: linear-gradient(90deg, var(--c), color-mix(in srgb, var(--c) 70%, #fff));
+}
+.st-check {   /* tick on finished drills */
+    position: absolute; left: 50%; top: 50%;
+    width: 5px; height: 10px; margin: -7px 0 0 -3px;
+    border: solid #fff; border-width: 0 2.5px 2.5px 0;
+    transform: rotate(45deg);
+}
+.st-here {   /* "you are here" marker above the current drill */
+    position: absolute; left: 50%; top: -11px;
+    width: 0; height: 0; margin-left: -6px;
+    border: 6px solid transparent; border-top: 7px solid var(--c);
+    border-bottom: 0;
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.2));
+    animation: stBob 1.4s ease-in-out infinite;
+}
+
+.st-labels { display: flex; gap: 4px; margin-top: 7px; }
+.st-label { min-width: 10px; display: flex; align-items: center; gap: 5px; overflow: hidden; }
+.st-label i { flex-shrink: 0; width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
+.st-label span { font-size: 0.68rem; color: var(--text-gray); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* expanded list of every drill */
+.st-list { list-style: none; margin: 14px 0 0; padding: 12px 0 0; border-top: 1px solid var(--line, rgba(118, 140, 168, 0.24)); display: grid; gap: 6px; }
+.st-list[hidden] { display: none; }
+.st-list li {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    color: var(--text-white);
+}
+.st-list li.current { background: color-mix(in srgb, var(--c) 12%, transparent); box-shadow: inset 3px 0 0 var(--c); }
+.st-list li.next { color: var(--text-gray); }
+.st-num {
+    display: grid; place-items: center;
+    width: 24px; height: 24px; border-radius: 50%;
+    border: 2px solid var(--c);
+    font-family: 'Orbitron', sans-serif; font-size: 0.66rem; font-weight: 700;
+    color: var(--text-white);
+}
+.st-list li.done .st-num { background: var(--c); position: relative; }
+.st-list li.done .st-num::after { content: ""; width: 4px; height: 8px; margin-top: -2px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.st-list li.current .st-num { background: var(--c); color: #fff; }
+.st-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-list li.done .st-name { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--text-gray) 60%, transparent); color: var(--text-gray); }
+.st-sec { font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--text-white); white-space: nowrap; }
+.st-time { font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--text-gray); white-space: nowrap; min-width: 48px; text-align: right; }
+
+@keyframes stGlow { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@keyframes stBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+@media (max-width: 640px) {
+    .session-timeline { padding: 12px; margin-top: -18px; }
+    .st-where { width: 100%; }
+    .st-left { margin-left: 0; flex: 1; }
+    .st-toggle { padding: 5px 10px; }
+    .st-bar { height: 18px; gap: 3px; }
+    .st-label span { font-size: 0.6rem; }
+    .st-list li { grid-template-columns: 26px minmax(0, 1fr) auto; }
+    .st-list li .st-sec { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .st-seg.current::after, .st-here { animation: none; } }

@@ -8,6 +8,14 @@ const muscleCheckboxIds = [
 // Global drills list: array of strings in the form "drillname + description"
 window.globalDrillsList = [];
 
+// Session events for the read-aloud, mobile timer dock and screen-reader helpers
+// (scripts/read-aloud.js, scripts/session-dock.js). Fire-and-forget: nothing here depends on a listener.
+function emitSessionEvent(name, detail) {
+    try { document.dispatchEvent(new CustomEvent('cognicoach:' + name, { detail: detail || {} })); } catch (e) {}
+}
+// Set when the user asked for the next drill, so its title gets keyboard/screen-reader focus once it shows.
+let focusDrillOnRender = false;
+
 function updateGlobalDrillsList(drillData) {
     if (!drillData) return;
     const name = drillData.name || drillData.Name || 'Drill';
@@ -129,7 +137,6 @@ function applySportPresetFromQuery() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    initializeInteractiveBackground();
 
     // If this page load came from a sport landing page's "Start a
     // session" link (e.g. index.html?sport=Basketball), always land
@@ -212,55 +219,7 @@ function ensureSkipToEndButton() {
     }
 }
 
-function initializeInteractiveBackground() {
-    // Touch devices don't have a meaningful "pointer position" to track —
-    // driving this effect off touchmove meant the background tilted and
-    // shifted on every scroll drag, which just looked janky and fought
-    // with scrolling. Skip it entirely on coarse/no-hover (touch) devices.
-    const isTouchDevice = window.matchMedia &&
-        window.matchMedia('(hover: none), (pointer: coarse)').matches;
-    if (isTouchDevice) {
-        return;
-    }
-
-    const root = document.documentElement;
-    const updatePointer = (clientX, clientY) => {
-        const x = Math.max(0, Math.min(100, (clientX / window.innerWidth) * 100));
-        const y = Math.max(0, Math.min(100, (clientY / window.innerHeight) * 100));
-        const dx = (x - 50) / 50;
-        const dy = (y - 50) / 50;
-
-        const shiftX = (dx * -3).toFixed(2) + 'px';
-        const shiftY = (dy * -3).toFixed(2) + 'px';
-        const gridOffsetX = (dx * -8).toFixed(2) + 'px';
-        const gridOffsetY = (dy * -8).toFixed(2) + 'px';
-        const rotateX = (dy * -14).toFixed(2) + 'deg';
-        const rotateY = (dx * 14).toFixed(2) + 'deg';
-        const scale = (1 + Math.abs(dx) * 0.03 + Math.abs(dy) * 0.03).toFixed(2);
-        const bgRotateX = (dy * -8).toFixed(2) + 'deg';
-        const bgRotateY = (dx * 8).toFixed(2) + 'deg';
-        const bgScale = (1 + Math.abs(dx) * 0.02 + Math.abs(dy) * 0.02).toFixed(2);
-
-        root.style.setProperty('--pointer-x', x.toFixed(2) + '%');
-        root.style.setProperty('--pointer-y', y.toFixed(2) + '%');
-        root.style.setProperty('--bg-shift-x', shiftX);
-        root.style.setProperty('--bg-shift-y', shiftY);
-        root.style.setProperty('--grid-shift-x', gridOffsetX);
-        root.style.setProperty('--grid-shift-y', gridOffsetY);
-        root.style.setProperty('--grid-offset-x', gridOffsetX);
-        root.style.setProperty('--grid-offset-y', gridOffsetY);
-        root.style.setProperty('--grid-rotate-x', rotateX);
-        root.style.setProperty('--grid-rotate-y', rotateY);
-        root.style.setProperty('--grid-scale', scale);
-        root.style.setProperty('--bg-rotate-x', bgRotateX);
-        root.style.setProperty('--bg-rotate-y', bgRotateY);
-        root.style.setProperty('--bg-scale', bgScale);
-    };
-
-    window.addEventListener('pointermove', event => {
-        updatePointer(event.clientX, event.clientY);
-    }, { passive: true });
-}
+// The background's pointer tilt now lives in scripts/depth.js so every page has it.
 // Update slider display
 function updateSliderValue() {
     const slider = document.getElementById('workoutLength');
@@ -705,6 +664,8 @@ async function startSession() {
     }));
 
     appState.session.currentDrillIndex = 0;
+    appState.session.startedAt = Date.now();   // XP boosts running when the session started still count
+    appState.session.usedCoachMode = false;
 
     // Show session view
     document.getElementById('setupView').style.display = 'none';
@@ -712,37 +673,104 @@ async function startSession() {
     document.getElementById('marketingIntro').classList.add('hidden');
 
     // Load first drill
+    focusDrillOnRender = true;
     loadCurrentDrill();
     saveState();
 }
 
-// Load current drill
-async function loadCurrentDrill() {
-    const drill = appState.session.drills[appState.session.currentDrillIndex];
-    
-    // Show loading
-    document.getElementById('loadingContainer').classList.add('active');
-    document.getElementById('drillContent').classList.add('hidden');
+// ---- Drill prefetch --------------------------------------------------------
+// While the athlete works through drill N, drill N+1 is generated in the background, so "Next
+// Drill" is usually instant. Same request as before (including recentDrills, which by then holds
+// every drill shown so far), one drill ahead only, so quality and backend load are unchanged.
+const drillPrefetch = new Map();   // drills array index -> { drills, promise }
 
-    // Prepare data for getDrill
-    const drillRequest = {
+function buildDrillRequest(drill) {
+    const request = {
         sport: appState.setup.sport,
         focus: appState.setup.focus,
         "muscle group": appState.setup.muscleGroup,
         level: appState.setup.level,
         "drill time": drill.drillTime,
         section: drill.sectionName,
-        location:appState.setup.location
+        location: appState.setup.location
     };
+    // Adaptive coach (scripts/coach-adapt.js): today's readiness and the athlete's
+    // "too easy / too hard" feedback nudge the intensity of drills not generated yet.
+    let req = request;
+    if (window.CogniCoachAdapt) {
+        try { req = window.CogniCoachAdapt.adjustRequest(request, drill); } catch (e) {}
+    }
+    // Your coach (scripts/coach-profile.js): the athlete's own description and what the coach has
+    // learned from their training ride along in the focus field the backend already uses.
+    if (window.CogniCoachProfile) {
+        try { req = window.CogniCoachProfile.apply(req, appState.setup.sport); } catch (e) {}
+    }
+    return req;
+}
+
+// Throw away the prepared next drill (if it hasn't been shown yet) and prepare it again,
+// e.g. after the athlete says the current one is too easy or too hard.
+function refreshUpcomingDrill() {
+    const index = appState.session.currentDrillIndex + 1;
+    const drill = appState.session.drills[index];
+    if (!drill) return;
+    const pending = drillPrefetch.get(index);
+    if (pending) pending.cancelled = true;
+    drillPrefetch.delete(index);
+    drill.generatedDrill = null;
+    saveState();
+    setTimeout(() => prefetchDrill(index), 200);
+}
+
+function prefetchDrill(index) {
+    const drills = appState.session.drills;
+    const drill = drills && drills[index];
+    if (!drill || drill.generatedDrill || drillPrefetch.has(index)) return;
+    const entry = { drills, promise: null };
+    entry.promise = getDrill(buildDrillRequest(drill)).then((data) => {
+        if (entry.cancelled) return data;
+        // only keep it if this is still the same session
+        if (appState.session.drills === drills && drills[index] && !drills[index].generatedDrill) {
+            drills[index].generatedDrill = data;
+            saveState();
+        }
+        return data;
+    }).catch((error) => {
+        console.warn('Prefetching the next drill failed (it will load normally):', error);
+        drillPrefetch.delete(index);
+        throw error;
+    });
+    entry.promise.catch(() => {});
+    drillPrefetch.set(index, entry);
+}
+
+// Load current drill
+async function loadCurrentDrill() {
+    const drill = appState.session.drills[appState.session.currentDrillIndex];
+    
+    emitSessionEvent('drill-loading', { index: appState.session.currentDrillIndex });
+    // Show loading
+    document.getElementById('loadingContainer').classList.add('active');
+    document.getElementById('drillContent').classList.add('hidden');
+
+    // Prepare data for getDrill
+    const drillRequest = buildDrillRequest(drill);
 
     try {
+        const index = appState.session.currentDrillIndex;
+        const pending = drillPrefetch.get(index);
+        let prefetched = null;
+        if (!drill.generatedDrill && pending && !pending.cancelled && pending.drills === appState.session.drills) {
+            prefetched = await pending.promise.catch(() => null);   // already on its way: wait for it
+        }
+        drillPrefetch.delete(index);
         const drillData = drill.generatedDrill
             ? normalizeDrillData(
                 typeof drill.generatedDrill === 'string'
                     ? parseDrillResponse(drill.generatedDrill)
                     : drill.generatedDrill
             )
-            : await getDrill(drillRequest);
+            : prefetched || await getDrill(drillRequest);
 
         if (!drill.generatedDrill) {
             appState.session.drills[appState.session.currentDrillIndex].generatedDrill = drillData;
@@ -750,6 +778,8 @@ async function loadCurrentDrill() {
         }
 
         renderDrill(drill, drillData);
+        // start on the next drill while this one is being done
+        setTimeout(() => prefetchDrill(appState.session.currentDrillIndex + 1), 300);
 
     } catch (error) {
         console.error('Error loading drill:', error);
@@ -897,8 +927,8 @@ function getAppPassword() {
 }
 
 async function requestDrillFromApi(drillRequest, turnstileToken) {
-    const temperatureInput = document.getElementById("temperature").value;
-    const temperature = Number(temperatureInput);
+    const temperatureInput = String(document.getElementById("temperature").value || '').trim();
+    const temperature = temperatureInput === '' ? NaN : Number(temperatureInput);
 
     const payload = {
         ...drillRequest,
@@ -951,6 +981,17 @@ async function getDrill(drillRequest) {
             console.warn("Drill request rejected (403) — retrying with a fresh Turnstile token.");
             const freshToken = await getTurnstileToken();
             response = await requestDrillFromApi(drillRequest, freshToken);
+        }
+
+        // If the backend ever refuses the longer request (athlete details in the focus field),
+        // ask again without them rather than failing the drill.
+        if (!response.ok && [400, 413, 422].includes(response.status) && window.CogniCoachProfile) {
+            const plain = window.CogniCoachProfile.strip(drillRequest);
+            if (plain) {
+                console.warn(`Drill request rejected (${response.status}) with athlete details - retrying without them.`);
+                const freshToken = await getTurnstileToken();
+                response = await requestDrillFromApi(plain, freshToken);
+            }
         }
 
         if (!response.ok) {
@@ -1033,6 +1074,23 @@ function renderDrill(drill, drillData) {
     // Add this drill to the global drills list (name + description)
     updateGlobalDrillsList(drillData);
     prepareTimer(drill.drillTime);
+
+    if (focusDrillOnRender) {
+        focusDrillOnRender = false;
+        const title = document.getElementById('drillName');
+        if (title) {
+            title.setAttribute('tabindex', '-1');
+            title.focus({ preventScroll: true });
+            const card = title.closest('.card');
+            if (card) card.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        }
+    }
+    emitSessionEvent('drill-rendered', {
+        index: appState.session.currentDrillIndex,
+        total: appState.session.drills.length,
+        seconds: drill.drillTime,
+        drill: drillData
+    });
 }
 
 
@@ -1155,12 +1213,16 @@ function syncMuscleSelectionState(id) {
     const isAiSelected = input.dataset.aiSelected === 'true';
     const isManualSelected = input.dataset.manualSelected === 'true';
 
-    input.checked = isAiSelected;
-    input.disabled = isAiSelected;
+    // Checked = shown as worked (by the AI pick or the user's own pick). The checkbox is visually hidden but
+    // keyboard-focusable, so screen reader and keyboard users can toggle muscles too.
+    input.checked = isAiSelected || isManualSelected;
+    input.disabled = false;
 
     if (label) {
         label.classList.toggle('ai-selected', isAiSelected);
         label.classList.toggle('manual-selected', isManualSelected);
+        const name = label.dataset.muscleName || (label.dataset.muscleName = label.textContent.trim());
+        input.setAttribute('aria-label', name + (isAiSelected ? ', worked by this drill' : ''));
     }
 
     if (svgGroup) {
@@ -1202,6 +1264,7 @@ function prepareTimer(seconds) {
     if (skipBtnEl) skipBtnEl.style.display = 'inline-block';
     document.getElementById('pauseBtn').textContent = 'Pause';
     document.getElementById('pauseBtn').disabled = true;
+    document.getElementById('pauseBtn').setAttribute('aria-pressed', 'false');
     document.getElementById('timerStatus').textContent = 'Drill loaded. Start when you are ready.';
 
     updateTimerDisplay();
@@ -1228,12 +1291,14 @@ function startTimer() {
     document.getElementById('timerStatus').textContent = 'Timer is running.';
 
     updateTimerDisplay();
+    emitSessionEvent('timer', { state: 'running', remaining: appState.session.timeRemaining, total: appState.session.totalTime });
 
     appState.session.timerInterval = setInterval(() => {
         if (!appState.session.isPaused) {
             appState.session.timeRemaining--;
 
             updateTimerDisplay();
+            emitSessionEvent('timer', { state: 'tick', remaining: appState.session.timeRemaining, total: appState.session.totalTime });
 
             if (appState.session.timeRemaining <= 0) {
                 clearInterval(appState.session.timerInterval);
@@ -1371,9 +1436,11 @@ function togglePause() {
 
     appState.session.isPaused = !appState.session.isPaused;
     document.getElementById('pauseBtn').textContent = appState.session.isPaused ? 'Resume' : 'Pause';
+    document.getElementById('pauseBtn').setAttribute('aria-pressed', appState.session.isPaused ? 'true' : 'false');
     document.getElementById('timerStatus').textContent = appState.session.isPaused
         ? 'Timer paused.'
         : 'Timer is running.';
+    emitSessionEvent('timer', { state: appState.session.isPaused ? 'paused' : 'running', remaining: appState.session.timeRemaining, total: appState.session.totalTime });
     saveState();
 }
 
@@ -1388,10 +1455,12 @@ function drillComplete() {
     if (skipBtnEl) skipBtnEl.style.display = 'none';
     document.getElementById('nextDrillContainer').style.display = 'block';
     saveState();
+    emitSessionEvent('timer', { state: 'complete', remaining: 0, total: appState.session.totalTime });
 }
 
 // Next drill
 function nextDrill() {
+    focusDrillOnRender = true;
     appState.session.currentDrillIndex++;
 
     if (appState.session.currentDrillIndex >= appState.session.drills.length) {
@@ -1411,6 +1480,9 @@ function sessionComplete() {
     logSessionToHistory(true);
     document.getElementById('drillContent').classList.add('hidden');
     document.getElementById('sessionComplete').classList.remove('hidden');
+    emitSessionEvent('session-end', { completed: true });
+    const doneTitle = document.querySelector('#sessionComplete .drill-name');
+    if (doneTitle) { doneTitle.setAttribute('tabindex', '-1'); doneTitle.focus(); }
 }
 
 // End session early
@@ -1444,6 +1516,19 @@ function logSessionToHistory(completed) {
         drillsTotal: drillsTotal,
         completed: !!completed
     };
+    if (window.CogniCoachAdapt) {
+        try { Object.assign(record, window.CogniCoachAdapt.sessionSummary()); } catch (e) {}
+    }
+    if (appState.session.usedCoachMode) record.coachMode = true;
+    // XP (with any active boost), coins, chests - scripts/economy.js; the recap shows them.
+    window.__lastSessionReward = null;
+    if (window.CogniEconomy) {
+        try {
+            const res = window.CogniEconomy.awardSession(record, appState.session);
+            Object.assign(record, res.fields);
+            window.__lastSessionReward = res.reward;
+        } catch (e) { console.warn('Economy reward failed:', e); }
+    }
 
     try {
         const history = JSON.parse(localStorage.getItem('cognicoach-history') || '[]');
@@ -1456,6 +1541,7 @@ function logSessionToHistory(completed) {
 
 // Return to setup
 function returnToSetup() {
+    emitSessionEvent('session-end', { completed: false });
     // Reset session
     appState.session = {
         currentDrillIndex: 0,
@@ -1545,10 +1631,15 @@ function initializeMuscleDiagramInteractions() {
         });
     });
 
+    const svgHost = document.getElementById('muscleSvgHost');
+    if (svgHost) svgHost.setAttribute('aria-hidden', 'true');   // the labels above carry the same info
     document.querySelectorAll('.muscle-groups label[for]').forEach(function(label) {
         label.addEventListener('click', function(event) {
             event.preventDefault();
             toggleManualMuscle(label.htmlFor);
         });
+        // keyboard (Space on the focused checkbox)
+        const box = document.getElementById(label.htmlFor);
+        if (box) box.addEventListener('change', function() { toggleManualMuscle(label.htmlFor); });
     });
 }

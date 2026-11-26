@@ -19,7 +19,7 @@ import { ScriptError, compileScript } from "./script.js";
 warmUp(); // start-up time (not request CPU): indexes + JIT
 
 const DEFAULT_ORIGINS = "https://cognicoachai.com,https://www.cognicoachai.com";
-const MAX_BODY = 8192;
+const MAX_BODY = 16384;
 const memCache = new Map();          // per-isolate plan cache (KV is the shared one)
 const MEM_CACHE_SIZE = 200;
 const memHits = new Map();           // per-isolate fallback rate limiter
@@ -146,7 +146,7 @@ async function generate(request, env, ctx, who) {
   const movement = typeof body.movement === "string" ? body.movement.trim() : "";
   const extra = typeof body.extra_instructions === "string" ? body.extra_instructions.trim() : "";
   const side = body.dominant_side === "left" ? "left" : "right";
-  if (movement.length < 3 || movement.length > 400) return json({ detail: "movement must be 3-400 characters" }, 422);
+  if (movement.length < 3 || movement.length > 2000) return json({ detail: "movement must be 3-2000 characters" }, 422);
   if (extra.length > 800) return json({ detail: "extra_instructions must be at most 800 characters" }, 422);
 
   const local = localScript(movement);
@@ -171,7 +171,7 @@ async function generate(request, env, ctx, who) {
     title: raw.title || "",
     canonical_name: raw.canonical_name || "",
     steps: raw.steps || [],
-    coaching_cues: raw.coaching_cues || [],
+    coaching_cues: raw.what_happens || raw.coaching_cues || [],
     camera_view: VIEWS.includes(raw.camera_view) ? raw.camera_view : "three_quarter",
     dominant_side: side,
     model: MODEL,

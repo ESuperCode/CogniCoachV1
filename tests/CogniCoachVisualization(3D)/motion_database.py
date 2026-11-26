@@ -7387,6 +7387,12 @@ NAME_ALIASES: Dict[str, str] = {
     "churn": "run", "finish": "stand", "secure_catch": "catch", "overhead_two_hand_set_shot": "overhead_two_hand_set",
     "two_hand_overhead_set": "overhead_two_hand_set", "bump": "forearm_pass", "smash": "spike_arms", "plank_hold": "plank", "dive": "side_dive", "follow_through": "stand",
     "jumping_jacks": "jumping_jack", "lateral_shuffle": "shuffle", "defense": "defensive_stance",
+    # names the model invents for drill phases
+    "push_off_wall": "streamline", "wall_push_off": "streamline", "push_off": "streamline", "streamline_glide": "streamline",
+    "crow_hop": "stride_step", "approach": "stride_step", "spike_approach": "stride_step", "approach_step": "stride_step",
+    "sprint_stride": "run(pace=sprint)", "acceleration": "run(pace=sprint)", "accelerate": "run(pace=sprint)",
+    "decelerate": "stop_and_stick", "deceleration": "stop_and_stick", "closeout": "arms_up_block", "close_out": "arms_up_block",
+    "freestyle": "front_crawl", "easy_swim": "front_crawl", "field_ground_ball": "low_scoop", "ground_ball": "low_scoop",
 }
 
 
@@ -7411,6 +7417,13 @@ for _old, _new in RENAMES.items():
         DB[_new] = DB.pop(_old)
         DB[_new]["name"] = _new
         NAME_ALIASES[_old] = _new
+# Aliases written before a rename point at the old name: resolve them to the current one
+# ("kick" -> soccer_kick -> instep_kick), so every alias names a real database motion.
+NAME_ALIASES["defense"] = "wide_defensive_stance"
+for _a, _target in list(NAME_ALIASES.items()):
+    _base, _sep, _rest = _target.partition("(")
+    if _base not in DB and _base in NAME_ALIASES:
+        NAME_ALIASES[_a] = NAME_ALIASES[_base] + (_sep + _rest if _sep else "")
 GENERAL_COMMENTS: Dict[str, str] = {
     "instep_kick": "Full-power instep kick of a ball on the ground with the right foot (e.g. soccer shot, rugby place/goal kick, kick-off): plant, knee-bent backswing, straight-leg strike, high follow-through. Calm balance arms.",
     "inside_foot_kick": "Inside-of-the-foot kick / pass with the right foot: short backswing, foot turned out, firm ankle, follow through to the target.",

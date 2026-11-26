@@ -1,0 +1,238 @@
+/* Economy UI (scripts/economy-ui.js): HUD, buttons, toasts, chest dialog. */
+
+.ci { display: inline-block; vertical-align: middle; flex: 0 0 auto; }
+.ci-wrap { display: inline-flex; align-items: center; }
+.spin { animation: ciSpin 1s linear infinite; }
+@keyframes ciSpin { to { transform: rotate(360deg); } }
+
+/* ---- buttons ---------------------------------------------------------------- */
+.econ-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 44px; padding: 0 18px;
+    border-radius: 14px;
+    border: 2px solid var(--line, #dbe7f3);
+    border-bottom-width: 4px;
+    background: #fff; color: var(--text-white, #172033);
+    font-family: 'Space Mono', monospace; font-size: 0.86rem; font-weight: 700;
+    text-decoration: none; cursor: pointer;
+    transition: transform 0.08s ease, filter 0.15s ease;
+}
+.econ-btn:hover:not(:disabled) { filter: brightness(1.04); transform: translateY(-1px); }
+.econ-btn:active:not(:disabled) { transform: translateY(2px); border-bottom-width: 2px; }
+.econ-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.econ-btn-primary {
+    background: linear-gradient(180deg, #3d8ef0, #1a6dcc);
+    border-color: #1559a8; color: #fff;
+}
+.econ-btn-icon { min-width: 44px; padding: 0; }
+.econ-btn-icon.cheered { color: #e34948; }
+
+/* ---- HUD ---------------------------------------------------------------------- */
+.econ-hud {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;
+    margin: 0 auto 26px; max-width: 900px;
+}
+.econ-chip {
+    position: relative;
+    display: inline-flex; align-items: center; gap: 8px;
+    min-height: 52px; padding: 6px 16px 6px 10px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--line, #dbe7f3);
+    box-shadow: 0 10px 24px rgba(30, 50, 80, 0.1), inset 0 -3px 0 rgba(30, 50, 80, 0.06);
+    color: var(--text-white, #172033); text-decoration: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.econ-chip:hover { transform: translateY(-2px); box-shadow: 0 16px 30px rgba(30, 50, 80, 0.14); }
+.econ-num { font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 1.15rem; line-height: 1; }
+.econ-num small { font-size: 0.7rem; color: var(--text-gray); font-weight: 700; }
+.econ-lbl { font-size: 0.7rem; color: var(--text-gray); text-transform: uppercase; letter-spacing: 0.05em; }
+.econ-streak.on .econ-num { color: #e0560f; }
+.econ-freeze { display: inline-flex; align-items: center; gap: 2px; margin-left: 2px; padding: 2px 6px 2px 2px; border-radius: 999px; background: #e6f5ff; font-size: 0.72rem; color: #1c5cab; }
+.econ-goal-text, .econ-stack { display: flex; flex-direction: column; gap: 3px; }
+.econ-hud[hidden] { display: none; }
+.econ-ring-bg { fill: none; stroke: #e3eaf3; stroke-width: 5; }
+.econ-ring-fg { fill: none; stroke: #f59e0b; stroke-width: 5; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease; }
+.econ-goal.done .econ-ring-fg { stroke: #1baf7a; }
+.econ-boost { background: linear-gradient(135deg, #f3ebff, #fff); border-color: #d3bdff; }
+.econ-boost .econ-num { color: #6a2ad6; }
+.econ-dot { position: absolute; top: 6px; right: 6px; width: 11px; height: 11px; border-radius: 50%; background: #e34948; box-shadow: 0 0 0 2px #fff; }
+
+@media (max-width: 640px) {
+    .econ-hud { gap: 6px; margin-bottom: 18px; }
+    .econ-chip { min-height: 46px; padding: 4px 10px 4px 6px; gap: 5px; border-radius: 14px; }
+    .econ-lbl { font-size: 0.58rem; letter-spacing: 0.02em; white-space: nowrap; }
+    .econ-num { font-size: 1rem; }
+    .econ-ring { width: 28px; height: 28px; }
+}
+
+/* ---- toasts ------------------------------------------------------------------- */
+.econ-toasts { position: fixed; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 2600; display: grid; gap: 10px; width: min(420px, calc(100vw - 32px)); pointer-events: none; }
+.econ-toast {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; border-radius: 16px;
+    background: #172033; color: #fff;
+    box-shadow: 0 18px 40px rgba(10, 20, 40, 0.35);
+    font-size: 0.9rem;
+    animation: econIn 0.35s cubic-bezier(.2, .9, .3, 1.3);
+}
+.econ-toast.out { opacity: 0; transform: translateY(10px); transition: all 0.35s ease; }
+@keyframes econIn { from { opacity: 0; transform: translateY(16px) scale(0.96); } }
+body.has-session-dock .econ-toasts { bottom: calc(100px + env(safe-area-inset-bottom)); }
+
+/* ---- chest dialog --------------------------------------------------------------- */
+html.chest-on, html.chest-on body { overflow: hidden; }
+.chest-overlay {
+    position: fixed; inset: 0; z-index: 2700;
+    display: grid; place-items: center; padding: 16px;
+    background: radial-gradient(circle at 50% 40%, rgba(40, 60, 110, 0.75), rgba(7, 13, 26, 0.92));
+    backdrop-filter: blur(6px);
+}
+.chest-overlay[hidden] { display: none; }
+.chest-card {
+    position: relative; overflow: hidden;
+    width: min(440px, 100%);
+    padding: 28px 24px 24px;
+    border-radius: 28px;
+    background: linear-gradient(180deg, #ffffff, #f1f6fd);
+    box-shadow: 0 40px 90px rgba(0, 0, 0, 0.5);
+    text-align: center;
+}
+.chest-card h2 { position: relative; font-family: 'Orbitron', sans-serif; font-size: 1.35rem; color: #172033; margin: 0; }
+.chest-src { position: relative; color: #56657b; font-size: 0.85rem; margin: 4px 0 6px; min-height: 1.2em; }
+.chest-rays {
+    position: absolute; left: 50%; top: 42%; width: 640px; height: 640px; margin: -320px 0 0 -320px;
+    background: repeating-conic-gradient(from 0deg, rgba(255, 204, 61, 0.22) 0 10deg, transparent 10deg 20deg);
+    border-radius: 50%; opacity: 0; transform: scale(0.4);
+    transition: opacity 0.5s ease, transform 0.8s ease;
+    pointer-events: none;
+    -webkit-mask-image: radial-gradient(circle, #000 20%, transparent 65%);
+    mask-image: radial-gradient(circle, #000 20%, transparent 65%);
+}
+.chest-card.burst .chest-rays { opacity: 1; transform: scale(1); animation: chestRays 14s linear infinite; }
+@keyframes chestRays { to { transform: scale(1) rotate(360deg); } }
+.chest-big {
+    position: relative;
+    display: block; margin: 6px auto 0; padding: 0;
+    border: 0; background: none; cursor: pointer;
+    filter: drop-shadow(0 18px 24px rgba(59, 34, 8, 0.35));
+    transition: transform 0.2s ease;
+}
+.chest-big:hover:not(:disabled) { transform: translateY(-4px) scale(1.03); }
+.chest-big:disabled { cursor: default; }
+.chest-big .chest-lid { transform-box: view-box; transform-origin: 6px 21px; transition: transform 0.45s cubic-bezier(.3, 1.6, .5, 1); }
+.chest-big.shake { animation: chestShake 0.9s ease-in-out; }
+@keyframes chestShake {
+    0%, 100% { transform: rotate(0); }
+    15% { transform: rotate(-8deg) scale(1.03); } 30% { transform: rotate(7deg) scale(1.05); }
+    45% { transform: rotate(-6deg) scale(1.07); } 60% { transform: rotate(5deg) scale(1.09); }
+    80% { transform: rotate(-2deg) scale(1.12); }
+}
+.chest-big.opened .chest-lid { transform: translate(0, -7px) rotate(-14deg); }
+.chest-big::before {   /* light spilling out of the open chest */
+    content: ""; position: absolute; left: 50%; top: 38%; width: 70%; height: 40%;
+    transform: translate(-50%, -50%) scale(0.2); border-radius: 50%;
+    background: radial-gradient(ellipse, rgba(255, 236, 140, 0.95), rgba(255, 204, 61, 0.35) 45%, transparent 70%);
+    opacity: 0; transition: opacity 0.4s ease, transform 0.5s ease; pointer-events: none;
+}
+.chest-big.opened::before { opacity: 1; transform: translate(-50%, -60%) scale(1.25); }
+.chest-big.opened { animation: chestPop 0.5s ease-out; }
+@keyframes chestPop { 0% { transform: scale(1.12); } 60% { transform: scale(0.96); } 100% { transform: scale(1); } }
+.chest-hint { position: relative; color: #56657b; font-size: 0.85rem; margin: 6px 0 0; min-height: 1.2em; }
+.chest-rewards { position: relative; display: grid; gap: 10px; margin: 10px 0 16px; }
+.chest-reward {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 16px; border-radius: 18px;
+    background: #fff; border: 2px solid #ffe08a;
+    box-shadow: 0 10px 24px rgba(201, 133, 0, 0.18);
+    text-align: left;
+    animation: rewardIn 0.5s cubic-bezier(.2, .9, .3, 1.3) both;
+}
+.chest-reward b { display: block; font-family: 'Orbitron', sans-serif; font-size: 1.05rem; color: #172033; }
+.chest-reward small { display: block; color: #56657b; font-size: 0.8rem; }
+@keyframes rewardIn { from { opacity: 0; transform: translateY(24px) scale(0.85); } }
+.chest-actions { position: relative; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+html.a11y-reduce-motion .chest-card.burst .chest-rays { animation: none; }
+html.a11y-reduce-motion .chest-reward, html.a11y-reduce-motion .econ-toast { animation: none; }
+@media (max-width: 440px) {
+    .econ-hud { gap: 5px; }
+    .econ-chip { padding: 4px 7px 4px 5px; gap: 4px; min-height: 44px; }
+    .econ-chip .ci { width: 22px; height: 22px; }
+    .econ-ring { width: 24px; height: 24px; }
+    .econ-num { font-size: 0.92rem; }
+    .econ-num small { font-size: 0.6rem; }
+    .econ-freeze { padding: 1px 4px 1px 1px; }
+    .econ-freeze .ci { width: 14px; height: 14px; }
+}
+
+/* ---- shared page tabs (dashboard.html, arena.html) -------------------------------------- */
+.page-tabs {
+    position: sticky; top: 10px; z-index: 50;
+    transition: top 0.35s ease;
+    display: flex; gap: 4px; justify-content: center;
+    margin: 0 auto 10px; padding: 5px; max-width: 680px;
+    border-radius: 20px; background: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--line, #dbe7f3);
+    box-shadow: 0 12px 26px rgba(30, 50, 80, 0.1);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.page-tabs [role="tab"] {
+    position: relative; flex: 1 1 0; min-width: 0;
+    display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 56px; padding: 6px 4px;
+    border: 0; border-radius: 15px; background: transparent;
+    color: #4d5a6e; font-family: 'Space Mono', monospace; font-size: 0.78rem; font-weight: 700; cursor: pointer;
+}
+.page-tabs [role="tab"]:hover { color: var(--text-white); background: var(--medium-gray, #edf3fb); }
+.page-tabs [role="tab"][aria-selected="true"] { color: #fff; background: linear-gradient(180deg, #3d8ef0, #1a6dcc); box-shadow: 0 8px 18px rgba(26, 109, 204, 0.35); }
+.page-tabs .tab-dot { position: absolute; top: 7px; right: calc(50% - 20px); width: 10px; height: 10px; border-radius: 50%; background: #e34948; box-shadow: 0 0 0 2px #fff; }
+.page-tabs .tab-dot[hidden] { display: none; }
+.page-tour-btn {
+    display: flex; align-items: center; gap: 6px; margin: 0 auto 22px;
+    min-height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent;
+    color: var(--primary-blue); font-family: 'Space Mono', monospace; font-size: 0.8rem; font-weight: 700; cursor: pointer;
+}
+.page-tour-btn:hover { background: rgba(26, 109, 204, 0.08); }
+.dash-intro, .panel-intro { max-width: 680px; margin: 0 auto 14px; text-align: center; color: #4d5a6e; font-size: 0.85rem; line-height: 1.5; }
+.panel-intro { margin-bottom: 20px; }
+.dash-panel:focus-visible { outline: 3px solid var(--primary-blue); outline-offset: 4px; border-radius: 16px; }
+@media (max-width: 640px) {
+    .page-tabs { gap: 2px; padding: 4px; border-radius: 16px; }
+    .page-tabs [role="tab"] { min-height: 52px; font-size: 0.66rem; border-radius: 12px; }
+    .page-tour-btn { margin-bottom: 14px; }
+}
+
+/* dashboard Home: welcome card */
+.dash-welcome { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap;
+    background: linear-gradient(135deg, #0f1f3a, #1b355f 60%, #4a2a17) !important; color: #eaf2ff; border: 0 !important; }
+.dash-welcome h2 { font-family: 'Orbitron', sans-serif; font-size: 1.5rem; margin: 0 0 6px; color: #fff; }
+.dash-welcome p { margin: 0; color: #c9d8ee; line-height: 1.5; }
+.dw-text { flex: 1 1 280px; }
+.dw-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.dw-actions .btn { display: inline-flex; align-items: center; gap: 8px; }
+.dash-welcome .btn-secondary { background: rgba(255, 255, 255, 0.1); color: #fff; border-color: rgba(255, 255, 255, 0.35); }
+@media (max-width: 640px) { .dw-actions, .dw-actions .btn { width: 100%; justify-content: center; } .dash-welcome h2 { font-size: 1.25rem; } }
+
+.dash-welcome a.btn, #smartActions a.btn, .competition-cta a.btn { text-decoration: none; }
+
+/* ---- slim page header (dashboard.html, arena.html) ---------------------------------- */
+header.page-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    max-width: none; margin: 0 0 16px; text-align: left; animation: none;
+}
+.page-head .page-h1 { font-size: 2rem; letter-spacing: -1px; line-height: 1.1; margin: 0; }
+.page-head .page-sub { margin: 4px 0 0; font-size: 0.85rem; color: var(--text-gray); }
+.page-head .page-tour-btn { margin: 0; border: 1px solid var(--line, #dbe7f3); background: rgba(255, 255, 255, 0.8); }
+.page-head + .econ-hud, .page-head + #econHud .econ-hud, .page-head + #arenaHud .econ-hud { margin-bottom: 14px; }
+#econHud .econ-hud, #arenaHud .econ-hud { margin-bottom: 14px; }
+/* tabs stay on screen while scrolling; they drop below the site nav while it is showing */
+body:has(.site-nav:not(.nav-hidden)) .page-tabs { top: 82px; }
+.dash-panel, .arena-panel { scroll-margin-top: 160px; }
+@media (max-width: 640px) {
+    .page-head .page-h1 { font-size: 1.5rem; }
+    .page-head .page-sub { font-size: 0.78rem; }
+    .page-head .page-tour-btn { min-height: 34px; padding: 0 10px; font-size: 0.72rem; }
+    .page-tabs [role="tab"] { min-height: 46px; }
+    body:has(.site-nav:not(.nav-hidden)) .page-tabs { top: 76px; }
+}
