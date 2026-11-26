@@ -170,20 +170,20 @@
         if (claim) { hi.push('<li><a href="arena.html#quests">' + icon('target', 18) + ' ' + claim + ' quest reward' + (claim > 1 ? 's' : '') + ' ready in the Arena</a></li>'); }
         var coins = rw ? rw.coins + rw.levelCoins : 0;
         card.innerHTML =
-            '<div class="rc-top"><span class="rc-medal" aria-hidden="true">' + icon('trophy-gold', 44) + '</span>' +
+            '<div class="recap-medal" aria-hidden="true"><div class="recap-coin">' + icon('trophy-gold', 58) + '</div></div>' +
             '<h2 class="recap-title" tabindex="-1">Session complete</h2>' +
-            '<p class="recap-sub">' + esc(rec.sport) + (rec.focus && rec.focus !== 'General' ? ' · ' + esc(rec.focus) : '') + '</p></div>' +
-            '<div class="rc-nums">' +
-            '<div><b>' + esc(rec.drillsCompleted + '/' + rec.drillsTotal) + '</b><span>drills</span></div>' +
-            '<div><b>' + d.mins + '</b><span>minutes</span></div>' +
-            '<div><b>+' + (rw ? rw.xp : d.earned) + '</b><span>XP' + (coins ? ' · +' + coins + ' Grit' : '') + '</span></div>' +
+            '<p class="recap-sub">' + esc(rec.sport) + (rec.focus && rec.focus !== 'General' ? ' · ' + esc(rec.focus) : '') + '</p>' +
+            '<div class="recap-grid rc-grid">' +
+            tile(rec.drillsCompleted + '/' + rec.drillsTotal, 'Drills done') +
+            tile(d.mins, 'Minutes') +
+            tile('+' + (rw ? rw.xp : d.earned), 'XP' + (coins ? ' · +' + coins + ' Grit' : '')) +
             '</div>' +
             (hi.length ? '<ul class="rc-high">' + hi.join('') + '</ul>' : '') +
             '<div class="recap-advice"><span class="recap-advice-label">Coach’s note</span>' + esc(advice(rec)) + '</div>' +
             (window.CogniCoachProfile ? window.CogniCoachProfile.recapHtml() : '') +
             '<div class="recap-actions">' +
             '<button class="btn btn-primary" type="button" onclick="returnToSetup()">Start next session</button>' +
-            '<a class="rc-link" href="dashboard.html">See your progress</a>' +
+            '<a class="btn btn-secondary" href="dashboard.html">See your progress</a>' +
             '</div>';
         // how hard: one tap saves it; the written note waits behind "Add a note"
         var form = card.querySelector('[data-coach-checkout]');

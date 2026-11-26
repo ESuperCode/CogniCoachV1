@@ -1,88 +1,34 @@
 /* ==========================================================================
-   Clean look (html.clean, on by default; ?classic=1 shows the old look).
-   Calm background, plain readable type, solid buttons, flat cards, and on the app page
-   (scripts/clean.js) one "Today" card instead of a form, and a focused drill screen.
-   Loaded on every page after the other stylesheets.
+   Simpler layouts (html.clean, on by default; ?classic=1 shows the old layouts).
+   Layout only: the site's own theme (colours, fonts, buttons, cards, interactive background)
+   is unchanged. Covers the training page (scripts/clean.js), the bottom tabs on phones
+   (scripts/nav.js), the short recap (scripts/session-recap.js), and fewer repeated blocks on
+   the Dashboard and in the Arena. Loaded on every page after the other stylesheets.
    ========================================================================== */
-html.clean {
-    --c-bg: #f4f6fa;
-    --c-card: #ffffff;
-    --c-ink: #101828;
-    --c-sub: #556070;
-    --c-line: #e2e7ef;
-    --c-blue: #1a6dcc;
-    --c-blue-d: #12549f;
-    --c-blue-soft: #eaf2fd;
-    --c-orange: #a84a06;
-    --c-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --c-radius: 18px;
-}
 
-/* ---- calm background ------------------------------------------------------ */
-html.clean body { background: var(--c-bg); color: var(--c-ink); }
-html.clean .animated-bg, html.clean .grid-pattern, html.clean .bg-orb, html.clean .pointer-glow { display: none !important; }
-
-/* ---- type: one readable font everywhere; the display font stays only on clocks ---- */
-html.clean:not(.a11y-easy-read) body { font-family: var(--c-sans); }
-html.clean:not(.a11y-easy-read) body *:not(.timer-display):not(.cm-digits):not(.sd-clock):not(.timer-display *):not(.cm-digits *) { font-family: inherit; }
-html.clean h1, html.clean h2, html.clean h3 { text-transform: none; }
-html.clean h2, html.clean h3, html.clean .card-title { letter-spacing: -0.01em; }
-html.clean .card-title { text-transform: none; color: var(--c-ink); }
-
-/* ---- surfaces ------------------------------------------------------------- */
-html.clean .card {
-    background: var(--c-card);
-    border: 1px solid var(--c-line);
-    border-radius: var(--c-radius);
-    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-    backdrop-filter: none;
-}
-html.clean .card:hover { transform: none; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04); border-color: var(--c-line); background: var(--c-card); }
-
-/* ---- buttons -------------------------------------------------------------- */
-html.clean .btn { text-transform: none; letter-spacing: 0; border-radius: 14px; box-shadow: none; font-weight: 700; }
-html.clean .btn-primary { background: var(--c-blue); color: #fff; border: 0; }
-html.clean .btn-primary:hover { background: var(--c-blue-d); transform: none; box-shadow: none; }
-html.clean .btn-secondary { background: #fff; color: var(--c-ink); border: 1px solid var(--c-line); }
-html.clean .btn-secondary:hover { background: var(--c-blue-soft); color: var(--c-ink); box-shadow: none; }
-html.clean .btn-chip { text-transform: none; letter-spacing: 0; font-size: 0.85rem; border-width: 1px; border-color: var(--c-line); background: #fff; color: var(--c-blue); }
-html.clean .btn-chip:not(.btn-chip-danger):hover { background: var(--c-blue-soft); color: var(--c-blue-d); }
-html.clean .adapt-chip { border-width: 1px; border-color: var(--c-line); font-weight: 600; box-shadow: none; }
-html.clean .adapt-chip:hover { transform: none; }
-html.clean .adapt-chip[aria-pressed="true"] { background: var(--c-blue-soft); border-color: var(--c-blue); box-shadow: inset 0 0 0 1px var(--c-blue); }
-
-/* ---- top nav: plain white bar --------------------------------------------- */
-html.clean .site-nav { background: rgba(255, 255, 255, 0.96); backdrop-filter: none; -webkit-backdrop-filter: none; border-bottom: 1px solid var(--c-line); }
-html.clean .site-nav-link { text-transform: none; letter-spacing: 0; color: var(--c-ink); font-size: 0.92rem; font-weight: 600; }
-html.clean .site-nav-link:hover { color: var(--c-blue); background: var(--c-blue-soft); }
-html.clean .site-nav-link.active, html.clean .site-nav-link.active:hover { color: var(--c-blue); border-color: transparent; box-shadow: none; background: var(--c-blue-soft); }
-html.clean .site-nav-brand, html.clean .site-nav-brand.active { color: var(--c-ink); background: none; box-shadow: none; border-color: transparent; font-family: var(--c-sans); font-weight: 800; }
-html.clean .nav-menu-btn, html.clean .a11y-btn { border: 1px solid var(--c-line); background: #fff; color: var(--c-ink); font-family: var(--c-sans); }
-html.clean .a11y-btn:hover, html.clean .a11y-btn[aria-expanded="true"] { border-color: var(--c-blue); color: var(--c-blue); }
-html.clean .nav-account-btn { border: 1px solid var(--c-line); background: #fff; color: var(--c-ink); font-family: var(--c-sans); }
-html.clean .nav-account-btn.signed-in { background: #fff; }
-html.clean .nav-account-btn:hover { box-shadow: none; border-color: var(--c-blue); }
-@media (max-width: 900px) {
-    html.clean .site-nav-links { background: #fff; border: 1px solid var(--c-line); box-shadow: 0 18px 40px rgba(16, 24, 40, 0.14); }
-    html.clean .site-nav-links .site-nav-link { color: var(--c-ink); }
-}
-
-/* ---- bottom tabs on phones (scripts/nav.js) -------------------------------- */
+/* ---- bottom tabs on phones (scripts/nav.js), styled like the top bar -------- */
 .bottom-tabs { display: none; }
 @media (max-width: 900px) {
     html.clean .bottom-tabs {
         position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000;
         display: grid; grid-template-columns: repeat(3, 1fr);
         padding: 0 8px env(safe-area-inset-bottom);
-        background: rgba(255, 255, 255, 0.98); border-top: 1px solid var(--c-line);
+        background: rgba(8, 8, 8, 0.82);
+        backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+        border-top: 1px solid var(--light-gray);
     }
     html.clean .bottom-tabs a {
-        display: flex; align-items: center; justify-content: center; min-height: 56px;
-        font-family: var(--c-sans); font-size: 0.9rem; font-weight: 600; color: var(--c-sub); text-decoration: none;
         position: relative;
+        display: flex; align-items: center; justify-content: center; min-height: 56px;
+        font-family: 'Space Mono', monospace; font-size: 0.85rem; font-weight: 700;
+        color: #fff; text-decoration: none;
     }
-    html.clean .bottom-tabs a[aria-current="page"] { color: var(--c-blue); }
-    html.clean .bottom-tabs a[aria-current="page"]::before { content: ""; position: absolute; top: 0; left: 28%; right: 28%; height: 3px; border-radius: 0 0 3px 3px; background: var(--c-blue); }
+    html.clean .bottom-tabs a:hover { color: #8fd0ff; }
+    html.clean .bottom-tabs a[aria-current="page"] { color: #ffb27a; }
+    html.clean .bottom-tabs a[aria-current="page"]::before {
+        content: ""; position: absolute; top: 0; left: 26%; right: 26%; height: 3px; border-radius: 0 0 3px 3px;
+        background: linear-gradient(90deg, var(--primary-blue), var(--secondary-orange));
+    }
     html.clean body { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
     /* out of the way while training, in Coach Mode and with the form check sheet open */
     html.clean.in-session .bottom-tabs, html.clean.coach-on .bottom-tabs, html.clean.fc-open .bottom-tabs { display: none; }
@@ -91,181 +37,74 @@ html.clean .nav-account-btn:hover { box-shadow: none; border-color: var(--c-blue
 }
 
 /* ==========================================================================
-   App page (scripts/clean.js)
+   Training page (scripts/clean.js)
    ========================================================================== */
-/* the big logo header and the stats row step aside; the h1 stays for screen readers and search */
-html.clean #main > header { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; margin: 0; }
-html.clean #main #econHud { display: none; }
-html.clean #main.container { padding-top: 12px; }
-html.clean #quickStartCard { display: none; }
-html.clean .advanced-setup:not([open]) { display: none; }
-
-/* ---- Today card ------------------------------------------------------------ */
-.today {
-    max-width: 560px; margin: 8px auto 18px; padding: 28px 22px 20px;
-    background: var(--c-card); border: 1px solid var(--c-line); border-radius: 24px;
-    text-align: center;
-}
-.today-hi { margin: 0; color: var(--c-sub); font-size: 0.92rem; font-weight: 600; }
-.today .today-title { margin: 6px 0 4px; font-size: clamp(1.9rem, 7vw, 2.6rem); font-weight: 800; line-height: 1.1; color: var(--c-ink); background: none; -webkit-text-fill-color: currentColor; text-transform: none; overflow-wrap: anywhere; }
-.today-meta { margin: 0; font-size: 1.05rem; color: var(--c-ink); }
-.today-why { margin: 10px auto 0; max-width: 42ch; color: var(--c-sub); font-size: 0.92rem; line-height: 1.5; }
-.today-why:empty { display: none; }
-.today-go { margin-top: 22px; }
-.today-go #quickStartBtn { width: 100%; max-width: 360px; min-height: 60px; margin: 0; font-size: 1.2rem; border-radius: 999px; }
-.today-go .quick-start-hint { margin: 8px 0 0; color: var(--c-sub); font-size: 0.85rem; }
-.today-adjust { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-top: 8px; padding: 0 14px; border: 0; background: none; color: var(--c-blue); font: 600 0.95rem var(--c-sans); cursor: pointer; border-radius: 999px; }
-.today-adjust:hover { background: var(--c-blue-soft); }
-.today-streak { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 6px 0 0; color: var(--c-orange); font-weight: 700; font-size: 0.9rem; }
-.today-streak[hidden] { display: none; }
-/* new athletes pick their sport right on the card */
-.today-pick:empty { display: none; }
-.today-pick { margin-top: 16px; text-align: left; }
-.today-pick .sport-switcher { margin: 0; padding: 0; border: 0; background: none; }
-.today-pick .sport-switcher-current, .today-pick .sport-pick-label { display: none; }
-.today-pick .sport-chip-row, .today-pick .sport-switcher-panel > div:first-of-type { justify-content: center; }
-.today-new .today-adjust { display: none; }
-
-/* ---- Adjust sheet ---------------------------------------------------------- */
-html.clean-sheet-open { overflow: hidden; }
-.clean-sheet { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: flex-end; justify-content: center; background: rgba(16, 24, 40, 0.45); }
-.clean-sheet[hidden] { display: none; }
-.cs-panel {
-    width: min(100%, 580px); max-height: 90vh; overflow-y: auto; overscroll-behavior: contain;
-    padding: 16px 20px 0; background: var(--c-card); color: var(--c-ink);
-    border-radius: 22px 22px 0 0; box-shadow: 0 -10px 40px rgba(16, 24, 40, 0.18);
-}
-@media (min-width: 700px) { .clean-sheet { align-items: center; } .cs-panel { border-radius: 22px; } }
-.cs-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-.cs-head h2 { margin: 0; font-size: 1.2rem; color: var(--c-ink); background: none; -webkit-text-fill-color: currentColor; }
-.cs-x { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--c-line); background: #fff; color: var(--c-ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
-.cs-body > * { margin: 0 0 18px !important; }
-.cs-body .sport-switcher, .cs-body .qs-coach, .cs-body .qs-details, .cs-body .readiness { padding: 0; border: 0; background: none; box-shadow: none; text-align: left; }
-.cs-body .qs-label, .cs-body .readiness-label { font-family: var(--c-sans); text-transform: none; letter-spacing: 0; font-size: 0.95rem; font-weight: 700; color: var(--c-ink); text-align: left; margin-bottom: 8px; }
-.cs-body .qs-length-chips, .cs-body .readiness-opts { justify-content: flex-start; }
-.cs-body .qs-more { text-align: left; }
-.cs-body #qsDetailsBtn { display: none; }
-.cs-foot { position: sticky; bottom: 0; display: grid; gap: 4px; padding: 10px 0 calc(12px + env(safe-area-inset-bottom)); background: var(--c-card); }
-.cs-foot .btn { width: 100%; margin: 0; min-height: 52px; }
-.cs-link { min-height: 44px; border: 0; background: none; color: var(--c-blue); font: 600 0.92rem var(--c-sans); cursor: pointer; }
-
-/* ---- everything else on the home screen folds into one quiet line ----------- */
-.clean-more { max-width: 560px; margin: 28px auto 12px; }
-.clean-more > summary { display: flex; align-items: center; justify-content: center; min-height: 44px; color: var(--c-sub); font-size: 0.9rem; cursor: pointer; }
-.clean-more .seo-guides { margin-top: 8px; }
-html.clean.in-session .clean-more { display: none; }
-
-/* ---- the drill screen ------------------------------------------------------- */
-html.clean #drillContent > .card { max-width: 720px; margin: 0 auto; padding: 18px 20px 22px; }
-html.clean #sessionTimeline { display: none; }
-html.clean.clean-timeline #sessionTimeline:not([hidden]) { display: block; }
-html.clean .progress-indicator { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-html.clean .progress-text { margin: 0; color: var(--c-sub); font-size: 0.9rem; text-transform: none; letter-spacing: 0; font-family: var(--c-sans); }
-html.clean .progress-number { color: var(--c-ink); }
-.clean-all { min-height: 44px; padding: 0 12px; border: 1px solid var(--c-line); border-radius: 999px; background: #fff; color: var(--c-blue); font: 600 0.85rem var(--c-sans); cursor: pointer; }
-.clean-all[aria-expanded="true"] { background: var(--c-blue-soft); border-color: var(--c-blue); }
+/* Coach Mode, read aloud and form check live in the tool row instead */
 html.clean #coachModeBtn, html.clean #formCheckBtn, html.clean #drillContent .ra-bar { display: none; }
-html.clean .drill-display { text-align: left; }
-html.clean .drill-display .drill-name { margin: 4px 0 8px; font-size: clamp(1.6rem, 6vw, 2.2rem); font-weight: 800; line-height: 1.15; text-transform: none; letter-spacing: -0.01em; color: var(--c-ink); background: none; -webkit-text-fill-color: currentColor; text-align: left; }
-html.clean .drill-display .drill-focus { display: inline-block; margin: 0 0 12px; padding: 4px 10px; border: 0; border-radius: 999px; background: var(--c-blue-soft); color: var(--c-blue-d); font: 600 0.82rem var(--c-sans); text-transform: none; letter-spacing: 0; }
-html.clean .drill-display .drill-description { color: var(--c-ink); font-size: 1rem; line-height: 1.6; text-align: left; }
-.clean-why { margin-top: 10px; }
-.clean-why > summary { min-height: 44px; display: flex; align-items: center; color: var(--c-blue); font-weight: 600; cursor: pointer; }
-.clean-why p { margin: 4px 0 0; color: var(--c-sub); }
-html.clean .coach-cues { background: var(--c-bg); border: 0; border-radius: 14px; }
 
-/* timer: one clear clock and one button */
-html.clean .timer-container { margin-top: 18px; padding: 16px 0 4px; border-top: 1px solid var(--c-line); }
-html.clean .timer-display { background: none; -webkit-text-fill-color: currentColor; color: var(--c-ink); text-shadow: none; }
-html.clean .timer-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-html.clean #pauseBtn:disabled { display: none; }
-html.clean .timer-container .flex-center { flex-direction: column; align-items: center; gap: 4px; }
-html.clean .timer-container .flex-center .btn { width: 100%; max-width: 360px; min-height: 56px; margin: 0 !important; border-radius: 999px; font-size: 1.1rem; }
-html.clean .timer-container .end-early-link { display: block; margin: 2px auto 0; }
-html.clean #skipToEndBtn { width: auto !important; min-width: 0 !important; min-height: 44px !important; padding: 0 10px; background: none; border: 0; box-shadow: none; color: var(--c-sub); font-size: 0.9rem !important; font-weight: 600; text-decoration: underline; }
-html.clean .end-early-link { font-size: 0.85rem; }
+/* "why this drill" folds under the steps */
+.clean-why { margin-top: 10px; text-align: left; }
+.clean-why > summary { display: inline-flex; align-items: center; min-height: 44px; color: var(--primary-blue); font-weight: 700; cursor: pointer; }
+.clean-why p { margin: 4px 0 0; }
 
 /* the tool row */
-.clean-tools { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 16px 0 4px; }
-.clean-tool { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 70px; padding: 10px 4px; border: 1px solid var(--c-line); border-radius: 14px; background: #fff; color: var(--c-ink); font: 600 0.78rem var(--c-sans); cursor: pointer; text-align: center; }
-.clean-tool .ci { color: var(--c-blue); }
-.clean-tool:hover { background: var(--c-blue-soft); }
-.clean-tool[aria-pressed="true"], .clean-tool[aria-expanded="true"] { background: var(--c-blue-soft); border-color: var(--c-blue); color: var(--c-blue-d); }
+.clean-tools { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 18px 0 6px; }
+.clean-tool {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    min-height: 74px; padding: 10px 4px;
+    border: 1px solid var(--line, #d5dfeb); border-radius: 14px;
+    background: var(--surface-strong, #fff); color: var(--text-white, #172033);
+    font-family: 'Space Mono', monospace; font-size: 0.74rem; font-weight: 700; text-align: center;
+    box-shadow: 0 10px 24px rgba(30, 50, 80, 0.08);
+    cursor: pointer; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.clean-tool .ci { color: var(--primary-blue); }
+.clean-tool:hover { border-color: var(--primary-blue); transform: translateY(-2px); box-shadow: 0 14px 28px rgba(31, 122, 224, 0.18); }
+.clean-tool[aria-pressed="true"], .clean-tool[aria-expanded="true"] {
+    border-color: var(--primary-blue);
+    background: linear-gradient(135deg, #eaf3ff, #fff3e8);
+    box-shadow: 0 6px 18px rgba(26, 109, 204, 0.18), inset 0 0 0 1px rgba(26, 109, 204, 0.35);
+}
 .clean-tool[hidden] { display: none; }
-@media (max-width: 380px) { .clean-tools { gap: 6px; } .clean-tool { font-size: 0.68rem; padding: 8px 2px; } }
+@media (max-width: 380px) { .clean-tools { gap: 6px; } .clean-tool { font-size: 0.64rem; padding: 8px 2px; } }
+html.a11y-reduce-motion .clean-tool { transition: none; }
+html.a11y-reduce-motion .clean-tool:hover { transform: none; }
 
-/* rating appears once the drill runs; the muscle map and the 3D preview open from the tools */
+/* one timer action at a time; the rating shows once the drill runs; muscles and 3D open from the tools */
+html.clean #pauseBtn:disabled { display: none; }
 html.clean #drillContent .adapt-feedback { display: none; }
 html.clean.clean-running #drillContent .adapt-feedback { display: block; }
 html.clean #drillContent .muscle-groups:not(.clean-show), html.clean #drillContent #motionViewer:not(.clean-show) { display: none; }
 
 /* ==========================================================================
-   Dashboard and Arena: lighter cards, no repeated shortcuts (Train is one tap away)
-   ========================================================================== */
-html.clean .page-tabs { box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; border-color: var(--c-line); }
-html.clean .page-tabs [role="tab"] { text-transform: none; letter-spacing: 0; font-size: 0.78rem; font-weight: 600; }
-html.clean .dash-welcome { background: var(--c-card) !important; color: var(--c-ink); border: 1px solid var(--c-line) !important; box-shadow: none; }
-html.clean .dash-welcome h2 { color: var(--c-ink); font-size: 1.4rem; }
-html.clean .dash-welcome p { color: var(--c-sub); }
-html.clean .dash-welcome .btn-secondary { background: #fff; color: var(--c-ink); border-color: var(--c-line); }
-html.clean .dw-steps .dw-n { background: var(--c-blue-soft); color: var(--c-blue-d); }
-html.clean .dash-welcome:not(:has(.dw-steps)) .dw-actions { display: none; }
-html.clean #smartActions .resume-banner:has(.btn-secondary) { display: none; }
-html.clean .resume-banner { background: var(--c-blue-soft); border-color: transparent; }
-html.clean #dashRecommend { display: none; }
-html.clean #main > #econHud { display: none; }
-html.clean .page-h1 { background: none; -webkit-text-fill-color: currentColor; color: var(--c-ink); }
-html.clean .sport-switcher-current { color: var(--c-ink); }
-html.clean .sport-switcher-label { text-transform: none; letter-spacing: 0; font-size: 0.95rem; font-weight: 700; color: var(--c-ink); }
-html.clean .sport-switcher-panel { border-top-color: var(--c-line); }
-html.clean label, html.clean .form-group label { text-transform: none; letter-spacing: 0; }
-.cs-body .form-group label { font-size: 0.95rem; font-weight: 700; color: var(--c-ink); }
-.cs-body #qsDetailsSummary { display: none; }
-html.clean #skipToEndBtn { margin-left: 0 !important; }
-
-/* ==========================================================================
    Session recap (scripts/session-recap.js renderClean): one short screen
    ========================================================================== */
-html.clean #sessionComplete .recap { max-width: 560px; margin: 0 auto; padding: 24px 20px 20px !important; text-align: center; }
-.rc-top { margin-bottom: 16px; }
-.rc-medal { display: inline-flex; }
-html.clean .recap .recap-title { margin: 6px 0 2px; font-size: 1.6rem; font-weight: 800; color: var(--c-ink); background: none; -webkit-text-fill-color: currentColor; }
-html.clean .recap .recap-sub { margin: 0; color: var(--c-sub); }
-.rc-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 0 14px; }
-.rc-nums > div { padding: 12px 6px; border-radius: 14px; background: var(--c-bg); }
-.rc-nums b { display: block; font-size: 1.5rem; font-weight: 800; color: var(--c-ink); line-height: 1.2; }
-.rc-nums span { font-size: 0.8rem; color: var(--c-sub); }
-.rc-high { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 6px; text-align: left; }
-.rc-high li { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 12px; border-radius: 12px; background: var(--c-blue-soft); color: var(--c-ink); font-size: 0.92rem; }
+html.clean .recap .rc-grid { grid-template-columns: repeat(3, 1fr); max-width: 560px; margin-left: auto; margin-right: auto; }
+.rc-high { list-style: none; max-width: 560px; margin: 0 auto 6px; padding: 0; display: grid; gap: 8px; text-align: left; }
+.rc-high li { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 14px; border-radius: 14px; background: #eef3fb; color: #172033; font-size: 0.9rem; }
 .rc-high li span { flex: 1; }
-.rc-high li.rc-chest { background: #fff6e8; }
-.rc-high a { color: var(--c-blue-d); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.rc-high li.rc-chest { background: linear-gradient(135deg, #fff4e6, #fff); border: 1px solid rgba(255, 138, 52, 0.35); }
+.rc-high li.rc-up { background: linear-gradient(135deg, #eaf3ff, #fff3e8); }
+.rc-high a { color: #1559a8; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
 .rc-high .recap-rank-badge { flex: none; }
-html.clean .recap .recap-advice { margin: 0 0 12px; text-align: left; border-left-width: 3px; background: var(--c-bg); color: var(--c-ink); }
-html.clean .recap .coach-checkout { margin: 0 0 12px; padding: 14px; border-radius: 14px; background: var(--c-bg); text-align: left; border: 0; }
-html.clean .recap .co-q { font-weight: 700; color: var(--c-ink); }
-.co-saved { margin: 6px 0 0; min-height: 1.2em; font-size: 0.85rem; color: var(--c-sub); }
+.co-saved { margin: 6px 0 0; min-height: 1.2em; font-size: 0.85rem; color: var(--text-gray); }
 .co-saved:empty { min-height: 0; }
 .co-more { margin-top: 4px; }
-.co-more > summary { min-height: 44px; display: flex; align-items: center; color: var(--c-blue); font-weight: 600; cursor: pointer; }
-html.clean .recap .coach-recap { margin: 0 0 12px; background: var(--c-bg); }
-html.clean .recap .recap-actions { display: grid; gap: 4px; justify-items: center; margin-top: 16px; }
-html.clean .recap .recap-actions .btn { width: 100%; max-width: 360px; min-height: 56px; margin: 0; border-radius: 999px; font-size: 1.1rem; }
-.rc-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--c-blue); font-weight: 600; }
-html.clean #sessionComplete:not(.hidden) ~ *, html.clean.in-session #loadingContainer:has(~ #sessionComplete:not(.hidden)) { display: none; }
+.co-more > summary { min-height: 44px; display: flex; align-items: center; color: var(--primary-blue); font-weight: 700; cursor: pointer; }
+html.clean .recap .coach-recap li:nth-child(n+3) { display: none; }
+@media (max-width: 640px) { html.clean .recap .rc-grid { gap: 8px; } html.clean .recap .rc-grid .recap-num { font-size: 1.2rem; } }
 
 /* ==========================================================================
-   Arena: no repeated stats row, no intros, quests first
+   Dashboard and Arena: fewer repeated blocks (Train is one tap away)
    ========================================================================== */
+html.clean .dash-welcome:not(:has(.dw-steps)) .dw-actions { display: none; }
+html.clean #smartActions .resume-banner:has(.btn-secondary) { display: none; }
+html.clean #dashRecommend { display: none; }
+html.clean #main:has(#panel-home) > #econHud { display: none; }
 html.clean #arenaHud { display: none; }
 html.clean .panel-intro { display: none; }
-html.clean .qs-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-html.clean .qs-goal, html.clean .qs-streak { padding: 14px 10px; border-radius: 16px; background: var(--c-card); border: 1px solid var(--c-line); box-shadow: none; }
-html.clean .qs-ring svg { width: 84px; height: 84px; }
-html.clean .qs-goal h2 { font-size: 1rem; margin: 6px 0 2px; }
-html.clean .qs-streak > svg { width: 44px; height: 44px; }
-html.clean .qs-freezes, html.clean .qs-mile { display: none; }
-html.clean .ar-h2 { font-size: 1.15rem; }
-html.clean .qs-item, html.clean .qs-all { box-shadow: none; border-color: var(--c-line); }
-html.clean .recap .coach-recap li:nth-child(n+3) { display: none; }
-html.clean .qs-goal .ar-small { display: none; }
+html.clean .qs-ring svg { width: 96px; height: 96px; }
+html.clean .qs-streak > svg { width: 52px; height: 52px; }
+html.clean .qs-freezes, html.clean .qs-mile, html.clean .qs-goal .ar-small { display: none; }
+/* the session is over: no leftover "generating" spinner above the recap */
+#sessionView:has(#sessionComplete:not(.hidden)) #loadingContainer { display: none; }

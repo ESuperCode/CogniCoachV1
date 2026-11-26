@@ -210,3 +210,6 @@ html.tour-on site-nav { z-index: 1800; }
 .tour-sport:focus-visible { outline: 3px solid var(--primary-blue, #1a6dcc); outline-offset: 2px; }
 .tour-sport-note { margin: 8px 0 0; font-size: 0.75rem; color: var(--text-gray); }
 .tour-card.with-form .tour-join { margin-top: 14px; }
+
+/* Phones: the tour card sits along the bottom, so leave room to scroll the last parts of a page above it. */
+@media (max-width: 639px) { html.tour-on body { padding-bottom: 60vh !important; } }

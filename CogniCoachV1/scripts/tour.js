@@ -60,21 +60,27 @@
         { target: '#advancedSetup', title: 'Build my own plan',
           text: 'Pick muscle groups, set your level, or drag drills into your own warm-up, main work and cool-down timeline.' },
         { demo: 'enter', target: '#drillContent .drill-display', title: 'Inside a session',
-          text: "Here's a sample drill. Each one tells you exactly what to do and what it focuses on." },
-        { demo: true, target: '#coachModeBtn', title: 'Coach Mode',
-          text: 'Go hands-free: a full-screen timer you can see across the gym. It reads each drill, counts you in, calls halfway and time, rests you and moves on. You can even say "pause", "next" or "too easy".' },
-        { demo: true, target: '#drillContent .ra-bar', title: 'Hear it instead',
-          text: 'Read aloud speaks the drill and highlights each sentence, so you can keep your eyes on the ball. The Aa button at the top sets text size, contrast, voice and speed.' },
-        { demo: true, target: '#sessionTimeline', title: 'Your whole session',
+          text: "Here's a sample drill. Each one tells you exactly what to do, the coach cues to remember, and Why this drill opens how it helps you." },
+        { demo: true, target: '#sessionTimeline', title: 'Where you are',
           text: 'Your timeline from warm-up to cool-down: finished drills get a check, the one you are on fills up as its timer runs, and All drills lists everything ahead.' },
-        { demo: true, target: '#drillContent .muscle-groups', title: 'Muscles worked',
-          text: 'The muscles each drill trains light up on the body map. Tap any muscle to adjust it.' },
-        { demo: 'play', target: '#motionViewer .motion-stage', title: 'Watch it in 3D',
-          text: 'Generate Animation turns any drill into a 3D demonstration. Here is this drill - no waiting.' },
-        { demo: 'controls', target: '#motionViewer', group: ['#motionViewer .motion-controls', '#motionViewer .motion-help'], title: 'Make it yours',
-          text: 'Pause, scrub frame by frame, flip between right- and left-handed, and click the athlete then use the arrow keys to turn it.' },
         { demo: true, target: '#drillContent .timer-container', title: 'Timed for you',
-          text: 'Start the timer when you are ready. Each drill is sized to fit your session, and Next Drill appears when it is done.' },
+          text: 'Press Start when you are ready. Once it runs, rate the drill (too hard, just right, too easy) and the next drills adjust. Next Drill appears when time is up.' },
+        { demo: true, open: 'rate', target: '#drillContent .adapt-feedback', title: 'Tell your coach',
+          text: 'Once a drill is running, rate it: too hard, just right or too easy. The next drills adjust, and too hard or too easy shows an easier or harder version straight away.' },
+        { demo: true, target: '#drillContent .clean-tools', alt: '#coachModeBtn', title: 'Your tools',
+          text: 'Everything else is one tap away in this row: Listen, Hands-free, 3D demo, Muscles and Form check. Tap one to open it, tap again to close it.' },
+        { demo: true, target: '#drillContent [data-tool="listen"]', alt: '#drillContent .ra-bar', title: 'Listen',
+          text: 'Reads the drill and its coach cues out loud, so you can keep your eyes on the ball. The Aa button at the top sets voice, speed, text size and contrast.' },
+        { demo: true, target: '#drillContent [data-tool="handsfree"]', alt: '#coachModeBtn', title: 'Hands-free (Coach Mode)',
+          text: 'A full-screen timer you can see across the gym. It reads each drill, counts you in, calls halfway and time, rests you and moves on. Turn on the mic and say "pause", "next", "show me" or "check my form".' },
+        { demo: true, open: 'muscles', target: '#drillContent .muscle-groups', title: 'Muscles',
+          text: 'The muscles each drill trains light up on the body map. Tap Edit to add your own.' },
+        { demo: 'play', open: '3d', target: '#motionViewer .motion-stage', title: '3D demo',
+          text: 'Turns any drill into a 3D athlete doing it - it starts building as soon as you open it. Here is this drill.' },
+        { demo: 'controls', open: '3d', target: '#motionViewer', group: ['#motionViewer .motion-controls', '#motionViewer .motion-help'], title: 'Make it yours',
+          text: 'Pause, scrub frame by frame, flip between right- and left-handed, and click the athlete then use the arrow keys to turn it.' },
+        { demo: true, target: '#drillContent [data-tool="form"]', alt: '#formCheckBtn', title: 'Form check',
+          text: 'Prop up your phone or laptop 2-3 m away and press Turn on camera. It counts your reps, calls out fixes as you go and gives you a coach note after the set. The video never leaves your device.' },
         { target: 'site-nav a[href="dashboard.html"]', smallTarget: '#navMenuBtn', nav: true, title: 'Your dashboard',
           text: 'Your streak, Athlete Card, stats and past sessions. The first time you open it, a short tour shows you around.' },
         { target: 'site-nav a[href="arena.html"]', smallTarget: '#navMenuBtn', nav: true, title: 'The Arena',
@@ -96,22 +102,22 @@
         { target: '#quickStartBtn', title: 'Press Start',
           text: 'Your coach builds the session drill by drill. The first time, we will point out the tools on the drill screen.' },
         { target: 'site-nav a[href="dashboard.html"]', smallTarget: '#navMenuBtn', nav: true, title: 'After you train',
-          text: 'Dashboard shows your progress. Arena has daily quests and rewards. Both are in the menu.' },
+          text: 'Dashboard shows your progress. Arena has daily quests and rewards. Both are in the menu, and on a phone also in the tabs along the bottom.' },
         { kind: 'hero', id: 'finale', title: "You're all set",
           text: 'Pick your time, press Start, and your first drill is on its way.' }
     ];
     var SESSION_KEY = 'cognicoach-tour-session-done';
     var SESSION_STEPS = [
         { target: '#drillContent .drill-display', title: 'Your first drill',
-          text: 'Read what to do here, or press Read aloud to hear it.' },
+          text: 'Read what to do and the coach cues. Why this drill opens how it helps you.' },
+        { target: '#sessionTimeline', title: 'Where you are',
+          text: 'Your whole session at a glance: done drills are checked and the current one fills up as its timer runs.' },
         { target: '#drillContent .timer-container', title: 'Start when ready',
-          text: 'The timer is sized to fit your session. When it ends, Next Drill appears.' },
-        { target: '#drillContent .adapt-feedback', title: 'Tell your coach',
-          text: 'Too hard or too easy? Tap it and the next drills adjust.' },
-        { target: '#coachModeBtn', title: 'Coach Mode',
-          text: 'Hands-free and full screen: it reads each drill, counts you in, times it and moves on.' },
-        { target: '#motionViewer', title: 'Watch it in 3D',
-          text: 'Not sure how a drill looks? Generate Animation shows a 3D athlete doing it.' }
+          text: 'Press Start. Once it runs, rate the drill (too hard, just right, too easy) and the next drills adjust. Next Drill appears when time is up.' },
+        { target: '#drillContent .clean-tools', alt: '#coachModeBtn', title: 'Your tools',
+          text: 'Listen reads the drill aloud. Hands-free runs the whole session full screen. 3D demo shows an athlete doing it. Muscles shows what it trains.' },
+        { target: '#drillContent [data-tool="form"]', alt: '#formCheckBtn', title: 'Check your form',
+          text: 'Your camera counts reps and calls out fixes, and your coach writes a note after the set. The video stays on your device.' }
     ];
 
     // ---- page tours (dashboard.html, arena.html) ----
@@ -124,7 +130,7 @@
             { target: '.page-tabs', title: 'Five tabs',
               text: 'Home is today. Card is your Athlete Card. Stats has charts. History lists past sessions and badges. Settings holds your profile and data.' },
             { tab: 'home', target: '#dashWelcome', title: 'Home',
-              text: 'Start here: what to do next, with one tap to start training or check your quests.' },
+              text: 'Start here: how your week is going, and a way back into a session you did not finish.' },
             { tab: 'home', target: '#dashOverview', title: 'At a glance',
               text: 'This week’s sessions and minutes, your streak and favourite sport. Your level and weekly goal are just below.' },
             { tab: 'card', target: '#athleteCard .ac-card', title: 'Your Athlete Card',
@@ -205,7 +211,7 @@
             if (small && s.smallTarget) { var c = {}; Object.keys(s).forEach(function (k) { c[k] = s[k]; }); c.target = s.smallTarget; return c; }
             return s;
         }).map(function (s) {
-            if (s.alt && !$(s.target) && $(s.alt)) { var c = {}; Object.keys(s).forEach(function (k) { c[k] = s[k]; }); c.target = s.alt; return c; }
+            if (s.alt && !s.demo && !visible($(s.target)) && $(s.alt)) { var c = {}; Object.keys(s).forEach(function (k) { c[k] = s[k]; }); c.target = s.alt; return c; }
             return s;
         }).filter(function (s) {
             if (!s.target || s.demo || s.nav || s.tab) { return true; }   // tab steps are checked when shown
@@ -272,8 +278,19 @@
         window.CogniMotionViewer.demo({ script: d.script, title: d.name, coaching_cues: d.cues, camera_view: 'three_quarter', compile: 'client' });
     }
 
+    // The training page keeps the muscle map, the 3D preview and the rating closed until they are
+    // needed (scripts/clean.js); the tour opens the one it is explaining.
+    function openParts(which) {
+        if (window.CogniClean && window.CogniClean.show) {
+            window.CogniClean.show('muscles', which === 'muscles');
+            window.CogniClean.show('3d', which === '3d');
+        }
+        document.documentElement.classList.toggle('clean-running', which === 'rate');
+    }
+
     function exitDemo() {
         if (!inDemo) { return; }
+        openParts(null);
         inDemo = false;
         demoPlayed = false;
         if (window.CogniMotionViewer && window.CogniMotionViewer.endDemo) { window.CogniMotionViewer.endDemo(); }
@@ -454,6 +471,16 @@
             if (t >= 0 && t < list.length) { go(t); return; }
         }
         if (step.demo) { enterDemo(); } else if (inDemo) { exitDemo(); }
+        if (inDemo) { openParts(step.open); }
+        if (step.demo && !visible($(step.target))) {
+            // the demo drill is showing now: fall back to the classic element, or skip a part it does not have
+            if (step.alt && visible($(step.alt))) {
+                var c = {}; Object.keys(step).forEach(function (k) { c[k] = step[k]; }); c.target = step.alt; list[idx] = step = c;
+            } else if (!step.group || !step.group.some(function (g) { return visible($(g)); })) {
+                var t2 = n + dir;
+                if (t2 >= 0 && t2 < list.length) { go(t2); return; }
+            }
+        }
         if (step.demo === 'play') { playDemo(); }
 
         card.classList.remove('enter');

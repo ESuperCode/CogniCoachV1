@@ -114,7 +114,7 @@
     font-family: 'Orbitron', sans-serif;
     font-size: 1.1rem;
     font-weight: 700;
-    color: var(--secondary-orange);
+    color: #b84d00;   /* a deeper orange: readable on the light card */
 }
 
 .sport-switcher-level {
