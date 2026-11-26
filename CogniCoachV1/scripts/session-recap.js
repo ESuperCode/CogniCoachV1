@@ -107,6 +107,10 @@
         var readyWord = { low: 'Low energy', normal: 'Normal', high: 'Fired up' }[rec.readiness] || '';
 
         card.classList.add('recap');
+        if (document.documentElement.classList.contains('clean')) {
+            renderClean(card, { rec: rec, earned: earned, rw: rw, st: st, mins: mins, h: h, levelUp: before.index !== after.index ? after.cur.name : '' });
+            return;
+        }
         card.innerHTML =
             '<div class="recap-medal" aria-hidden="true"><div class="recap-coin">' + icon('trophy-gold', 58) + '</div></div>' +
             '<h2 class="recap-title" tabindex="-1">Session complete</h2>' +
@@ -143,6 +147,75 @@
             ob.addEventListener('click', function () {
                 var ids = (rw && rw.chests || []).map(function (c) { return c.id; });
                 window.CogniEconomyUI.openChests(ids, function () { var b = card.querySelector('.recap-rewards [data-open-chests]'); if (b) { b.disabled = true; b.textContent = 'Opened'; } });
+            });
+        }
+    }
+
+    // The clean recap (html.clean): one short screen. Three numbers, at most three highlights,
+    // the coach's note, one tap for how hard it was, and the next step.
+    function renderClean(card, d) {
+        var rec = d.rec, rw = d.rw, E = window.CogniEconomy;
+        var hi = [];
+        if (d.levelUp) { hi.push('<li class="rc-up" role="status">' + icon('trend-up', 20) + ' Level up! You are now <b>' + esc(d.levelUp) + '</b></li>'); }
+        var rank = rankLine(d.h);
+        if (rank && /recap-rank-up/.test(rank)) { hi.push('<li class="rc-up">' + rank.replace(/^<p[^>]*>|<\/p>$/g, '') + '</li>'); }
+        if (rw && rw.chests && rw.chests.length) {
+            hi.push('<li class="rc-chest">' + icon('chest-' + rw.chests[0].tier, 32) + '<span>' + (rw.milestone ? '<b>' + rw.milestone + '-day streak!</b> ' : '') +
+                rw.chests.length + ' chest' + (rw.chests.length > 1 ? 's' : '') + ' earned</span>' +
+                '<button type="button" class="btn-chip" data-open-chests>' + icon('gift', 16) + ' Open</button></li>');
+        } else if (d.st > 1) {
+            hi.push('<li>' + icon('flame', 20) + ' <b>' + d.st + '-day streak</b></li>');
+        }
+        var claim = E ? E.claimableCount() : 0;
+        if (claim) { hi.push('<li><a href="arena.html#quests">' + icon('target', 18) + ' ' + claim + ' quest reward' + (claim > 1 ? 's' : '') + ' ready in the Arena</a></li>'); }
+        var coins = rw ? rw.coins + rw.levelCoins : 0;
+        card.innerHTML =
+            '<div class="rc-top"><span class="rc-medal" aria-hidden="true">' + icon('trophy-gold', 44) + '</span>' +
+            '<h2 class="recap-title" tabindex="-1">Session complete</h2>' +
+            '<p class="recap-sub">' + esc(rec.sport) + (rec.focus && rec.focus !== 'General' ? ' · ' + esc(rec.focus) : '') + '</p></div>' +
+            '<div class="rc-nums">' +
+            '<div><b>' + esc(rec.drillsCompleted + '/' + rec.drillsTotal) + '</b><span>drills</span></div>' +
+            '<div><b>' + d.mins + '</b><span>minutes</span></div>' +
+            '<div><b>+' + (rw ? rw.xp : d.earned) + '</b><span>XP' + (coins ? ' · +' + coins + ' Grit' : '') + '</span></div>' +
+            '</div>' +
+            (hi.length ? '<ul class="rc-high">' + hi.join('') + '</ul>' : '') +
+            '<div class="recap-advice"><span class="recap-advice-label">Coach’s note</span>' + esc(advice(rec)) + '</div>' +
+            (window.CogniCoachProfile ? window.CogniCoachProfile.recapHtml() : '') +
+            '<div class="recap-actions">' +
+            '<button class="btn btn-primary" type="button" onclick="returnToSetup()">Start next session</button>' +
+            '<a class="rc-link" href="dashboard.html">See your progress</a>' +
+            '</div>';
+        // how hard: one tap saves it; the written note waits behind "Add a note"
+        var form = card.querySelector('[data-coach-checkout]');
+        if (form) {
+            var note = form.querySelector('label[for="coNote"]'), ta = form.querySelector('textarea'), row = form.querySelector('.co-row');
+            var more = document.createElement('details');
+            more.className = 'co-more';
+            more.innerHTML = '<summary>Add a note for your coach</summary>';
+            [note, ta].forEach(function (el) { if (el) { more.appendChild(el); } });
+            form.insertBefore(more, row);
+            if (row) { more.appendChild(row); }
+            var live = document.createElement('p');
+            live.className = 'co-saved';
+            live.setAttribute('aria-live', 'polite');
+            more.insertAdjacentElement('beforebegin', live);
+            form.addEventListener('click', function (e) {
+                if (!e.target.closest('[data-rpe]')) { return; }
+                setTimeout(function () {   // after coach-profile marks the pressed number
+                    if (form.requestSubmit) { form.requestSubmit(); } else { form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); }
+                    live.textContent = 'Saved. Your coach plans the next sessions with this.';
+                }, 0);
+            });
+        }
+        var title = card.querySelector('.recap-title');
+        if (title) { title.focus({ preventScroll: true }); }
+        card.scrollIntoView({ block: 'start', behavior: document.documentElement.classList.contains('a11y-reduce-motion') ? 'auto' : 'smooth' });
+        confetti(card);
+        var ob = card.querySelector('[data-open-chests]');
+        if (ob && window.CogniEconomyUI) {
+            ob.addEventListener('click', function () {
+                var ids = (rw && rw.chests || []).map(function (c) { return c.id; });
+                window.CogniEconomyUI.openChests(ids, function () { ob.disabled = true; ob.textContent = 'Opened'; });
             });
         }
     }
