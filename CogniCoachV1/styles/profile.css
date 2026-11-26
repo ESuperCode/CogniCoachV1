@@ -490,3 +490,4 @@ h3.coach-label { margin-top: 18px; }
 .coach-recap ul { padding-left: 18px; }
 .qs-coach { flex-wrap: wrap; }
 .qs-coach .coach-sum { flex: 1 1 200px; min-width: 0; }
+.coach-ask { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; background: #fff4e8; color: #7a3d00; font-weight: 700; font-size: 0.88rem; }

@@ -225,8 +225,13 @@
             return '<li><span>' + esc(i.text) + '</span><button type="button" class="coach-forget" data-forget="' + esc(i.id) + '" aria-label="Forget: ' + esc(i.text) + '">' + ic('close', 16) + '</button></li>';
         }).join('') + '</ul>';
     }
-    function open() {
+    // opts.start: asked because a workout is starting and nothing is filled in yet.
+    // "Save and start" / "Not now" both continue to the workout; Escape or the X cancels.
+    var onContinue = null;
+    function open(opts) {
+        opts = opts || {};
         if (dlg) { return; }
+        onContinue = opts.start ? opts.onContinue : null;
         lastFocus = document.activeElement;
         lastHost = lastFocus && lastFocus.closest ? lastFocus.closest('[data-coach-summary], .coach-recap') : null;
         var c = load();
@@ -235,6 +240,7 @@
         dlg.innerHTML =
             '<div class="coach-dialog" role="dialog" aria-modal="true" aria-labelledby="coachDlgTitle">' +
             '  <div class="coach-head"><h2 id="coachDlgTitle">Your coach</h2><button type="button" class="coach-x" data-coach-close aria-label="Close">' + ic('close', 20) + '</button></div>' +
+            (opts.start ? '  <p class="coach-ask">Before you start: tell your coach a little about you, so every drill fits you.</p>' : '') +
             '  <p class="coach-intro">What you write here and what your coach learns go into every drill and into Competition Mode, so it coaches you, not just your sport.</p>' +
             '  <label for="coachAbout" class="coach-label">About you as an athlete</label>' +
             '  <textarea id="coachAbout" maxlength="' + MAX_ABOUT + '" rows="4" aria-describedby="coachAboutHint coachCount" placeholder="e.g. 16, point guard on my school team. Good shooter, want a quicker first step. Coming back from a sprained left ankle.">' + esc(c.about) + '</textarea>' +
@@ -243,7 +249,9 @@
             '  <div class="coach-learned-host">' + learnedHtml(c) + '</div>' +
             '  <label class="coach-check"><input type="checkbox" id="coachLearn"' + (c.learn ? ' checked' : '') + '> Learn from my training</label>' +
             '  <p class="coach-muted coach-privacy">Friends never see this. It is sent to the AI with your requests, so leave out anything private.</p>' +
-            '  <div class="coach-actions"><button type="button" class="btn btn-secondary" data-coach-close>Cancel</button><button type="button" class="btn btn-primary" data-coach-save>Save</button></div>' +
+            (opts.start
+                ? '  <div class="coach-actions"><button type="button" class="btn btn-secondary" data-coach-skip>Not now</button><button type="button" class="btn btn-primary" data-coach-save>Save and start</button></div>'
+                : '  <div class="coach-actions"><button type="button" class="btn btn-secondary" data-coach-close>Cancel</button><button type="button" class="btn btn-primary" data-coach-save>Save</button></div>') +
             '</div>';
         document.body.appendChild(dlg);
         var ta = dlg.querySelector('#coachAbout'), count = dlg.querySelector('#coachCount'), learn = dlg.querySelector('#coachLearn');
@@ -262,7 +270,9 @@
                 (nb || learn).focus();
                 return;
             }
+            if (e.target.closest('[data-coach-skip]')) { var go0 = onContinue; close(); if (go0) { go0(); } return; }
             if (e.target.closest('[data-coach-save]')) {
+                var go = onContinue;
                 var cur = load();
                 cur.about = ta.value.slice(0, MAX_ABOUT);
                 cur.learn = learn.checked;
@@ -271,6 +281,7 @@
                 save(cur);   // repaints the summary; close() already noted where focus goes back
                 var h = lastHost && lastHost.isConnected ? lastHost.querySelector('[data-coach-edit]') : null;
                 if (h) { h.focus(); }
+                if (go) { go(); }
             }
         });
         document.addEventListener('keydown', onKey, true);
@@ -280,6 +291,17 @@
         var b = e.target.closest && e.target.closest('[data-coach-edit]');
         if (b) { e.preventDefault(); open(); }
     });
+
+    // Starting a workout with nothing filled in always asks first (every time, until it is filled in).
+    var passThrough = false;
+    document.addEventListener('click', function (e) {
+        if (passThrough) { return; }
+        var b = e.target.closest && e.target.closest('#quickStartBtn, [onclick="startSession()"]');
+        if (!b || load().about.trim()) { return; }
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        open({ start: true, onContinue: function () { passThrough = true; try { b.click(); } finally { passThrough = false; } } });
+    }, true);
 
     document.addEventListener('cognicoach:coach', paintHosts);
     window.addEventListener('cognicoach:synced', paintHosts);
