@@ -12,13 +12,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <link href="styles/style.css?v=20261125h" rel="stylesheet">
-    <link href="styles/nav.css?v=20261125h" rel="stylesheet">
-    <link href="styles/dashboard.css?v=20261125h" rel="stylesheet">
-    <link href="styles/profile.css?v=20261125h" rel="stylesheet">
-    <link href="styles/athlete-card.css?v=20261125h" rel="stylesheet">
-    <link href="styles/my-stats.css?v=20261125h" rel="stylesheet">
-    <link href="styles/economy.css?v=20261125h" rel="stylesheet">
+    <link href="styles/style.css?v=20261125i" rel="stylesheet">
+    <link href="styles/nav.css?v=20261125i" rel="stylesheet">
+    <link href="styles/dashboard.css?v=20261125i" rel="stylesheet">
+    <link href="styles/profile.css?v=20261125i" rel="stylesheet">
+    <link href="styles/athlete-card.css?v=20261125i" rel="stylesheet">
+    <link href="styles/my-stats.css?v=20261125i" rel="stylesheet">
+    <link href="styles/economy.css?v=20261125i" rel="stylesheet">
 </head>
 <body>
     <site-nav></site-nav>
@@ -175,6 +175,11 @@
         <section class="dash-panel" role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" tabindex="-1" hidden>
             <p class="dash-intro">Your training profile, your account and your saved data.</p>
             <div class="dash-grid">
+                <div class="card dash-card dash-span-12 coach-card" id="coachCard">
+                    <h2 class="card-title">Your coach</h2>
+                    <p class="coach-card-sub">What you have told your coach, and what it has learned from your training. Used for every drill and in Competition Mode.</p>
+                    <div class="qs-coach" data-coach-summary></div>
+                </div>
                 <div class="card dash-card dash-span-12" id="profileSummaryCard"></div>
                 <div class="card dash-card dash-span-12 account-data-card">
                     <h2 class="card-title">Account &amp; Data</h2>
@@ -196,18 +201,19 @@
         </section>
     </main>
 
-    <script src="scripts/icons.js?v=20261125h"></script>
+    <script src="scripts/icons.js?v=20261125i"></script>
 
-    <script src="scripts/nav.js?v=20261125h"></script>
-    <script src="scripts/dash-tabs.js?v=20261125h"></script>
-    <script src="scripts/profile.js?v=20261125h"></script>
-    <script src="scripts/dashboard.js?v=20261125h"></script>
-    <script src="scripts/dashboard-plus.js?v=20261125h"></script>
-    <script src="scripts/athlete-stats.js?v=20261125h"></script>
-    <script src="scripts/economy.js?v=20261125h"></script>
-    <script src="scripts/economy-ui.js?v=20261125h"></script>
-    <script src="scripts/social.js?v=20261125h"></script>
-    <script src="scripts/athlete-card.js?v=20261125h"></script>
-    <script src="scripts/my-stats.js?v=20261125h"></script>
+    <script src="scripts/nav.js?v=20261125i"></script>
+    <script src="scripts/dash-tabs.js?v=20261125i"></script>
+    <script src="scripts/profile.js?v=20261125i"></script>
+    <script src="scripts/dashboard.js?v=20261125i"></script>
+    <script src="scripts/dashboard-plus.js?v=20261125i"></script>
+    <script src="scripts/athlete-stats.js?v=20261125i"></script>
+    <script src="scripts/economy.js?v=20261125i"></script>
+    <script src="scripts/economy-ui.js?v=20261125i"></script>
+    <script src="scripts/social.js?v=20261125i"></script>
+    <script src="scripts/athlete-card.js?v=20261125i"></script>
+    <script src="scripts/my-stats.js?v=20261125i"></script>
+    <script src="scripts/coach-profile.js?v=20261125i"></script>
 </body>
 </html>

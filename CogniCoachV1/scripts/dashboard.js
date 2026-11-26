@@ -434,10 +434,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('exportDataBtn').addEventListener('click', () => {
         let profile = null;
         try { profile = JSON.parse(localStorage.getItem('cognicoach-profile') || 'null'); } catch (e) { profile = null; }
+        let coach = null;
+        try { coach = JSON.parse(localStorage.getItem('cognicoach-coach') || 'null'); } catch (e) { coach = null; }
         const data = {
             history: loadHistory(),
             settings: loadDashboardSettings(),
-            profile
+            profile,
+            coach
         };
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);

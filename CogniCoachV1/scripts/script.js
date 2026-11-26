@@ -696,10 +696,16 @@ function buildDrillRequest(drill) {
     };
     // Adaptive coach (scripts/coach-adapt.js): today's readiness and the athlete's
     // "too easy / too hard" feedback nudge the intensity of drills not generated yet.
+    let req = request;
     if (window.CogniCoachAdapt) {
-        try { return window.CogniCoachAdapt.adjustRequest(request, drill); } catch (e) {}
+        try { req = window.CogniCoachAdapt.adjustRequest(request, drill); } catch (e) {}
     }
-    return request;
+    // Your coach (scripts/coach-profile.js): the athlete's own description and what the coach has
+    // learned from their training ride along in the focus field the backend already uses.
+    if (window.CogniCoachProfile) {
+        try { req = window.CogniCoachProfile.apply(req, appState.setup.sport); } catch (e) {}
+    }
+    return req;
 }
 
 // Throw away the prepared next drill (if it hasn't been shown yet) and prepare it again,
@@ -975,6 +981,17 @@ async function getDrill(drillRequest) {
             console.warn("Drill request rejected (403) — retrying with a fresh Turnstile token.");
             const freshToken = await getTurnstileToken();
             response = await requestDrillFromApi(drillRequest, freshToken);
+        }
+
+        // If the backend ever refuses the longer request (athlete details in the focus field),
+        // ask again without them rather than failing the drill.
+        if (!response.ok && [400, 413, 422].includes(response.status) && window.CogniCoachProfile) {
+            const plain = window.CogniCoachProfile.strip(drillRequest);
+            if (plain) {
+                console.warn(`Drill request rejected (${response.status}) with athlete details - retrying without them.`);
+                const freshToken = await getTurnstileToken();
+                response = await requestDrillFromApi(plain, freshToken);
+            }
         }
 
         if (!response.ok) {

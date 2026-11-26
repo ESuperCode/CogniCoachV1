@@ -137,14 +137,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <link href="styles/style.css?v=20261125h" rel="stylesheet">
-    <link href="styles/nav.css?v=20261125h" rel="stylesheet">
-    <link href="styles/profile.css?v=20261125h" rel="stylesheet">
-    <link href="styles/motion-viewer.css?v=20261125h" rel="stylesheet">
-    <link href="styles/session-timeline.css?v=20261125h" rel="stylesheet">
-    <link href="styles/read-aloud.css?v=20261125h" rel="stylesheet">
-    <link href="styles/coach.css?v=20261125h" rel="stylesheet">
-    <link href="styles/economy.css?v=20261125h" rel="stylesheet">
+    <link href="styles/style.css?v=20261125i" rel="stylesheet">
+    <link href="styles/nav.css?v=20261125i" rel="stylesheet">
+    <link href="styles/profile.css?v=20261125i" rel="stylesheet">
+    <link href="styles/motion-viewer.css?v=20261125i" rel="stylesheet">
+    <link href="styles/session-timeline.css?v=20261125i" rel="stylesheet">
+    <link href="styles/read-aloud.css?v=20261125i" rel="stylesheet">
+    <link href="styles/coach.css?v=20261125i" rel="stylesheet">
+    <link href="styles/economy.css?v=20261125i" rel="stylesheet">
 </head>
 <body>
     <site-nav></site-nav>
@@ -186,6 +186,9 @@
                 <p class="quick-start-sub">Pick how long you have. Your AI coach plans every drill.</p>
 
                 <div class="sport-switcher" id="sportSwitcher"><!-- populated by profile.js --></div>
+
+                <!-- What your coach knows about you (scripts/coach-profile.js) -->
+                <div class="qs-coach" data-coach-summary></div>
 
                 <div class="form-group qs-length" role="group" aria-labelledby="qsLengthLabel">
                     <div class="qs-label" id="qsLengthLabel">How long?</div>
@@ -448,28 +451,29 @@
                 </div>
         </section>
     </main>    
-<script src="scripts/icons.js?v=20261125h"></script>    
-<script src="scripts/nav.js?v=20261125h"></script>
-<script src="scripts/profile.js?v=20261125h"></script>
-<script src="scripts/sport-normalize.js?v=20261125h"></script>
+<script src="scripts/icons.js?v=20261125i"></script>    
+<script src="scripts/nav.js?v=20261125i"></script>
+<script src="scripts/profile.js?v=20261125i"></script>
+<script src="scripts/sport-normalize.js?v=20261125i"></script>
 <!-- Invisible bot check for drill generation only — see scripts/script.js (getTurnstileToken) -->
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad" async defer></script>
 <div id="turnstileContainer" style="display:none;"></div>
 <!-- Separate invisible bot check for background Competition Mode note-taking — see scripts/competition.js -->
 <div id="competitionTurnstileContainer" style="display:none;"></div>
-<script src="scripts/competition.js?v=20261125h"></script>
-<script src="scripts/script.js?v=20261125h"></script>
-<script src="scripts/app-simple.js?v=20261125h"></script>
-<script src="scripts/motion-viewer.js?v=20261125h"></script>
-<script src="scripts/session-timeline.js?v=20261125h"></script>
-<script src="scripts/read-aloud.js?v=20261125h"></script>
-<script src="scripts/session-dock.js?v=20261125h"></script>
-<script src="scripts/coach-adapt.js?v=20261125h"></script>
-<script src="scripts/coach-mode.js?v=20261125h"></script>
-<script src="scripts/athlete-stats.js?v=20261125h"></script>
-<script src="scripts/economy.js?v=20261125h"></script>
-<script src="scripts/economy-ui.js?v=20261125h"></script>
-<script src="scripts/social.js?v=20261125h"></script>
-<script src="scripts/session-recap.js?v=20261125h"></script>
+<script src="scripts/competition.js?v=20261125i"></script>
+<script src="scripts/script.js?v=20261125i"></script>
+<script src="scripts/app-simple.js?v=20261125i"></script>
+<script src="scripts/motion-viewer.js?v=20261125i"></script>
+<script src="scripts/session-timeline.js?v=20261125i"></script>
+<script src="scripts/read-aloud.js?v=20261125i"></script>
+<script src="scripts/session-dock.js?v=20261125i"></script>
+<script src="scripts/coach-adapt.js?v=20261125i"></script>
+<script src="scripts/coach-mode.js?v=20261125i"></script>
+<script src="scripts/coach-profile.js?v=20261125i"></script>
+<script src="scripts/athlete-stats.js?v=20261125i"></script>
+<script src="scripts/economy.js?v=20261125i"></script>
+<script src="scripts/economy-ui.js?v=20261125i"></script>
+<script src="scripts/social.js?v=20261125i"></script>
+<script src="scripts/session-recap.js?v=20261125i"></script>
 </body>
 </html>

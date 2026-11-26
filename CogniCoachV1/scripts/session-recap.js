@@ -129,6 +129,7 @@
                 (rated ? 'You rated ' + rated + ' drill' + (rated === 1 ? '' : 's') + ': ' +
                     [f.easy ? f.easy + ' too easy' : '', f.right ? f.right + ' just right' : '', f.hard ? f.hard + ' too hard' : ''].filter(Boolean).join(', ') + '.' : '') + '</p>' : '') +
             '<div class="recap-advice"><span class="recap-advice-label">Coach’s note</span>' + esc(advice(rec)) + '</div>' +
+            (window.CogniCoachProfile ? window.CogniCoachProfile.recapHtml() : '') +
             '<div class="recap-actions">' +
             '<button class="btn btn-primary" type="button" onclick="returnToSetup()">Start new session</button>' +
             '<a class="btn btn-secondary" href="dashboard.html#card">See your Athlete Card</a>' +

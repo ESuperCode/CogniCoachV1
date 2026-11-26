@@ -224,6 +224,7 @@
                 localStorage.setItem('cognicoach-history', JSON.stringify(merged));
                 if (data.settings && typeof data.settings === 'object') { localStorage.setItem('cognicoach-dashboard', JSON.stringify(data.settings)); }
                 if (data.profile && typeof data.profile === 'object') { localStorage.setItem('cognicoach-profile', JSON.stringify(data.profile)); }
+                if (data.coach && typeof data.coach === 'object') { localStorage.setItem('cognicoach-coach', JSON.stringify(data.coach)); document.dispatchEvent(new CustomEvent('cognicoach:coach')); }
                 refreshAll();
                 toast('Import done - ' + merged.length + ' sessions in your history.', 'ok');
             } catch (e) {

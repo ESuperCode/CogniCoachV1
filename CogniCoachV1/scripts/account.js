@@ -24,7 +24,8 @@
     var SESSION_KEY = 'cognicoach-account';
     var META_KEY = 'cognicoach-sync-meta';
     var SYNC_KEYS = { 'cognicoach-profile': 'profile', 'cognicoach-history': 'history', 'cognicoach-dashboard': 'dashboard',
-        'cognicoach-competition-notes': 'competition', 'cognicoach-motion-saved': 'animations', 'cognicoach-wallet': 'wallet' };
+        'cognicoach-competition-notes': 'competition', 'cognicoach-motion-saved': 'animations', 'cognicoach-wallet': 'wallet',
+        'cognicoach-coach': 'coach' };
     var MAX_DOC_CHARS = 240000;   // the server accepts 256 KB per account
     var PUSH_DELAY = 2500;
     var PULL_EVERY = 60000;
@@ -70,6 +71,7 @@
             history: readJSON('cognicoach-history', []), historyAt: m.historyAt || 0,
             dashboard: readJSON('cognicoach-dashboard', null), dashboardAt: m.dashboardAt || 0,
             wallet: readJSON('cognicoach-wallet', null), walletAt: m.walletAt || 0,
+            coach: readJSON('cognicoach-coach', null), coachAt: m.coachAt || 0,
             competition: readJSON('cognicoach-competition-notes', {}),
             animations: readJSON('cognicoach-motion-saved', {})
         };
@@ -112,7 +114,7 @@
             if (field === 'profile' && !!x.onboarded !== !!y.onboarded) { return x.onboarded ? [x, tx] : [y, ty]; }
             return ty > tx ? [y, ty] : [x, tx];
         }
-        var p = pick('profile'), d = pick('dashboard'), wl = pick('wallet');
+        var p = pick('profile'), d = pick('dashboard'), wl = pick('wallet'), co = pick('coach');
         var seen = {}, hist = [];
         [].concat(Array.isArray(a.history) ? a.history : [], Array.isArray(b.history) ? b.history : []).forEach(function (r) {
             var k = historyKey(r);
@@ -122,7 +124,7 @@
         var anims = mergeMap(a.animations, b.animations, animTime);
         var ids = Object.keys(anims).sort(function (i, j) { return animTime(anims[j]) - animTime(anims[i]); });
         ids.slice(40).forEach(function (id) { delete anims[id]; });
-        return fitSize({ profile: p[0], profileAt: p[1], dashboard: d[0], dashboardAt: d[1], wallet: wl[0], walletAt: wl[1], history: hist,
+        return fitSize({ profile: p[0], profileAt: p[1], dashboard: d[0], dashboardAt: d[1], wallet: wl[0], walletAt: wl[1], coach: co[0], coachAt: co[1], history: hist,
             historyAt: Math.max(a.historyAt || 0, b.historyAt || 0),
             competition: mergeMap(a.competition, b.competition, noteTime), animations: anims });
     }
@@ -137,6 +139,7 @@
             if (Array.isArray(doc.history)) { writeRaw('cognicoach-history', JSON.stringify(doc.history)); }
             if (doc.dashboard) { writeRaw('cognicoach-dashboard', JSON.stringify(doc.dashboard)); }
             if (doc.wallet) { writeRaw('cognicoach-wallet', JSON.stringify(doc.wallet)); }
+            if (doc.coach) { writeRaw('cognicoach-coach', JSON.stringify(doc.coach)); }
             if (doc.competition && Object.keys(doc.competition).length) { writeRaw('cognicoach-competition-notes', JSON.stringify(doc.competition)); }
             if (doc.animations && Object.keys(doc.animations).length) { writeRaw('cognicoach-motion-saved', JSON.stringify(doc.animations)); }
             var m = meta();
@@ -144,6 +147,7 @@
             m.historyAt = doc.historyAt || m.historyAt || 0;
             m.dashboardAt = doc.dashboardAt || m.dashboardAt || 0;
             m.walletAt = doc.walletAt || m.walletAt || 0;
+            m.coachAt = doc.coachAt || m.coachAt || 0;
             saveMeta(m);
         } finally { applying = false; }
         if (!sameDoc(before, localDoc())) {
