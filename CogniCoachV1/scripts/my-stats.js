@@ -324,7 +324,10 @@
             return null;
         }
         function stopAuto() { auto = false; cancelAnimationFrame(raf); }
-        canvas.addEventListener('pointerdown', function (e) { dragging = true; lastX = e.clientX; stopAuto(); canvas.setPointerCapture(e.pointerId); });
+        canvas.addEventListener('pointerdown', function (e) {
+            if (e.pointerType === 'touch') { return; }   // phones: swipes scroll the page (the turn buttons still work)
+            dragging = true; lastX = e.clientX; stopAuto(); canvas.setPointerCapture(e.pointerId);
+        });
         canvas.addEventListener('pointerup', function () { dragging = false; });
         canvas.addEventListener('pointercancel', function () { dragging = false; });
         canvas.addEventListener('pointermove', function (e) {

@@ -32,7 +32,7 @@
     html.clean body { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
     /* out of the way while training, in Coach Mode and with the form check sheet open */
     html.clean.in-session .bottom-tabs, html.clean.coach-on .bottom-tabs, html.clean.fc-open .bottom-tabs { display: none; }
-    html.clean.in-session body { padding-bottom: 0; }
+    html.clean.in-session body:not(.has-session-dock) { padding-bottom: 0; }
     html.clean.fc-open body { padding-bottom: var(--fc-sheet); }
 }
 

@@ -366,6 +366,7 @@
             '    <button type="button" class="btn btn-secondary motion-retry">Try Again</button>' +
             '  </div>' +
             '  <div class="motion-caption"><span class="motion-title"></span></div>' +
+            '  <button type="button" class="motion-touch" hidden><span>Tap to turn the athlete</span></button>' +
             '</div>' +
             '<div class="motion-controls">' +
             '  <button type="button" class="motion-play" aria-label="Pause"><span class="icon-play"></span><span class="icon-pause"></span></button>' +
@@ -396,6 +397,16 @@
         sideToggle = root.querySelector('.motion-side');
         setMode('idle');
 
+        // Phones: the 3D viewer would take over any swipe that starts on it (it turns the athlete), so
+        // the page could not scroll past it. A see-through shield lets swipes scroll the page; one tap
+        // lifts it to turn the athlete, and it comes back once the page is scrolled again.
+        var shield = root.querySelector('.motion-touch');
+        if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
+            shield.hidden = false;
+            var liftedAt = 0;
+            shield.addEventListener('click', function () { shield.hidden = true; liftedAt = Date.now(); });
+            window.addEventListener('scroll', function () { if (shield.hidden && Date.now() - liftedAt > 600) { shield.hidden = false; } }, { passive: true });
+        }
         root.querySelector('.motion-generate').addEventListener('click', generate);
         root.querySelector('.motion-retry').addEventListener('click', generate);
         root.querySelector('.motion-regen').addEventListener('click', generate);

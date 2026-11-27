@@ -154,9 +154,10 @@ function loadSiteExtras() {
         { css: 'styles/brand3d.css', js: 'scripts/brand3d.js' },
         { css: 'styles/account.css', js: 'scripts/account.js' },
         { css: 'styles/tour.css', js: 'scripts/tour.js' },
-        { css: 'styles/depth.css', js: 'scripts/depth.js' }
+        { css: 'styles/depth.css', js: 'scripts/depth.js' },
+        { css: 'styles/mobile.css', js: 'scripts/mobile.js' }
     ];
-    const v = 'v=20261126f';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
+    const v = 'v=20261127a';   // bump with the ?v= on each page's own links so browsers fetch new files after a deploy
     extras.forEach(({ css: cssPath, js: jsPath }) => {
         const css = cssPath + '?' + v, js = jsPath + '?' + v;
         if (!document.querySelector(`link[href="${css}"]`)) {

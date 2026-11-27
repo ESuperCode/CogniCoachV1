@@ -704,3 +704,19 @@ html.motion-live #drillContent .card:hover { transform: none !important; transit
 .motion-viewer:not([data-mode="loading"]) .motion-loader,
 .motion-viewer:not([data-mode="loading"]) .motion-loader * { animation-play-state: paused !important; }
 .motion-viewer[data-mode="ready"] .motion-loader { visibility: hidden; }
+
+/* Phones: a see-through shield over the playing 3D viewer so swipes scroll the page (scripts/motion-viewer.js). */
+.motion-touch { display: none; }
+@media (pointer: coarse) {
+    .motion-viewer[data-mode="ready"] .motion-touch:not([hidden]) {
+        position: absolute; inset: 0; z-index: 4;
+        display: flex; align-items: flex-end; justify-content: center; padding: 0 0 12px;
+        border: 0; background: transparent; cursor: pointer;
+    }
+    .motion-touch span {
+        padding: 6px 12px; border-radius: 999px;
+        background: rgba(10, 20, 36, 0.72); color: #fff;
+        font-family: 'Space Mono', monospace; font-size: 0.75rem; font-weight: 700;
+    }
+    .motion-help { display: none; }
+}

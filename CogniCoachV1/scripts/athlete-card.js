@@ -192,7 +192,7 @@
             card.style.setProperty('--my', (y * 100).toFixed(1) + '%');
         }
         card.addEventListener('pointermove', function (e) {
-            if (reduce()) { return; }
+            if (reduce() || (e.pointerType && e.pointerType !== 'mouse')) { return; }
             var rc = card.getBoundingClientRect();
             var x = (e.clientX - rc.left) / rc.width, y = (e.clientY - rc.top) / rc.height;
             cancelAnimationFrame(raf);

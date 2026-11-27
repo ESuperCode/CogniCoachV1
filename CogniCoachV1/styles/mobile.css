@@ -1,0 +1,60 @@
+/* ==========================================================================
+   Phone fixes, on every page (loaded by scripts/nav.js with scripts/mobile.js).
+   ========================================================================== */
+
+/* No sideways panning. iPhones ignore overflow-x: hidden on <body> for touch, so clip both
+   <html> and <body> ("clip" does not turn them into scroll containers, so page scrolling and
+   sticky tab bars keep working). */
+@supports (overflow-x: clip) {
+    html, body { overflow-x: clip; }
+}
+img, svg, video, canvas, iframe { max-width: 100%; }
+
+/* Dialogs fit the part of the screen above the keyboard (dvh shrinks with it on Android). */
+.profile-modal-overlay { z-index: 1500; }
+.profile-modal { max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); overscroll-behavior: contain; }
+html.profile-modal-open { overflow: hidden; }
+
+/* While typing on a phone (scripts/mobile.js sets html.kb-open): nothing fixed sits between the
+   field and the keyboard, and the top bar scrolls away with the page instead of covering it. */
+@media (pointer: coarse), (max-width: 900px) {
+    html.kb-open .bottom-tabs,
+    html.kb-open .session-dock,
+    html.kb-open .econ-toasts,
+    html.kb-open .econ-toast { display: none !important; }
+    html.kb-open body { padding-bottom: 0 !important; }
+    html.kb-open .site-nav { position: absolute; }
+    html.kb-open .page-tabs { position: static; }
+}
+
+/* Comfortable taps */
+@media (pointer: coarse) {
+    input, select, textarea { font-size: max(16px, 1em); }   /* 16px+ stops iPhones zooming in on focus */
+}
+
+/* Touch screens keep the last-tapped element in :hover, so "lift on hover" effects left buttons and
+   cards stuck half-raised or jumping while scrolling. No hover movement on touch. */
+@media (hover: none) {
+    .btn:hover, .btn-primary:hover, .btn-secondary:hover, .btn-chip:hover, .adapt-chip:hover,
+    .clean-tool:hover, .form-launch:hover, .coach-launch:hover, .econ-btn:hover, .card:hover,
+    .page-tabs [role="tab"]:hover, .nav-account-btn:hover, .tour-sport:hover, .site-nav-link:hover,
+    .dash-link-row:hover, .sh-item:hover, .qs-item:hover, .recap-tile:hover, .stat-card:hover {
+        transform: none !important;
+    }
+}
+
+/* Pop-up messages (Grit, quests) sit above the bottom tabs instead of on them. */
+@media (max-width: 900px) {
+    html.clean:not(.in-session) .econ-toasts { bottom: calc(76px + env(safe-area-inset-bottom)); }
+}
+
+/* The streak / Grit / XP / chests row stays on one line on phones (it wrapped, leaving one chip
+   alone): four equal chips, each with its icon above the number and label. */
+@media (max-width: 640px) {
+    .econ-hud { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; max-width: 520px; }
+    .econ-chip { min-width: 0; flex-direction: column; justify-content: center; gap: 1px; padding: 6px 2px; }
+    .econ-chip .ci, .econ-ring { width: 22px; height: 22px; }
+    .econ-goal-text, .econ-stack { align-items: center; }
+    .econ-lbl { white-space: nowrap; }
+}
+@media (max-width: 340px) { .econ-lbl { font-size: 0.52rem; } }

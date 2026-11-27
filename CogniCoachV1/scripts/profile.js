@@ -213,23 +213,49 @@ function currentSport() {
 // Shared modal shell
 // ==========================================================================
 
+let profileModalReturn = null;
 function closeProfileModal() {
     const el = document.getElementById('profileModalOverlay');
-    if (el) el.remove();
+    if (!el) return;
+    el.remove();
+    document.documentElement.classList.remove('profile-modal-open');
+    const back = profileModalReturn;
+    profileModalReturn = null;
+    if (back && document.contains(back) && back.focus) back.focus();
 }
 
+// A dialog: focus moves in, Escape closes it (when dismissible), Tab stays inside, focus returns after.
 function openProfileModal(innerHtml, { dismissible = true, extraClass = '' } = {}) {
-    closeProfileModal();
+    const ret = document.getElementById('profileModalOverlay') ? profileModalReturn : document.activeElement;
+    const old = document.getElementById('profileModalOverlay');
+    if (old) old.remove();
+    profileModalReturn = ret;
     const overlay = document.createElement('div');
     overlay.id = 'profileModalOverlay';
     overlay.className = 'profile-modal-overlay';
-    overlay.innerHTML = `<div class="profile-modal card${extraClass ? ' ' + extraClass : ''}">${innerHtml}</div>`;
+    overlay.innerHTML = `<div class="profile-modal card${extraClass ? ' ' + extraClass : ''}" role="dialog" aria-modal="true">${innerHtml}</div>`;
+    const dlg = overlay.firstElementChild;
+    const title = dlg.querySelector('h2, h3');
+    if (title) { if (!title.id) title.id = 'profileModalTitle'; dlg.setAttribute('aria-labelledby', title.id); }
     if (dismissible) {
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) closeProfileModal();
         });
     }
+    overlay.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && dismissible) { e.preventDefault(); e.stopPropagation(); closeProfileModal(); return; }
+        if (e.key !== 'Tab') return;
+        const f = [...dlg.querySelectorAll('button, [href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])')].filter(el => !el.disabled && el.offsetParent !== null);
+        if (!f.length) return;
+        if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+        else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+    });
     document.body.appendChild(overlay);
+    document.documentElement.classList.add('profile-modal-open');
+    setTimeout(() => {
+        const first = dlg.querySelector('button, [href], input, select, textarea');
+        if (first && !dlg.contains(document.activeElement)) first.focus({ preventScroll: true });
+    }, 0);
     return overlay;
 }
 

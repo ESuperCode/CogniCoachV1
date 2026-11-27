@@ -6,7 +6,7 @@ HARD RULES
 - Cloudflare is on the FREE plan; don't make it paid (Workers free = 10 ms CPU/request; heavy work stays client-side). SQLite Durable Objects are fine. Keep requests under 10 s.
 - Deploys: the motion and accounts Workers deploy through GitHub Actions (.github/workflows/deploy-cognicoach-motion.yml, deploy-cognicoach-accounts.yml, on push to main touching their folder; check runs with the GitHub MCP actions tools; the Cloudflare token in the environment is invalid). Repo secrets: CLOUDFLARE_API_TOKEN, OPENAI_API_KEY, MOTION_DEV_CODE. Cloudflare account id 00ed78486159dbce2f059215aeee83e9.
 - The DRILL BACKEND (live `cognicoach-backend` Worker: /api/drill, /api/contact, /api/normalize-sport, /api/competition-notes, /api/competition-chat) is NOT deployed by Actions. Its source is tests/CogniCoachVisualization(3D)/worker/drill_backend.js. To change it: edit that file, test it locally (import it in Node, stub fetch for Turnstile siteverify, real OpenAI calls through the proxy), commit it, and send me the file (SendUserFile) to paste into the Cloudflare dashboard. Keep it backward compatible with the current site, and keep the site working with the previous backend (I may deploy later).
-- Cache busting: every page links its own CSS/JS with ?v=YYYYMMDDx (currently 20261126f) and scripts/nav.js uses the same tag for the extras it loads. Bump it in all *.html and nav.js whenever CSS/JS changes.
+- Cache busting: every page links its own CSS/JS with ?v=YYYYMMDDx (currently 20261127a) and scripts/nav.js uses the same tag for the extras it loads. Bump it in all *.html and nav.js whenever CSS/JS changes.
 - No emoji anywhere: use scripts/icons.js (CogniIcons.svg(name, {size}) in JS, <i data-icon="name" data-size="24"></i> in HTML). Add new icons there. The top nav has NO icons (text only).
 - The currency is called "Grit" in everything users see (never "coins"); in code/data it stays wallet.coins / type 'coins'.
 - Keep it simple: one thing at a time (tabs), short one-line explanations, rarely used controls behind small "Change"/"Edit" toggles. No keyword clutter on pages (SEO work stays invisible or collapsed).
@@ -20,6 +20,13 @@ SIMPLER LAYOUTS (html.clean, default; ?classic=1 shows the old layouts, remember
 - Recap (session-recap.js renderClean, original styles): medal, 3 tiles, up to 3 highlights (level/rank up, chests with Open, quest rewards ready), Coach's note, one-tap "how hard" (saves at once; note behind "Add a note"), 2 "Your coach learned" items, Start next session + See your progress.
 - Dashboard hides the econ HUD, Train next and Repeat; Arena hides its HUD and intros and shrinks the goal/streak pair.
 - Tours (asked for in this round): the full tour (?tour=1) and the first-drill tips cover the timeline, timer + rating, the tool row and each tool (the tour opens the muscle map and 3D while explaining them, steps fall back to the classic buttons with ?classic=1, missing demo parts are skipped); phones leave room under the page while a tour runs.
+
+PHONES (styles/mobile.css + scripts/mobile.js, loaded on every page by nav.js; viewport meta has interactive-widget=resizes-content)
+- No sideways panning: html, body { overflow-x: clip } (iPhones ignore body overflow-x: hidden). Inputs are 16px+ on touch (stops iOS zoom-on-focus).
+- Keyboard: while a text field has focus on a touch screen, html.kb-open hides the bottom tabs, timer dock and toasts and lets the top bar scroll away; the field is scrolled into the visible part once the keyboard is up.
+- Mouse-only effects: Athlete Card tilt, dragging the 3D stats chart (touch uses its turn buttons), chart tooltips; hover "lift" transforms are off on touch. The 3D viewer has a tap-to-turn shield on touch so swipes scroll the page.
+- Profile windows (profile.js openProfileModal) are real dialogs: focus in, Escape closes, Tab stays inside, focus returns. The streak/Grit/XP/chests row stays one line on phones.
+- Phone audit scripts used: touch-swipe pan check per page/state on Pixel 5 / 360 / 320, keyboard check (focus field, shrink viewport to 430 px, field visible and uncovered).
 
 PAGES (CogniCoachV1/)
 - index.html - the app.

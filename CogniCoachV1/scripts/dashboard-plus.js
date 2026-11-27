@@ -245,8 +245,9 @@
             document.body.appendChild(tipEl);
         }
         root.querySelectorAll('[data-tip]').forEach(function (n) {
-            n.addEventListener('pointerenter', function () { tipEl.textContent = n.getAttribute('data-tip'); tipEl.classList.add('show'); n.classList.add('hover'); });
+            n.addEventListener('pointerenter', function (e) { if (e.pointerType && e.pointerType !== 'mouse') { return; } tipEl.textContent = n.getAttribute('data-tip'); tipEl.classList.add('show'); n.classList.add('hover'); });
             n.addEventListener('pointermove', function (e) {
+                if (e.pointerType && e.pointerType !== 'mouse') { return; }
                 var x = Math.min(window.innerWidth - tipEl.offsetWidth - 8, e.clientX + 14);
                 tipEl.style.transform = 'translate(' + Math.max(8, x) + 'px,' + (e.clientY - 40) + 'px)';
             });
